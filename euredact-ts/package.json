@@ -1,0 +1,63 @@
+{
+  "name": "euredact",
+  "version": "0.1.0",
+  "description": "European PII redaction SDK -- fast, zero-dependency, rule-based detection and redaction of personal data across 31 European countries",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "pii",
+    "redaction",
+    "gdpr",
+    "privacy",
+    "europe",
+    "eu",
+    "iban",
+    "bsn",
+    "national-id",
+    "phone",
+    "email",
+    "anonymization",
+    "data-protection",
+    "personal-data",
+    "regex"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jnjs/euredact"
+  },
+  "scripts": {
+    "build:esm": "tsc",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "postbuild:cjs": "echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
+    "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
+    "test": "node --import tsx src/__tests__/run.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "tsx": "^4.7.0"
+  }
+}

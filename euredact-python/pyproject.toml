@@ -1,0 +1,79 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "euredact"
+version = "0.1.0"
+description = "European PII redaction SDK — rule engine for 31 countries"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+readme = "README.md"
+authors = [
+    { name = "JNJS" },
+]
+keywords = [
+    "pii", "redaction", "gdpr", "privacy", "europe",
+    "masking", "anonymization", "pseudonymization",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Documentation = "https://github.com/jnjs/euredact#readme"
+Repository = "https://github.com/jnjs/euredact"
+Changelog = "https://github.com/jnjs/euredact/blob/main/CHANGELOG.md"
+Issues = "https://github.com/jnjs/euredact/issues"
+
+[project.optional-dependencies]
+fast = ["pyahocorasick>=2.0.0"]
+cloud = []
+coref = []
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-benchmark",
+    "ruff",
+    "mypy",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/euredact"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/euredact/rules/countries/*.py" = ["E501"]  # regex patterns are long
+"src/euredact/rules/validators.py" = ["E501"]
+"src/euredact/rules/suppressors.py" = ["E501"]
+"src/euredact/rules/engine.py" = ["E501"]
+"src/euredact/rules/matchers.py" = ["E501"]
+"src/euredact/sdk.py" = ["E501"]
+"src/euredact/normalizer.py" = ["F841"]  # unused vars in offset mapping (complex algorithm)

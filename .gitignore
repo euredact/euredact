@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv*/
+*.egg-info/
+build/
+.pytest_cache/
+.benchmarks/
+.mypy_cache/
+.ruff_cache/
+
+# Python evaluation outputs (regenerated on each run)
+euredact-python/evaluation_report.html
+euredact-python/false_positives_*.json
+
+# Node / TypeScript
+node_modules/
+
+# Build outputs
+dist/
