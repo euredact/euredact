@@ -5,6 +5,7 @@
 __pycache__/
 *.pyc
 *.pyo
+*.py[codz]
 .venv*/
 *.egg-info/
 build/
@@ -12,6 +13,8 @@ build/
 .benchmarks/
 .mypy_cache/
 .ruff_cache/
+.env
+.envrc
 
 # Python evaluation outputs (regenerated on each run)
 euredact-python/evaluation_report.html
