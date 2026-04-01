@@ -5,11 +5,11 @@ import { EntityType, type Detection, type RedactResult } from "./types.js";
 
 const DATE_TYPES = new Set([EntityType.DOB, EntityType.DATE_OF_DEATH]);
 
-class PseudonymMapper {
+class ReferentialMapper {
   private counters = new Map<EntityType, number>();
   private mapping = new Map<string, string>();
 
-  getPseudonym(text: string, entityType: EntityType): string {
+  getLabel(text: string, entityType: EntityType): string {
     if (!this.mapping.has(text)) {
       const count = (this.counters.get(entityType) ?? 0) + 1;
       this.counters.set(entityType, count);
@@ -22,7 +22,7 @@ class PseudonymMapper {
 export interface RedactOptions {
   countries?: string[] | null;
   mode?: string;
-  pseudonymize?: boolean;
+  referentialIntegrity?: boolean;
   detectDates?: boolean;
   cache?: boolean;
 }
@@ -30,7 +30,7 @@ export interface RedactOptions {
 export class EuRedact {
   private engine = new RuleEngine();
   private cache = new ResultCache();
-  private pseudonymMapper = new PseudonymMapper();
+  private referentialMapper = new ReferentialMapper();
 
   addCustomPattern(name: string, pattern: string): void {
     this.engine.addCustomPattern(name, pattern);
@@ -41,7 +41,7 @@ export class EuRedact {
     const {
       countries = null,
       mode = "rules",
-      pseudonymize = false,
+      referentialIntegrity = false,
       detectDates = false,
       cache = true,
     } = options;
@@ -79,8 +79,8 @@ export class EuRedact {
     let redacted = text;
     for (let i = detections.length - 1; i >= 0; i--) {
       const det = detections[i];
-      const replacement = pseudonymize
-        ? this.pseudonymMapper.getPseudonym(det.text, det.entityType)
+      const replacement = referentialIntegrity
+        ? this.referentialMapper.getLabel(det.text, det.entityType)
         : `[${det.entityType}]`;
       redacted = redacted.slice(0, det.start) + replacement + redacted.slice(det.end);
     }

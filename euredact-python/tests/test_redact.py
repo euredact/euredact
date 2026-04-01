@@ -31,28 +31,28 @@ class TestRedactionOutput:
         assert "[EMAIL]" in result.redacted_text
         assert "jan@example.com" not in result.redacted_text
 
-    def test_pseudonymize(self):
+    def test_referential_integrity(self):
         result = euredact.redact(
             "Email: jan@example.com en piet@example.com",
             countries=["NL"],
-            pseudonymize=True,
+            referential_integrity=True,
         )
         assert "EMAIL_1" in result.redacted_text
         assert "EMAIL_2" in result.redacted_text
 
-    def test_pseudonymize_consistency(self):
+    def test_referential_integrity_consistency(self):
         result = euredact.redact(
             "jan@example.com en later jan@example.com opnieuw.",
             countries=["NL"],
-            pseudonymize=True,
+            referential_integrity=True,
         )
-        # Same email should get same pseudonym (whatever counter value)
+        # Same email should get same label (whatever counter value)
         dets = result.detections
         assert len(dets) == 2
-        # Both should have been replaced with the same pseudonym
-        pseudonym = result.redacted_text.split(" en later ")[0]
-        assert pseudonym.startswith("EMAIL_")
-        assert result.redacted_text.count(pseudonym) == 2
+        # Both should have been replaced with the same label
+        label = result.redacted_text.split(" en later ")[0]
+        assert label.startswith("EMAIL_")
+        assert result.redacted_text.count(label) == 2
 
     def test_source_is_rules(self):
         result = euredact.redact("Test", countries=["NL"])

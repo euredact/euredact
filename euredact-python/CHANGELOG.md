@@ -13,7 +13,7 @@ Initial release of the EuRedact rule engine.
 - **Context-aware detection**: Keyword proximity checks and structural detection (JSON field names, CSV headers)
 - **Batch processing**: `redact_batch()`, `redact_iter()`, `aredact_batch()` for bulk workloads
 - **True async**: `aredact()` offloads to thread pool, non-blocking for async frameworks
-- **Pseudonymization**: Consistent pseudonym mapping within a session
+- **Referential integrity**: Consistent label mapping within a session (`referential_integrity=True`)
 - **Aho-Corasick acceleration**: Optional `pyahocorasick` for faster pattern scanning
 - **Zero required dependencies**: Pure Python, works with `pip install euredact`
 

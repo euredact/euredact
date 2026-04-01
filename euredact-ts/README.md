@@ -74,7 +74,7 @@ Main entry point. Detects and redacts PII in the given text.
 ```ts
 interface RedactOptions {
   countries?: string[] | null; // Country codes (e.g. ["NL", "BE"]) — null loads all
-  pseudonymize?: boolean;      // Replace with consistent pseudonyms (default: false)
+  referentialIntegrity?: boolean;      // Replace with consistent labels (default: false)
   detectDates?: boolean;       // Include DOB/date-of-death detections (default: false)
   cache?: boolean;             // Enable result caching (default: true)
 }
@@ -83,7 +83,7 @@ interface RedactOptions {
 | Parameter | Default | Description |
 |---|---|---|
 | `countries` | `null` | ISO 3166-1 alpha-2 codes to restrict detection. `null` loads all 31 countries. |
-| `pseudonymize` | `false` | Replace PII with consistent pseudonyms instead of entity-type labels. |
+| `referentialIntegrity` | `false` | Replace PII with consistent labels instead of entity-type labels. |
 | `detectDates` | `false` | Include date-of-birth and date-of-death detections. Off by default. |
 | `cache` | `true` | Cache results for identical inputs. |
 
@@ -275,15 +275,15 @@ and custom patterns). Benefits:
   won't also be tested against unrelated country patterns.
 - **Faster.** Fewer patterns to compile and scan.
 
-## Pseudonymization
+## Referential Integrity
 
-When `pseudonymize: true`, each unique PII value is mapped to a consistent
-pseudonym:
+When `referentialIntegrity: true`, each unique PII value is mapped to a consistent
+label:
 
 ```ts
 const result = redact(
   "BSN 123456782 en later weer 123456782",
-  { countries: ["NL"], pseudonymize: true }
+  { countries: ["NL"], referentialIntegrity: true }
 );
 console.log(result.redactedText);
 // "BSN NATIONAL_ID_1 en later weer NATIONAL_ID_1"
@@ -311,7 +311,7 @@ Input text
     |               Within same tier, longer span wins
     v
 [Replacement] -- Right-to-left substitution with [ENTITY_TYPE] labels
-    |              or pseudonyms
+    |              or labels
     v
 RedactResult
 ```

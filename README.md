@@ -45,7 +45,7 @@ console.log(result.redactedText);
 - **Context-aware:** keyword proximity checks and structural detection (JSON field names, CSV headers) for ambiguous patterns like dates of birth
 - **Custom patterns:** register your own regex patterns for domain-specific PII
 - **Priority-aware deduplication:** validated matches (checksum) > custom patterns > regex-only; suppression zones prevent false positives from claiming spans of failed-validation matches
-- **Pseudonymization:** consistent pseudonym mapping within a session
+- **Referential integrity:** consistent label mapping within a session (same PII value always gets the same label)
 - **Fast:** sub-millisecond per page, ~2,000 records/second
 - **Zero required dependencies** in both Python and Node.js
 - **Thread-safe** (Python), immutable detection objects
@@ -140,7 +140,7 @@ Input text
     |               Within same tier, longer span wins
     v
 [Replacement] -- Right-to-left substitution with [ENTITY_TYPE] labels
-    |              or consistent pseudonyms
+    |              or referential-integrity labels
     v
 RedactResult
 ```

@@ -18,20 +18,25 @@ _DATE_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
 _DEFAULT_POOL = ThreadPoolExecutor()
 
 
-class PseudonymMapper:
-    """Maps real PII values to consistent pseudonyms within a session."""
+class ReferentialMapper:
+    """Maps real PII values to consistent labels within a session.
+
+    Ensures referential integrity: the same input value always maps to
+    the same label (e.g. ``EMAIL_1``), so relationships between
+    occurrences are preserved in the redacted output.
+    """
 
     def __init__(self) -> None:
         self._counters: dict[EntityType, int] = {}
         self._mapping: dict[str, str] = {}
 
-    def get_pseudonym(self, text: str, entity_type: EntityType | str) -> str:
-        """Return consistent pseudonym. Same input always returns same output."""
+    def get_label(self, text: str, entity_type: EntityType | str) -> str:
+        """Return consistent label. Same input always returns same output."""
         if text not in self._mapping:
             self._counters[entity_type] = self._counters.get(entity_type, 0) + 1
             n = self._counters[entity_type]
-            label = entity_type.value if isinstance(entity_type, EntityType) else entity_type
-            self._mapping[text] = f"{label}_{n}"
+            type_label = entity_type.value if isinstance(entity_type, EntityType) else entity_type
+            self._mapping[text] = f"{type_label}_{n}"
         return self._mapping[text]
 
 
@@ -41,7 +46,7 @@ class EuRedact:
     def __init__(self) -> None:
         self._engine = RuleEngine()
         self._cache = ResultCache()
-        self._pseudonym_mapper = PseudonymMapper()
+        self._referential_mapper = ReferentialMapper()
 
     def add_custom_pattern(self, name: str, pattern: str) -> None:
         """Register a custom regex pattern detected as *name*."""
@@ -54,7 +59,7 @@ class EuRedact:
         *,
         countries: list[str] | None = None,
         mode: str = "rules",
-        pseudonymize: bool = False,
+        referential_integrity: bool = False,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -111,8 +116,8 @@ class EuRedact:
         # Step 15: Apply replacements right-to-left
         redacted = text  # Use original text for replacements
         for det in reversed(detections):
-            if pseudonymize:
-                replacement = self._pseudonym_mapper.get_pseudonym(
+            if referential_integrity:
+                replacement = self._referential_mapper.get_label(
                     det.text, det.entity_type
                 )
             else:
@@ -141,7 +146,7 @@ class EuRedact:
         *,
         countries: list[str] | None = None,
         mode: str = "rules",
-        pseudonymize: bool = False,
+        referential_integrity: bool = False,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -160,7 +165,7 @@ class EuRedact:
                 text,
                 countries=countries,
                 mode=mode,
-                pseudonymize=pseudonymize,
+                referential_integrity=referential_integrity,
                 detect_dates=detect_dates,
                 coref=coref,
                 coref_model=coref_model,
@@ -174,7 +179,7 @@ class EuRedact:
         *,
         countries: list[str] | None = None,
         mode: str = "rules",
-        pseudonymize: bool = False,
+        referential_integrity: bool = False,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> list[RedactResult]:
@@ -195,7 +200,7 @@ class EuRedact:
                 text,
                 countries=countries,
                 mode=mode,
-                pseudonymize=pseudonymize,
+                referential_integrity=referential_integrity,
                 detect_dates=detect_dates,
                 cache=cache,
             )
@@ -208,7 +213,7 @@ class EuRedact:
         *,
         countries: list[str] | None = None,
         mode: str = "rules",
-        pseudonymize: bool = False,
+        referential_integrity: bool = False,
         detect_dates: bool = False,
         cache: bool = True,
         max_concurrency: int = 4,
@@ -233,7 +238,7 @@ class EuRedact:
                     text,
                     countries=countries,
                     mode=mode,
-                    pseudonymize=pseudonymize,
+                    referential_integrity=referential_integrity,
                     detect_dates=detect_dates,
                     cache=cache,
                 )
@@ -246,7 +251,7 @@ class EuRedact:
         *,
         countries: list[str] | None = None,
         mode: str = "rules",
-        pseudonymize: bool = False,
+        referential_integrity: bool = False,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> Iterator[RedactResult]:
@@ -264,7 +269,7 @@ class EuRedact:
                 text,
                 countries=countries,
                 mode=mode,
-                pseudonymize=pseudonymize,
+                referential_integrity=referential_integrity,
                 detect_dates=detect_dates,
                 cache=cache,
             )

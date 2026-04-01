@@ -18,10 +18,10 @@ print(result.redacted_text)
 for det in result.detections:
     print(f"  {det.entity_type.value}: '{det.text}' at [{det.start}:{det.end}]")
 
-# --- 4. Pseudonymization ---
+# --- 4. Referential integrity ---
 result = euredact.redact(
     "Jan (jan@example.nl) en Piet (piet@example.nl). Jan weer: jan@example.nl",
-    pseudonymize=True,
+    referential_integrity=True,
 )
 print(result.redacted_text)
 # "Jan (EMAIL_1) en Piet (EMAIL_2). Jan weer: EMAIL_1"

@@ -81,7 +81,7 @@ euredact.redact(
     *,
     countries: list[str] | None = None,
     mode: str = "rules",
-    pseudonymize: bool = False,
+    referential_integrity: bool = False,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> RedactResult
@@ -94,7 +94,7 @@ Main entry point. Detects and redacts PII in the given text.
 | `text` | -- | Input text to scan. |
 | `countries` | `None` | ISO 3166-1 alpha-2 codes to restrict detection (e.g. `["NL", "BE"]`). `None` loads all 31 countries. |
 | `mode` | `"rules"` | Detection mode. Currently only `"rules"` is supported. |
-| `pseudonymize` | `False` | Replace PII with consistent pseudonyms instead of entity-type labels. |
+| `referential_integrity` | `False` | Replace PII with consistent labels instead of entity-type labels. |
 | `detect_dates` | `False` | Include date-of-birth and date-of-death detections. Off by default because bare dates without strong context are better handled by an LLM tier. When enabled, the engine applies keyword and structural (JSON/CSV) checks. |
 | `cache` | `True` | Cache results for identical inputs. |
 
@@ -106,7 +106,7 @@ euredact.redact_batch(
     *,
     countries: list[str] | None = None,
     mode: str = "rules",
-    pseudonymize: bool = False,
+    referential_integrity: bool = False,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> list[RedactResult]
@@ -378,22 +378,22 @@ Custom patterns are always active regardless of the `countries` parameter.
 When `countries=None` (the default), all 31 country rule sets are loaded. This is
 the safest option when processing mixed-origin data.
 
-## Pseudonymization
+## Referential Integrity
 
-When `pseudonymize=True`, each unique PII value is mapped to a consistent
-pseudonym within the session. The same input always produces the same pseudonym:
+When `referential_integrity=True`, each unique PII value is mapped to a consistent
+label within the session. The same input always produces the same label:
 
 ```python
 import euredact
 
 text = "BSN 111222333 en later weer 111222333, IBAN NL91ABNA0417164300."
-result = euredact.redact(text, pseudonymize=True)
+result = euredact.redact(text, referential_integrity=True)
 print(result.redacted_text)
 # "BSN NATIONAL_ID_1 en later weer NATIONAL_ID_1, IBAN IBAN_1."
 ```
 
 The mapping is scoped to the `EuRedact` instance. The module-level `redact()`
-function uses a shared singleton, so pseudonyms are consistent across calls within
+function uses a shared singleton, so labels are consistent across calls within
 the same process.
 
 ## Architecture
@@ -418,7 +418,7 @@ Input text
     |               Within same tier, longer span wins
     v
 [Replacement] -- Right-to-left substitution with [ENTITY_TYPE] labels
-    |               or pseudonyms
+    |               or labels
     v
 RedactResult
 ```

@@ -30,12 +30,12 @@ class TestRedactBatch:
         assert len(results) == 1
         assert "[EMAIL]" in results[0].redacted_text
 
-    def test_batch_with_pseudonymize(self):
+    def test_batch_with_referential_integrity(self):
         results = euredact.redact_batch(
             ["jan@test.nl", "jan@test.nl"],
-            pseudonymize=True,
+            referential_integrity=True,
         )
-        # Same email should get same pseudonym across batch
+        # Same email should get same label across batch
         assert results[0].redacted_text == results[1].redacted_text
 
     def test_batch_with_countries(self):

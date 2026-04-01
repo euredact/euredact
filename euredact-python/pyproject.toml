@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = [
     "pii", "redaction", "gdpr", "privacy", "europe",
-    "masking", "anonymization", "pseudonymization",
+    "masking", "anonymization", "referential-integrity",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
