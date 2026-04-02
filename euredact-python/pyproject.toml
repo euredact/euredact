@@ -34,10 +34,10 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Documentation = "https://github.com/jnjs/euredact#readme"
-Repository = "https://github.com/jnjs/euredact"
-Changelog = "https://github.com/jnjs/euredact/blob/main/CHANGELOG.md"
-Issues = "https://github.com/jnjs/euredact/issues"
+Documentation = "https://github.com/euredact/euredact#readme"
+Repository = "https://github.com/euredact/euredact"
+Changelog = "https://github.com/euredact/euredact/blob/main/CHANGELOG.md"
+Issues = "https://github.com/euredact/euredact/issues"
 
 [project.optional-dependencies]
 fast = ["pyahocorasick>=2.0.0"]

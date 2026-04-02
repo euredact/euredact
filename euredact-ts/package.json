@@ -46,7 +46,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/jnjs/euredact"
+    "url": "https://github.com/euredact/euredact"
   },
   "scripts": {
     "build:esm": "tsc",
