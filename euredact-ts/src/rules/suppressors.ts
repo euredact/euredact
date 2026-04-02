@@ -47,7 +47,7 @@ const DATE_PATTERN_FULL = /^\d{2}[-/.]\d{2}[-/.]\d{4}$/;
 const PASSPORT_CONTEXT_BEFORE = /(?:Reisepass|passport|passeport|paspoort|Bisheriger\s+Reisepass)\s*(?:Nr\.?|Nummer|nummer|number|n[°o])?\s*[:.]?\s*$/i;
 const SE_ORG_CONTEXT_BEFORE = /(?:org\.?\s*nr\.?|organisationsnummer|organisationsnr|Bolagsverket|företag)\s*[:.]?\s*$/i;
 
-const NUMERIC_TYPES = new Set([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.POSTAL_CODE]);
+const NUMERIC_TYPES = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.POSTAL_CODE]);
 
 function suppressCurrency(text: string, match: RawMatch): boolean {
   if (!NUMERIC_TYPES.has(match.patternDef.entityType)) return false;
@@ -65,14 +65,14 @@ function suppressUnits(text: string, match: RawMatch): boolean {
 }
 
 function suppressReference(text: string, match: RawMatch): boolean {
-  const applicable = new Set([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.IBAN, EntityType.CHAMBER_OF_COMMERCE]);
+  const applicable = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.IBAN, EntityType.CHAMBER_OF_COMMERCE]);
   if (!applicable.has(match.patternDef.entityType)) return false;
   const [before] = getContext(text, match.start, match.end);
   return REFERENCE_BEFORE.test(before);
 }
 
 function suppressLegal(text: string, match: RawMatch): boolean {
-  const applicable = new Set([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.POSTAL_CODE]);
+  const applicable = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.POSTAL_CODE]);
   if (!applicable.has(match.patternDef.entityType)) return false;
   const [before] = getContext(text, match.start, match.end);
   return LEGAL_BEFORE.test(before);
@@ -192,7 +192,7 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
 
 type Suppressor = (text: string, match: RawMatch) => boolean;
 
-const TYPE_SUPPRESSORS: Partial<Record<EntityType, Suppressor[]>> = {
+const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneAfterIdLabel, suppressPhoneServiceNumber, suppressPhoneDateOverlap],
   [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressNatidAsPassport, suppressSeNatidAsOrg],
   [EntityType.SSN]: [suppressCurrency, suppressUnits, suppressReference, suppressMath],

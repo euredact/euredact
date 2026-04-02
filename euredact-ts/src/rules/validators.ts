@@ -481,7 +481,16 @@ export function validateGreekAmka(candidate: string): boolean {
 
 function validateHighEntropy(candidate: string): boolean {
   const clean = candidate.trim();
-  if (clean.length < 16) return false;
+  if (clean.length < 8) return false;
+  // Short passwords (< 24 chars): require at least 1 letter, 1 digit, 1 special char
+  if (clean.length < 24) {
+    const hasLetter = /[a-zA-Z]/.test(clean);
+    const hasDigit = /\d/.test(clean);
+    const hasSpecial = /[^a-zA-Z0-9]/.test(clean);
+    if (hasLetter && hasDigit && hasSpecial) return true;
+    // For short tokens without special chars, require entropy check
+    if (!hasSpecial && clean.length < 16) return false;
+  }
   const freq = new Map<string, number>();
   for (const ch of clean) freq.set(ch, (freq.get(ch) ?? 0) + 1);
   const len = clean.length;
@@ -490,7 +499,10 @@ function validateHighEntropy(candidate: string): boolean {
     const p = c / len;
     entropy -= p * Math.log2(p);
   }
-  return entropy >= 3.5;
+  // Hex-only strings have max ~4.0 bits entropy, use lower threshold
+  const isHex = /^[a-fA-F0-9]+$/.test(clean);
+  const threshold = isHex ? 3.0 : clean.length < 24 ? 3.0 : 3.5;
+  return entropy >= threshold;
 }
 
 export const VALIDATORS: Record<string, (candidate: string) => boolean> = {

@@ -82,7 +82,7 @@ class RuleEngine:
         for m in raw_matches:
             if self._matcher.validate(m):
                 validated.append(m)
-            elif m.pattern_def.validator is not None:
+            elif m.pattern_def.validator is not None and not m.pattern_def.requires_context:
                 suppression_zones.append((m.start, m.end))
 
         # Pass 2b: suppression filters + build candidates with priority

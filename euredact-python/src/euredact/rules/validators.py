@@ -756,20 +756,34 @@ def validate_greek_amka(candidate: str) -> bool:
 def validate_high_entropy(candidate: str) -> bool:
     """Reject low-entropy strings (repeated chars, sequential patterns).
 
-    Shannon entropy >= 3.5 bits/char indicates a random-looking token.
-    Natural text and structured data (counters, repeated chars) score lower.
+    Shannon entropy check with adaptive threshold: lower for hex-only
+    and short strings (which have limited charset / fewer unique chars).
     """
     import math
+    import re
 
     clean = candidate.strip()
-    if len(clean) < 16:
+    if len(clean) < 8:
         return False
+    # Short passwords (< 24 chars): require at least 1 letter, 1 digit, 1 special char
+    if len(clean) < 24:
+        has_letter = bool(re.search(r"[a-zA-Z]", clean))
+        has_digit = bool(re.search(r"\d", clean))
+        has_special = bool(re.search(r"[^a-zA-Z0-9]", clean))
+        if has_letter and has_digit and has_special:
+            return True
+        # For short tokens without special chars, require entropy check
+        if not has_special and len(clean) < 16:
+            return False
     freq: dict[str, int] = {}
     for ch in clean:
         freq[ch] = freq.get(ch, 0) + 1
     length = len(clean)
     entropy = -sum((c / length) * math.log2(c / length) for c in freq.values())
-    return entropy >= 3.5
+    # Hex-only strings have max ~4.0 bits entropy, use lower threshold
+    is_hex = bool(re.fullmatch(r"[a-fA-F0-9]+", clean))
+    threshold = 3.0 if is_hex else (3.0 if length < 24 else 3.5)
+    return entropy >= threshold
 
 
 # Registry mapping validator names to functions — MUST be at end of file

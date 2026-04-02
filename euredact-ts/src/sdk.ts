@@ -3,13 +3,13 @@ import { normalize, mapOffsetToOriginal } from "./normalizer.js";
 import { RuleEngine } from "./rules/engine.js";
 import { EntityType, type Detection, type RedactResult } from "./types.js";
 
-const DATE_TYPES = new Set([EntityType.DOB, EntityType.DATE_OF_DEATH]);
+const DATE_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
 
 class ReferentialMapper {
-  private counters = new Map<EntityType, number>();
+  private counters = new Map<EntityType | string, number>();
   private mapping = new Map<string, string>();
 
-  getLabel(text: string, entityType: EntityType): string {
+  getLabel(text: string, entityType: EntityType | string): string {
     if (!this.mapping.has(text)) {
       const count = (this.counters.get(entityType) ?? 0) + 1;
       this.counters.set(entityType, count);

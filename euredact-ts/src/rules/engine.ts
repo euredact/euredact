@@ -64,7 +64,7 @@ export class RuleEngine {
     for (const m of rawMatches) {
       if (this.matcher.validate(m)) {
         validated.push(m);
-      } else if (m.patternDef.validator !== null) {
+      } else if (m.patternDef.validator !== null && !m.patternDef.requiresContext) {
         suppressionZones.push([m.start, m.end]);
       }
     }
