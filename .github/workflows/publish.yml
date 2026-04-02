@@ -5,31 +5,62 @@ on:
     types: [published]
 
 jobs:
-  publish-python:
+  build-python:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: euredact-python
-    permissions:
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install build
+      - run: pip install build ".[dev]"
+      - run: ruff check src/
+      - run: python -m pytest tests/ -x -q
       - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: euredact-python/dist/
+
+  build-ts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: euredact-ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  publish-python:
+    needs: [build-python, build-ts]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: euredact-python/dist/
+          packages-dir: dist/
 
   publish-ts:
+    needs: [build-python, build-ts]
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: euredact-ts
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,6 +69,6 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run build
-      - run: npm publish --access public
+      - run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
