@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>EuRedact Benchmark Report</title>
+<style>:root { --green: #16a34a; --lime: #65a30d; --amber: #d97706; --red: #dc2626;
+        --blue: #2563eb; --purple: #7c3aed; --bg: #f8fafc; --fg: #0f172a; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', system-ui, -apple-system, sans-serif;
+       background: var(--bg); color: var(--fg); line-height: 1.5;
+       padding: 2rem; max-width: 1400px; margin: 0 auto; }
+h1 { font-size: 1.5rem; margin-bottom: .25rem; }
+h1 small { font-weight: 400; color: #64748b; font-size: .85rem; }
+h2 { font-size: 1.2rem; margin: 2rem 0 .75rem;
+     border-bottom: 2px solid #e2e8f0; padding-bottom: .4rem; }
+.summary { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1.25rem 0; }
+.card { background: white; border: 1px solid #e2e8f0; border-radius: .5rem;
+        padding: 1rem 1.25rem; min-width: 150px; flex: 1; }
+.card-title { font-size: .75rem; text-transform: uppercase;
+              letter-spacing: .05em; color: #64748b; margin-bottom: .15rem; }
+.big-number { font-size: 2rem; font-weight: 700; line-height: 1.2; }
+.card-detail { font-size: .78rem; color: #94a3b8; }
+.runtime-py { color: var(--blue); }
+.runtime-ts { color: var(--purple); }
+.dual-metric { display: flex; gap: 1.5rem; align-items: baseline; }
+.dual-metric .metric { text-align: center; }
+.dual-metric .metric-label { font-size: .65rem; text-transform: uppercase;
+                              letter-spacing: .05em; margin-bottom: .1rem; }
+.dual-metric .metric-value { font-size: 1.8rem; font-weight: 700; line-height: 1.2; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: .82rem; }
+th, td { padding: .35rem .55rem; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th { background: #f1f5f9; font-weight: 600; font-size: .72rem;
+     text-transform: uppercase; letter-spacing: .04em; color: #475569; }
+.group-py { background: #eff6ff; }
+.group-ts { background: #f5f3ff; }
+.group-shared { background: #f0fdf4; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.label { font-weight: 500; white-space: nowrap; }
+.perfect { color: var(--green); }
+.good { color: var(--lime); }
+.warn { color: var(--amber); }
+.bad { color: var(--red); }
+.na { color: #cbd5e1; }
+.delta-better { color: var(--green); font-size: .75rem; }
+.delta-worse { color: var(--red); font-size: .75rem; }
+.delta-same { color: #cbd5e1; font-size: .75rem; }
+.perf-bar { display: flex; align-items: center; gap: .5rem; }
+.perf-fill { height: 18px; border-radius: 3px; min-width: 4px; }
+.perf-fill.py { background: var(--blue); }
+.perf-fill.ts { background: var(--purple); }
+.perf-label { font-size: .78rem; white-space: nowrap; }
+.legend { display: flex; gap: 1.5rem; margin: .5rem 0 1rem; font-size: .78rem; color: #64748b; }
+.legend-dot { display: inline-block; width: 10px; height: 10px;
+              border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+.legend-dot.py { background: var(--blue); }
+.legend-dot.ts { background: var(--purple); }
+</style></head><body>
+<h1>EuRedact Benchmark Report <small>2026-04-13 10:10 UTC &middot; 152,300 records &middot; 31 countries &middot; v0.2.0</small></h1>
+
+<div class="legend">
+  <span><span class="legend-dot py"></span>Python 3.12.13</span>
+  <span><span class="legend-dot ts"></span>TypeScript v22.12.0</span>
+</div>
+<div class="summary">
+  <div class="card">
+    <div class="card-title">Records</div>
+    <div class="big-number">152,300</div>
+    <div class="card-detail">Expected PII: 667,213 (excl. DOB)</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Recall</div>
+    <div class="dual-metric">
+      <div class="metric"><div class="metric-label runtime-py">Python</div><div class="metric-value good">98.1%</div></div>
+      <div class="metric"><div class="metric-label runtime-ts">TypeScript</div><div class="metric-value good">98.1%</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Precision</div>
+    <div class="dual-metric">
+      <div class="metric"><div class="metric-label runtime-py">Python</div><div class="metric-value perfect">99.0%</div></div>
+      <div class="metric"><div class="metric-label runtime-ts">TypeScript</div><div class="metric-value perfect">99.0%</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">F1 Score</div>
+    <div class="dual-metric">
+      <div class="metric"><div class="metric-label runtime-py">Python</div><div class="metric-value">0.986</div></div>
+      <div class="metric"><div class="metric-label runtime-ts">TypeScript</div><div class="metric-value">0.986</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Performance</div>
+    <div class="dual-metric">
+      <div class="metric"><div class="metric-label runtime-py">Python</div><div class="metric-value">0.71<small style="font-size:.5em;font-weight:400"> ms</small></div></div>
+      <div class="metric"><div class="metric-label runtime-ts">TypeScript</div><div class="metric-value">0.05<small style="font-size:.5em;font-weight:400"> ms</small></div></div>
+    </div>
+    <div class="card-detail">Per sample &middot; TS is 16x faster</div>
+  </div>
+</div>
+<h2>Performance by Dataset</h2>
+<table><thead><tr><th rowspan=2>Dataset</th><th rowspan=2 class="num">Records</th><th colspan=3 class="group-py">Python</th><th colspan=3 class="group-ts">TypeScript</th><th rowspan=2>Delta</th></tr><tr><th class="group-py">Recall</th><th class="group-py">Precision</th><th class="group-py num">ms/rec</th><th class="group-ts">Recall</th><th class="group-ts">Precision</th><th class="group-ts num">ms/rec</th></tr></thead><tbody>
+<tr><td class="label">training_core2</td><td class="num">10,000</td><td><span class="perfect">99.5%</span></td><td><span class="perfect">99.9%</span></td><td class="num">0.74</td><td><span class="perfect">99.5%</span></td><td><span class="perfect">99.9%</span></td><td class="num">0.06</td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">training_core</td><td class="num">7,300</td><td><span class="perfect">99.4%</span></td><td><span class="perfect">100.0%</span></td><td class="num">0.70</td><td><span class="perfect">99.4%</span></td><td><span class="perfect">100.0%</span></td><td class="num">0.05</td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">nordic_20k</td><td class="num">20,000</td><td><span class="good">97.5%</span></td><td><span class="good">98.4%</span></td><td class="num">0.73</td><td><span class="good">97.5%</span></td><td><span class="good">98.4%</span></td><td class="num">0.05</td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">international_10k</td><td class="num">10,000</td><td><span class="good">96.8%</span></td><td><span class="good">97.9%</span></td><td class="num">0.74</td><td><span class="good">97.4%</span></td><td><span class="good">98.1%</span></td><td class="num">0.05</td><td class="num"><span class="delta-better">+0.6pp</span></td></tr>
+<tr><td class="label">ie_baltics_uk_20k</td><td class="num">20,000</td><td><span class="good">98.7%</span></td><td><span class="perfect">100.0%</span></td><td class="num">0.68</td><td><span class="good">98.7%</span></td><td><span class="perfect">100.0%</span></td><td class="num">0.04</td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">el_cy_mt_20k</td><td class="num">20,000</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num">0.72</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num">0.05</td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">eastern_20k</td><td class="num">20,000</td><td><span class="good">98.4%</span></td><td><span class="good">97.5%</span></td><td class="num">0.71</td><td><span class="good">98.4%</span></td><td><span class="good">97.5%</span></td><td class="num">0.04</td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">dach_south_20k</td><td class="num">20,000</td><td><span class="good">97.3%</span></td><td><span class="perfect">99.9%</span></td><td class="num">0.71</td><td><span class="good">97.3%</span></td><td><span class="perfect">99.9%</span></td><td class="num">0.05</td><td class="num"><span class="delta-better">+0.1pp</span></td></tr>
+<tr><td class="label">allcountries_20k</td><td class="num">20,000</td><td><span class="good">96.5%</span></td><td><span class="perfect">99.3%</span></td><td class="num">0.70</td><td><span class="good">96.5%</span></td><td><span class="perfect">99.3%</span></td><td class="num">0.05</td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">secrets_5k</td><td class="num">5,000</td><td><span class="good">95.1%</span></td><td><span class="warn">85.8%</span></td><td class="num">0.62</td><td><span class="good">95.3%</span></td><td><span class="warn">85.9%</span></td><td class="num">0.02</td><td class="num"><span class="delta-better">+0.2pp</span></td></tr>
+<tr style="font-weight:600;border-top:2px solid #cbd5e1"><td class="label">TOTAL</td><td class="num">152,300</td><td><span class="good">98.1%</span></td><td><span class="perfect">99.0%</span></td><td class="num">0.71</td><td><span class="good">98.1%</span></td><td><span class="perfect">99.0%</span></td><td class="num">0.05</td><td class="num"><span class="delta-better">+0.1pp</span></td></tr>
+</tbody></table>
+<h2>Performance by PII Category</h2>
+<table><thead><tr><th rowspan=2>Category</th><th rowspan=2 class="num">Expected</th><th colspan=3 class="group-py">Python</th><th colspan=3 class="group-ts">TypeScript</th><th rowspan=2>Delta</th></tr><tr><th class="group-py num">Detected</th><th class="group-py">Recall</th><th class="group-py">Precision</th><th class="group-ts num">Detected</th><th class="group-ts">Recall</th><th class="group-ts">Precision</th></tr></thead><tbody>
+<tr><td class="label">EMAIL</td><td class="num">152,938</td><td class="num">152,899</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num">152,593</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.2%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">IBAN</td><td class="num">126,428</td><td class="num">125,073</td><td><span class="perfect">99.8%</span></td><td><span class="perfect">100.9%</span></td><td class="num">125,073</td><td><span class="perfect">99.8%</span></td><td><span class="perfect">100.9%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">PHONE</td><td class="num">123,151</td><td class="num">113,685</td><td><span class="warn">93.5%</span></td><td><span class="perfect">101.3%</span></td><td class="num">113,670</td><td><span class="warn">93.5%</span></td><td><span class="perfect">101.3%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">NATIONAL_ID</td><td class="num">118,582</td><td class="num">109,734</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">108.1%</span></td><td class="num">109,615</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">108.2%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">POSTAL_CODE</td><td class="num">53,914</td><td class="num">57,017</td><td><span class="good">96.2%</span></td><td><span class="warn">91.0%</span></td><td class="num">57,097</td><td><span class="good">96.4%</span></td><td><span class="warn">91.0%</span></td><td class="num"><span class="delta-better">+0.2pp</span></td></tr>
+<tr><td class="label">VAT</td><td class="num">20,136</td><td class="num">20,667</td><td><span class="perfect">100.0%</span></td><td><span class="good">97.4%</span></td><td class="num">20,667</td><td><span class="perfect">100.0%</span></td><td><span class="good">97.4%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">VIN</td><td class="num">9,701</td><td class="num">9,700</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num">9,700</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">IP_ADDRESS</td><td class="num">9,585</td><td class="num">9,370</td><td><span class="good">95.7%</span></td><td><span class="good">97.9%</span></td><td class="num">9,844</td><td><span class="good">98.7%</span></td><td><span class="good">96.1%</span></td><td class="num"><span class="delta-better">+3.0pp</span></td></tr>
+<tr><td class="label">CHAMBER_OF_COMMERCE</td><td class="num">8,497</td><td class="num">6,865</td><td><span class="bad">82.3%</span></td><td><span class="perfect">101.9%</span></td><td class="num">6,865</td><td><span class="bad">82.3%</span></td><td><span class="perfect">101.9%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">LICENSE_PLATE</td><td class="num">6,445</td><td class="num">6,566</td><td><span class="perfect">99.9%</span></td><td><span class="good">98.1%</span></td><td class="num">6,436</td><td><span class="perfect">99.9%</span></td><td><span class="perfect">100.0%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">CREDIT_CARD</td><td class="num">6,415</td><td class="num">6,433</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">99.7%</span></td><td class="num">6,433</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">99.7%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">SECRET</td><td class="num">5,798</td><td class="num">7,842</td><td><span class="warn">94.7%</span></td><td><span class="bad">70.0%</span></td><td class="num">7,842</td><td><span class="warn">94.7%</span></td><td><span class="bad">70.0%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">UUID</td><td class="num">4,890</td><td class="num">4,205</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">116.3%</span></td><td class="num">4,205</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">116.3%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">TAX_ID</td><td class="num">4,118</td><td class="num">15,039</td><td><span class="perfect">100.0%</span></td><td><span class="bad">27.4%</span></td><td class="num">15,013</td><td><span class="perfect">100.0%</span></td><td><span class="bad">27.4%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">MAC_ADDRESS</td><td class="num">3,546</td><td class="num">3,545</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num">3,546</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">BIC</td><td class="num">3,228</td><td class="num">3,099</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">104.2%</span></td><td class="num">3,099</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">104.2%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">IMEI</td><td class="num">2,443</td><td class="num">2,720</td><td><span class="perfect">100.0%</span></td><td><span class="warn">89.8%</span></td><td class="num">2,720</td><td><span class="perfect">100.0%</span></td><td><span class="warn">89.8%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">SOCIAL_HANDLE</td><td class="num">2,267</td><td class="num">2,267</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num">2,573</td><td><span class="perfect">100.0%</span></td><td><span class="warn">88.1%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">SSN</td><td class="num">1,288</td><td class="num">573</td><td><span class="bad">84.2%</span></td><td><span class="perfect">189.2%</span></td><td class="num">573</td><td><span class="bad">84.2%</span></td><td><span class="perfect">189.2%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">PASSPORT</td><td class="num">1,072</td><td class="num">1,071</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.1%</span></td><td class="num">1,071</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.1%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">GPS_COORDINATES</td><td class="num">950</td><td class="num">950</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num">950</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">HEALTH_INSURANCE</td><td class="num">933</td><td class="num">949</td><td><span class="perfect">100.0%</span></td><td><span class="good">98.3%</span></td><td class="num">949</td><td><span class="perfect">100.0%</span></td><td><span class="good">98.3%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">IPV6_ADDRESS</td><td class="num">636</td><td class="num">636</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num">636</td><td><span class="perfect">100.0%</span></td><td><span class="perfect">100.0%</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+<tr><td class="label">HEALTHCARE_PROVIDER</td><td class="num">252</td><td class="num">0</td><td><span class="perfect">100.0%</span></td><td><span class="na">N/A</span></td><td class="num">0</td><td><span class="perfect">100.0%</span></td><td><span class="na">N/A</span></td><td class="num"><span class="delta-same">=</span></td></tr>
+</tbody></table>
+<h2>Processing Speed by Dataset</h2>
+<table><thead><tr><th>Dataset</th><th>Python</th><th>TypeScript</th></tr></thead><tbody>
+<tr><td class="label">training_core2</td><td><div class="perf-bar"><div class="perf-fill py" style="width:100.0%"></div><span class="perf-label">0.74 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:8.0%"></div><span class="perf-label">0.06 ms</span></div></td></tr>
+<tr><td class="label">training_core</td><td><div class="perf-bar"><div class="perf-fill py" style="width:93.8%"></div><span class="perf-label">0.70 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:6.9%"></div><span class="perf-label">0.05 ms</span></div></td></tr>
+<tr><td class="label">nordic_20k</td><td><div class="perf-bar"><div class="perf-fill py" style="width:98.5%"></div><span class="perf-label">0.73 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:6.2%"></div><span class="perf-label">0.05 ms</span></div></td></tr>
+<tr><td class="label">international_10k</td><td><div class="perf-bar"><div class="perf-fill py" style="width:99.3%"></div><span class="perf-label">0.74 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:6.1%"></div><span class="perf-label">0.05 ms</span></div></td></tr>
+<tr><td class="label">ie_baltics_uk_20k</td><td><div class="perf-bar"><div class="perf-fill py" style="width:91.7%"></div><span class="perf-label">0.68 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:5.8%"></div><span class="perf-label">0.04 ms</span></div></td></tr>
+<tr><td class="label">el_cy_mt_20k</td><td><div class="perf-bar"><div class="perf-fill py" style="width:96.7%"></div><span class="perf-label">0.72 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:6.1%"></div><span class="perf-label">0.05 ms</span></div></td></tr>
+<tr><td class="label">eastern_20k</td><td><div class="perf-bar"><div class="perf-fill py" style="width:95.8%"></div><span class="perf-label">0.71 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:5.9%"></div><span class="perf-label">0.04 ms</span></div></td></tr>
+<tr><td class="label">dach_south_20k</td><td><div class="perf-bar"><div class="perf-fill py" style="width:96.0%"></div><span class="perf-label">0.71 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:6.1%"></div><span class="perf-label">0.05 ms</span></div></td></tr>
+<tr><td class="label">allcountries_20k</td><td><div class="perf-bar"><div class="perf-fill py" style="width:94.6%"></div><span class="perf-label">0.70 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:6.1%"></div><span class="perf-label">0.05 ms</span></div></td></tr>
+<tr><td class="label">secrets_5k</td><td><div class="perf-bar"><div class="perf-fill py" style="width:83.9%"></div><span class="perf-label">0.62 ms</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:2.8%"></div><span class="perf-label">0.02 ms</span></div></td></tr>
+<tr style="font-weight:600;border-top:2px solid #cbd5e1"><td class="label">Average</td><td><div class="perf-bar"><div class="perf-fill py" style="width:95.6%"></div><span class="perf-label">0.71 ms (108.1s total)</span></div></td><td><div class="perf-bar"><div class="perf-fill ts" style="width:6.1%"></div><span class="perf-label">0.05 ms (6.9s total)</span></div></td></tr>
+</tbody></table>
+</body></html>
