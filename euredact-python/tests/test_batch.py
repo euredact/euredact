@@ -44,7 +44,7 @@ class TestRedactBatch:
             countries=["NL", "BE"],
         )
         assert "[NATIONAL_ID]" in results[0].redacted_text
-        assert "[IBAN]" in results[1].redacted_text
+        assert "[BANK_ACCOUNT]" in results[1].redacted_text
 
 
 class TestAredact:

@@ -29,7 +29,7 @@ const FILES = [
 // Map data PII categories → our EntityType values
 const CATEGORY_MAP: Record<string, string> = {
   EMAIL: "EMAIL",
-  IBAN: "IBAN",
+  IBAN: "BANK_ACCOUNT",
   PHONE: "PHONE",
   NATIONAL_ID: "NATIONAL_ID",
   NATIONAL_ID_CARD: "NATIONAL_ID",

@@ -32,7 +32,7 @@ class TestBelgianIBAN:
             "Mijn IBAN is BE68 5390 0754 7034.", countries=["BE"]
         )
         assert any(d.entity_type == EntityType.IBAN for d in result.detections)
-        assert "[IBAN]" in result.redacted_text
+        assert "[BANK_ACCOUNT]" in result.redacted_text
 
     def test_valid_iban_compact(self):
         result = euredact.redact(
