@@ -48,3 +48,6 @@ dist/
 
 # Tooling artifacts
 .playwright-mcp/
+
+# Claude Code: machine-local permissions state (skills in .claude/skills are shared)
+.claude/settings.local.json
