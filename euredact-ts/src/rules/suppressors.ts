@@ -1,5 +1,6 @@
 import { EntityType, type PatternDef } from "../types.js";
 import { isRegisteredBic } from "./bicRegistry.js";
+import { DE_DISTRICT_CODES } from "./deDistricts.js";
 
 const CONTEXT_CHARS = 150;
 
@@ -184,6 +185,29 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
     if (parts.length > 0 && (parts[0] === "WS" || parts[0] === "SS")) return true;
   }
   return false;
+}
+
+/**
+ * Reject a German plate whose district code is not a real one.
+ *
+ * The district-code set is closed, which makes it a whitelist rather than the
+ * open-ended blocklist of standards prefixes: "REF-A12", "SYS-B3", "KTO-A1"
+ * and every other document reference of that shape fail it without needing to
+ * be enumerated. Applied as a tier — an unknown code still emits when a plate
+ * cue is nearby, so a missing code costs recall only in the absence of any
+ * other evidence.
+ */
+function suppressDePlateUnknownDistrict(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.LICENSE_PLATE) return false;
+  if (match.countryCode !== "DE") return false;
+
+  const parts = match.text.trim().split(/[\s\-]+/);
+  if (parts.length === 0 || !parts[0]) return false;
+  if (DE_DISTRICT_CODES.has(parts[0].toUpperCase())) return false;
+
+  const [before, after] = getContext(text, match.start, match.end);
+  if (PLATE_CUE_NEAR.test(before + after)) return false;
+  return true;
 }
 
 function suppressNatidAsPassport(text: string, match: RawMatch): boolean {
@@ -463,7 +487,7 @@ const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.POSTAL_CODE]: [suppressCurrency, suppressUnits, suppressMath, suppressLegal, suppressYearAsPostal, suppressPostalInsideIban, suppressPostalAsHouseNumber, suppressPostalInLongerIdentifier],
   [EntityType.BIC]: [suppressBicWithoutEvidence],
   [EntityType.BANK_ACCOUNT]: [suppressReference],
-  [EntityType.LICENSE_PLATE]: [suppressPlateInCompound],
+  [EntityType.LICENSE_PLATE]: [suppressPlateInCompound, suppressDePlateUnknownDistrict],
   [EntityType.CHAMBER_OF_COMMERCE]: [suppressReference],
 };
 

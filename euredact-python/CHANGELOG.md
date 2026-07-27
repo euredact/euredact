@@ -4,6 +4,25 @@
 
 ### Fixed
 
+- **German plates are now validated against the district-code list.** The
+  pattern accepted any 1-3 uppercase letters as a city code, so document
+  references kept the plate shape: `REF-A12`, `SYS-B3`, `KTO-A1`, `JOB-C4`
+  were all detected. The ~790 *Unterscheidungszeichen* are a closed set fixed
+  by the Fahrzeug-Zulassungsverordnung, which makes membership a whitelist
+  rather than the open-ended blocklist of standards prefixes it replaces —
+  references of that shape now fail without needing to be enumerated.
+
+  Applied as a tier, not a filter: a code on the list emits with no cue, a
+  code absent from it still emits when a plate cue (`Kennzeichen`, `Kfz`,
+  `Fahrzeug`) is nearby, and only the combination of neither is rejected. A
+  code missing from the list therefore costs recall solely where there is no
+  other evidence. Verified on the corpus: 548 true positives, 0 false
+  positives, 0 missed.
+
+  The standards guard is kept alongside it, because `DIN` is both a standards
+  body and the district code for Dinslaken — a whitelist alone cannot tell
+  `DIN A4` from a Dinslaken plate.
+
 - **German `LICENSE_PLATE` matched standards codes and document references.**
   With `countries=["DE"]`, `ICD-10`, `ISO-9001`, `EN-1090`, `DIN-4102`,
   `RFC-2822`, `COVID-19`, `POL-2025` and similar were replaced with

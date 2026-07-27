@@ -11,6 +11,7 @@ import re
 from typing import Callable
 
 from euredact.rules.bic_registry import is_registered_bic
+from euredact.rules.de_districts import DE_DISTRICT_CODES
 from euredact.rules.matchers import RawMatch
 from euredact.types import EntityType
 
@@ -428,6 +429,35 @@ def suppress_plate_in_compound(text: str, match: RawMatch) -> bool:
     return False
 
 
+def suppress_de_plate_unknown_district(text: str, match: RawMatch) -> bool:
+    """Reject a German plate whose district code is not a real one.
+
+    The district-code set is closed (see :mod:`euredact.rules.de_districts`),
+    which makes it a whitelist rather than the open-ended blocklist of
+    standards prefixes: ``REF-A12``, ``SYS-B3``, ``KTO-A1`` and every other
+    document reference of that shape fail it without needing to be enumerated.
+
+    Applied as a tier — an unknown code still emits when a plate cue is
+    nearby, so a code missing from the list costs recall only in the absence
+    of any other evidence.
+    """
+    if match.pattern_def.entity_type != EntityType.LICENSE_PLATE:
+        return False
+    if match.country_code != "DE":
+        return False
+
+    parts = re.split(r"[\s\-]+", match.text.strip())
+    if not parts or not parts[0]:
+        return False
+    if parts[0].upper() in DE_DISTRICT_CODES:
+        return False
+
+    before, after = _get_context(text, match.start, match.end)
+    if _PLATE_CUE_NEAR.search(before + after):
+        return False
+    return True
+
+
 def suppress_natid_as_passport(text: str, match: RawMatch) -> bool:
     """Suppress NATIONAL_ID when context clearly says passport."""
     if match.pattern_def.entity_type != EntityType.NATIONAL_ID:
@@ -750,7 +780,7 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
     ],
     EntityType.BIC: [suppress_bic_without_evidence],
     EntityType.IBAN: [suppress_reference],
-    EntityType.LICENSE_PLATE: [suppress_plate_in_compound],
+    EntityType.LICENSE_PLATE: [suppress_plate_in_compound, suppress_de_plate_unknown_district],
     EntityType.CHAMBER_OF_COMMERCE: [suppress_reference],
 }
 
