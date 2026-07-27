@@ -41,6 +41,16 @@ class ATConfig(CountryConfig):
                 validator=None,
                 description="Austrian national phone",
             ),
+            # Short area codes (Vienna is "01") split across three groups:
+            # "01 53460 2215". The pattern above requires 3-4 digits after the
+            # trunk 0, so it never matched these. Both separators are
+            # mandatory here, which keeps "01 2025" (a date fragment) out.
+            PatternDef(
+                entity_type=EntityType.PHONE,
+                pattern=r"\b0\d{1,4}[\s\-/]\d{3,7}[\s\-/]\d{2,6}\b",
+                validator=None,
+                description="Austrian national phone — short area code, grouped",
+            ),
             # --- Phone (international) ---
             PatternDef(
                 entity_type=EntityType.PHONE,

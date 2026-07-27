@@ -6,14 +6,11 @@ import re
 from typing import Callable
 
 
-def validate_iban(candidate: str) -> bool:
-    """ISO 13616 IBAN validation. Move country code to end, convert letters to digits, mod 97."""
-    clean = candidate.replace(" ", "").replace("-", "").upper()
-    if len(clean) < 5 or not clean[:2].isalpha() or not clean[2:4].isdigit():
-        return False
-
-    # Country-specific length validation
-    iban_lengths: dict[str, int] = {
+# Total IBAN length per country (ISO 13616 registry). Also used to build the
+# country-independent IBAN pattern in euredact.rules.countries._shared, so an
+# IBAN is detected on its own structure rather than on the caller's
+# ``countries=[...]`` setting.
+IBAN_LENGTHS: dict[str, int] = {
         "AL": 28, "AD": 24, "AT": 20, "AZ": 28, "BH": 22, "BY": 28,
         "BE": 16, "BA": 20, "BR": 29, "BG": 22, "CR": 22, "HR": 21,
         "CY": 28, "CZ": 24, "DK": 18, "DO": 28, "TL": 23, "EE": 20,
@@ -27,9 +24,17 @@ def validate_iban(candidate: str) -> bool:
         "RS": 22, "SC": 31, "SK": 24, "SI": 19, "ES": 24, "SE": 24,
         "CH": 21, "TN": 24, "TR": 26, "UA": 29, "AE": 23, "GB": 22,
         "VA": 22, "VG": 24,
-    }
+}
+
+
+def validate_iban(candidate: str) -> bool:
+    """ISO 13616 IBAN validation. Move country code to end, convert letters to digits, mod 97."""
+    clean = candidate.replace(" ", "").replace("-", "").upper()
+    if len(clean) < 5 or not clean[:2].isalpha() or not clean[2:4].isdigit():
+        return False
+
     country = clean[:2]
-    expected_len = iban_lengths.get(country)
+    expected_len = IBAN_LENGTHS.get(country)
     if expected_len is not None and len(clean) != expected_len:
         return False
 
@@ -254,16 +259,50 @@ def validate_vin(candidate: str) -> bool:
     return True
 
 
+# ISO 3166-1 alpha-2 codes, plus the reserved codes SWIFT assigns BICs under
+# (XK = Kosovo, user-assigned but in active banking use).
+ISO_3166_ALPHA2: frozenset[str] = frozenset({
+    "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT",
+    "AU", "AW", "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI",
+    "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY",
+    "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN",
+    "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM",
+    "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK",
+    "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL",
+    "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HM",
+    "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR",
+    "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN",
+    "KP", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS",
+    "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK",
+    "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW",
+    "MX", "MY", "MZ", "NA", "NC", "NE", "NF", "NG", "NI", "NL", "NO", "NP",
+    "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM",
+    "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW",
+    "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM",
+    "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF",
+    "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW",
+    "TZ", "UA", "UG", "UM", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VI",
+    "VN", "VU", "WF", "WS", "XK", "YE", "YT", "ZA", "ZM", "ZW",
+})
+
+
 def validate_bic(candidate: str) -> bool:
-    """BIC/SWIFT: 8 or 11 alphanumeric characters. BBBB CC LL (PPP)."""
+    """BIC/SWIFT structural validation (ISO 9362): BBBB CC LL (PPP).
+
+    Necessary but **not sufficient** — BIC has no check digit, and characters
+    5-6 of ordinary uppercase words are frequently valid country codes
+    (``DRINGEND`` -> ``GE``, ``HOSPITAL`` -> ``IT``). Emission additionally
+    requires a registry hit or banking context; see
+    :func:`euredact.rules.suppressors.suppress_bic_without_evidence`.
+    """
     clean = candidate.replace(" ", "").upper()
     if len(clean) not in (8, 11):
         return False
-    # First 4: bank code (letters only)
+    # First 4: institution code (letters only — digits 0/1 are never valid here)
     if not clean[:4].isalpha():
         return False
-    # Next 2: country code (letters)
-    if not clean[4:6].isalpha():
+    # Next 2: country code — must be a real ISO 3166-1 alpha-2 code
+    if clean[4:6] not in ISO_3166_ALPHA2:
         return False
     # Next 2: location (alphanumeric)
     if not clean[6:8].isalnum():
@@ -272,6 +311,24 @@ def validate_bic(candidate: str) -> bool:
     if len(clean) == 11 and not clean[8:11].isalnum():
         return False
     return True
+
+
+def validate_e164(candidate: str) -> bool:
+    """International phone number in E.164 form: ``+`` then 8-15 digits.
+
+    A ``+`` prefix makes a phone number self-identifying, so this backs a
+    country-independent pattern: the per-country patterns each hard-code one
+    grouping and miss the others (``+43 664 8213 907`` was invisible because
+    the Austrian pattern expects an unbroken subscriber number).
+
+    E.164 caps a full number at 15 digits including the country code. The
+    lower bound of 8 keeps short numeric fragments and arithmetic out.
+    """
+    if not candidate.lstrip().startswith("+"):
+        return False
+    # A trunk prefix written as "(0)" is not part of the E.164 digit count.
+    digits = re.sub(r"\D", "", re.sub(r"\(\s*0\s*\)", "", candidate))
+    return 8 <= len(digits) <= 15
 
 
 def validate_kvk(candidate: str) -> bool:
@@ -801,6 +858,7 @@ VALIDATORS: dict[str, Callable[[str], bool]] = {
     "french_nir": validate_french_nir,
     "vin": validate_vin,
     "bic": validate_bic,
+    "e164": validate_e164,
     "kvk": validate_kvk,
     "swedish_pnr": validate_swedish_pnr,
     "norwegian_fnr": validate_norwegian_fnr,

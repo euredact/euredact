@@ -22,8 +22,9 @@ from __future__ import annotations
 
 from typing import Iterator
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
+from euredact.rules.bic_registry import set_bic_registry
 from euredact.sdk import EuRedact
 from euredact.types import Detection, DetectionSource, EntityType, RedactResult
 
@@ -33,6 +34,8 @@ __all__ = [
     "aredact",
     "aredact_batch",
     "available_countries",
+    "clear",
+    "set_bic_registry",
     "Detection",
     "DetectionSource",
     "EntityType",
@@ -65,6 +68,14 @@ def _get_instance() -> EuRedact:
 def add_custom_pattern(name: str, pattern: str) -> None:
     """Register a custom regex pattern detected as *name*."""
     _get_instance().add_custom_pattern(name, pattern)
+
+
+def clear() -> None:
+    """Clear the result cache and referential integrity mappings.
+
+    Call this in long-running processes to free PII from memory.
+    """
+    _get_instance().clear()
 
 
 def available_countries() -> list[str]:

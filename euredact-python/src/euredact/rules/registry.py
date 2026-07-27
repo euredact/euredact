@@ -13,9 +13,24 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+import warnings
 
 import euredact.rules.countries as _countries_pkg
 from euredact.rules.countries._base import CountryConfig
+
+# The country modules use the EU/VAT convention (UK, EL) while the public
+# contract is ISO 3166-1 alpha-2 (GB, GR). Accept both spellings so a caller
+# passing correct ISO codes is not punished for it.
+COUNTRY_CODE_ALIASES: dict[str, str] = {
+    "GB": "UK",   # ISO 3166-1 alpha-2 -> EU/VAT convention
+    "GR": "EL",
+    "UK": "UK",
+    "EL": "EL",
+}
+
+
+class UnknownCountryWarning(UserWarning):
+    """Raised as a warning when an unrecognised country code is requested."""
 
 
 class CountryRegistry:
@@ -45,22 +60,44 @@ class CountryRegistry:
                     if instance.code:
                         self._available[instance.code] = attr
 
-    def load(self, country_code: str) -> CountryConfig:
-        """Load a country config on demand. Idempotent."""
-        code = country_code.upper()
+    def resolve(self, country_code: str) -> str | None:
+        """Map a caller-supplied code to a registered one, or None if unknown.
+
+        Accepts ISO 3166-1 alpha-2 (``GB``, ``GR``) as well as the EU/VAT
+        spellings the country modules use (``UK``, ``EL``).
+        """
+        code = country_code.strip().upper()
+        code = COUNTRY_CODE_ALIASES.get(code, code)
+        return code if code in self._available else None
+
+    def load(self, country_code: str) -> CountryConfig | None:
+        """Load a country config on demand. Idempotent.
+
+        An unrecognised code returns ``None`` with a warning rather than
+        raising: a redaction library that throws on an unknown locale invites
+        callers to wrap it in ``try/except`` and skip redaction entirely,
+        which fails open and leaks PII. Detection continues with the shared
+        (country-independent) patterns.
+        """
+        code = self.resolve(country_code)
+        if code is None:
+            warnings.warn(
+                f"Unknown country code: {country_code!r}. Continuing with "
+                f"shared country-independent patterns only (email, IBAN, "
+                f"international phone, credit card, ...). "
+                f"Available: {sorted(self.available_countries)}",
+                UnknownCountryWarning,
+                stacklevel=3,
+            )
+            return None
         if code not in self._configs:
-            if code not in self._available:
-                raise ValueError(
-                    f"Unknown country code: {code!r}. "
-                    f"Available: {sorted(self._available)}"
-                )
-            cls = self._available[code]
-            self._configs[code] = cls()
+            self._configs[code] = self._available[code]()
         return self._configs[code]
 
     def load_all(self) -> list[CountryConfig]:
         """Load all registered countries."""
-        return [self.load(code) for code in self._available]
+        configs = [self.load(code) for code in self._available]
+        return [c for c in configs if c is not None]
 
     @property
     def available_countries(self) -> list[str]:

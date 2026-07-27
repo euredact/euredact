@@ -2,21 +2,47 @@ function clean(candidate: string, chars = /[\s.\-]/g): string {
   return candidate.replace(chars, "");
 }
 
+/**
+ * Total IBAN length per country (ISO 13616 registry). Also used to build the
+ * country-independent IBAN pattern in rules/countries, so an IBAN is detected
+ * on its own structure rather than on the caller's `countries` setting.
+ */
+export const IBAN_LENGTHS: Record<string, number> = {
+  AL:28,AD:24,AT:20,AZ:28,BH:22,BY:28,BE:16,BA:20,BR:29,BG:22,CR:22,HR:21,
+  CY:28,CZ:24,DK:18,DO:28,TL:23,EE:20,FO:18,FI:18,FR:27,GE:22,DE:22,GI:23,
+  GR:27,GL:18,GT:28,HU:28,IS:26,IQ:23,IE:22,IL:23,IT:27,JO:30,KZ:20,XK:20,
+  KW:30,LV:21,LB:28,LI:21,LT:20,LU:20,MT:31,MR:27,MU:30,MC:27,MD:24,ME:22,
+  NL:18,MK:19,NO:15,PK:24,PS:29,PL:28,PT:25,QA:29,RO:24,LC:32,SM:27,SA:24,
+  RS:22,SC:31,SK:24,SI:19,ES:24,SE:24,CH:21,TN:24,TR:26,UA:29,AE:23,GB:22,
+  VA:22,VG:24,
+};
+
+/** ISO 3166-1 alpha-2 codes, plus XK (Kosovo, user-assigned but in banking use). */
+export const ISO_3166_ALPHA2: ReadonlySet<string> = new Set([
+  "AD","AE","AF","AG","AI","AL","AM","AO","AQ","AR","AS","AT","AU","AW","AX","AZ",
+  "BA","BB","BD","BE","BF","BG","BH","BI","BJ","BL","BM","BN","BO","BQ","BR","BS",
+  "BT","BV","BW","BY","BZ","CA","CC","CD","CF","CG","CH","CI","CK","CL","CM","CN",
+  "CO","CR","CU","CV","CW","CX","CY","CZ","DE","DJ","DK","DM","DO","DZ","EC","EE",
+  "EG","EH","ER","ES","ET","FI","FJ","FK","FM","FO","FR","GA","GB","GD","GE","GF",
+  "GG","GH","GI","GL","GM","GN","GP","GQ","GR","GS","GT","GU","GW","GY","HK","HM",
+  "HN","HR","HT","HU","ID","IE","IL","IM","IN","IO","IQ","IR","IS","IT","JE","JM",
+  "JO","JP","KE","KG","KH","KI","KM","KN","KP","KR","KW","KY","KZ","LA","LB","LC",
+  "LI","LK","LR","LS","LT","LU","LV","LY","MA","MC","MD","ME","MF","MG","MH","MK",
+  "ML","MM","MN","MO","MP","MQ","MR","MS","MT","MU","MV","MW","MX","MY","MZ","NA",
+  "NC","NE","NF","NG","NI","NL","NO","NP","NR","NU","NZ","OM","PA","PE","PF","PG",
+  "PH","PK","PL","PM","PN","PR","PS","PT","PW","PY","QA","RE","RO","RS","RU","RW",
+  "SA","SB","SC","SD","SE","SG","SH","SI","SJ","SK","SL","SM","SN","SO","SR","SS",
+  "ST","SV","SX","SY","SZ","TC","TD","TF","TG","TH","TJ","TK","TL","TM","TN","TO",
+  "TR","TT","TV","TW","TZ","UA","UG","UM","US","UY","UZ","VA","VC","VE","VG","VI",
+  "VN","VU","WF","WS","XK","YE","YT","ZA","ZM","ZW",
+]);
+
 export function validateIban(candidate: string): boolean {
   const c = candidate.replace(/[\s\-]/g, "").toUpperCase();
   if (c.length < 5 || !/^[A-Z]{2}/.test(c) || !/^\d{2}$/.test(c.slice(2, 4))) return false;
 
-  const ibanLengths: Record<string, number> = {
-    AL:28,AD:24,AT:20,AZ:28,BH:22,BY:28,BE:16,BA:20,BR:29,BG:22,CR:22,HR:21,
-    CY:28,CZ:24,DK:18,DO:28,TL:23,EE:20,FO:18,FI:18,FR:27,GE:22,DE:22,GI:23,
-    GR:27,GL:18,GT:28,HU:28,IS:26,IQ:23,IE:22,IL:23,IT:27,JO:30,KZ:20,XK:20,
-    KW:30,LV:21,LB:28,LI:21,LT:20,LU:20,MT:31,MR:27,MU:30,MC:27,MD:24,ME:22,
-    NL:18,MK:19,NO:15,PK:24,PS:29,PL:28,PT:25,QA:29,RO:24,LC:32,SM:27,SA:24,
-    RS:22,SC:31,SK:24,SI:19,ES:24,SE:24,CH:21,TN:24,TR:26,UA:29,AE:23,GB:22,
-    VA:22,VG:24,
-  };
   const country = c.slice(0, 2);
-  const expected = ibanLengths[country];
+  const expected = IBAN_LENGTHS[country];
   if (expected !== undefined && c.length !== expected) return false;
 
   const rearranged = c.slice(4) + c.slice(0, 4);
@@ -144,14 +170,38 @@ export function validateVin(candidate: string): boolean {
   return !/[IOQ]/.test(c);
 }
 
+/**
+ * BIC/SWIFT structural validation (ISO 9362): BBBB CC LL (PPP).
+ *
+ * Necessary but **not sufficient** — BIC has no check digit, and characters
+ * 5-6 of ordinary uppercase words are frequently valid country codes
+ * (`DRINGEND` -> `GE`, `HOSPITAL` -> `IT`). Emission additionally requires a
+ * registry hit or banking context; see `suppressBicWithoutEvidence`.
+ */
 export function validateBic(candidate: string): boolean {
   const c = candidate.replace(/ /g, "").toUpperCase();
   if (c.length !== 8 && c.length !== 11) return false;
   if (!/^[A-Z]{4}/.test(c)) return false;
-  if (!/^[A-Z]{2}$/.test(c.slice(4, 6))) return false;
+  // Country code must be a real ISO 3166-1 alpha-2 code
+  if (!ISO_3166_ALPHA2.has(c.slice(4, 6))) return false;
   if (!/^[A-Z0-9]{2}$/.test(c.slice(6, 8))) return false;
   if (c.length === 11 && !/^[A-Z0-9]{3}$/.test(c.slice(8, 11))) return false;
   return true;
+}
+
+/**
+ * International phone number in E.164 form: `+` then 8-15 digits.
+ *
+ * A `+` prefix makes a phone number self-identifying, so this backs a
+ * country-independent pattern: the per-country patterns each hard-code one
+ * grouping and miss the others (`+43 664 8213 907` was invisible because the
+ * Austrian pattern expects an unbroken subscriber number).
+ */
+export function validateE164(candidate: string): boolean {
+  if (!candidate.trimStart().startsWith("+")) return false;
+  // A trunk prefix written as "(0)" is not part of the E.164 digit count.
+  const digits = candidate.replace(/\(\s*0\s*\)/g, "").replace(/\D/g, "");
+  return digits.length >= 8 && digits.length <= 15;
 }
 
 export function validateKvk(candidate: string): boolean {
@@ -519,6 +569,7 @@ export const VALIDATORS: Record<string, (candidate: string) => boolean> = {
   french_nir: validateFrenchNir,
   vin: validateVin,
   bic: validateBic,
+  e164: validateE164,
   kvk: validateKvk,
   swedish_pnr: validateSwedishPnr,
   norwegian_fnr: validateNorwegianFnr,

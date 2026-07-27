@@ -1,4 +1,26 @@
 import { EntityType, type CountryConfig, type PatternDef } from "../../types.js";
+import { IBAN_LENGTHS } from "../validators.js";
+
+/**
+ * Build a country-independent IBAN pattern from the ISO 13616 length table.
+ *
+ * An IBAN carries its own country code and a mod-97 checksum, so it is
+ * self-identifying and must never depend on the caller's `countries` setting —
+ * a Belgian account in an Austrian file is still an account.
+ *
+ * Each alternative pins the *exact* character count for its country, which
+ * stops the match absorbing a following word: without it, greedy matching
+ * turns `BE68 5390 0754 7034 KBC` into one over-long candidate that fails
+ * mod-97 and is lost entirely.
+ */
+function buildIbanPattern(): string {
+  const alternatives = Object.entries(IBAN_LENGTHS)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([code, length]) => `${code}\\d{2}(?:[ \\-]?[A-Z0-9]){${length - 4}}`);
+  return String.raw`\b(?:` + alternatives.join("|") + String.raw`)\b`;
+}
+
+const GENERIC_IBAN = buildIbanPattern();
 
 /**
  * Helper to create a PatternDef with sensible defaults.
@@ -13,6 +35,47 @@ function p(
 ): PatternDef {
   return { entityType, pattern, validator, description, contextKeywords, requiresContext };
 }
+
+// ---------------------------------------------------------------------------
+// Secret context keywords (consolidated, reused across SECRET patterns)
+// ---------------------------------------------------------------------------
+
+const SECRET_CONTEXT = [
+  // English
+  "key", "token", "secret", "password", "credential",
+  "api_key", "apikey", "api-key", "auth", "bearer",
+  "aws_secret_access_key", "access_key", "private_key",
+  "AES_KEY", "ENCRYPTION_KEY", "SIGNING_KEY",
+  "ACCOUNT_SID", "AUTH_TOKEN", "TWILIO",
+  "RAILS_SECRET", "SECRET_KEY_BASE", "DATABASE_URL",
+  "NPM_TOKEN", "DIGITALOCEAN", "GOOGLE_API",
+  "DB_PASS", "DB_PASSWORD", "DATASOURCE_PASSWORD",
+  "JWT_SIGNING", "passwd", "DISCORD_TOKEN",
+  // Dutch
+  "wachtwoord", "sleutel", "geheim",
+  // French
+  "mot de passe", "mot_de_passe", "clé", "jeton",
+  // German
+  "Passwort", "Kennwort", "Schlüssel", "Geheimnis",
+  // Italian
+  "chiave", "segreto",
+  // Spanish
+  "contraseña", "clave",
+  // Portuguese
+  "senha", "chave",
+  // Polish
+  "hasło", "klucz",
+  // Czech/Slovak
+  "heslo", "kľúč",
+  // Hungarian
+  "jelszó", "kulcs",
+  // Romanian
+  "parola",
+  // Nordic
+  "lösenord", "nøkkel", "nyckel", "avain", "lykill",
+  // Greek
+  "κωδικός",
+];
 
 // ---------------------------------------------------------------------------
 // DOB context keywords (reused across SHARED patterns)
@@ -47,8 +110,28 @@ const SHARED: CountryConfig = {
   code: "SHARED",
   name: "Shared EU Patterns",
   patterns: [
-    p(EntityType.EMAIL, String.raw`\b[\w._%+\-]+@[\w.\-]+\.[a-zA-Z]{2,}\b`),
+    // JavaScript's \w and \b are ASCII-only, so the Python engine's \w (which
+    // is Unicode-aware) matched local parts like "petras_ž@..." while this one
+    // did not. \p{L}\p{N} with the `u` flag restores parity; the leading guard
+    // is a Unicode-safe word boundary.
+    p(EntityType.EMAIL, String.raw`(?<![\p{L}\p{N}._%+\-])[\p{L}\p{N}._%+\-]+@(?:[\p{L}\p{N}\-]+\.)+\p{L}{2,}\b`),
+    // IBAN (any country) — structure + mod-97 only. Country-specific IBAN
+    // patterns still exist and win on identical spans; this one guarantees an
+    // IBAN is never missed just because its country was not requested.
+    p(EntityType.BANK_ACCOUNT, GENERIC_IBAN, "iban", "IBAN — any country (ISO 13616, mod-97 validated)"),
+    // International phone (E.164, any country). Runs alongside the per-country
+    // patterns, which each hard-code a single grouping and miss the rest:
+    // "+43 664 8213 907" was invisible to the Austrian pattern, which expects
+    // an unbroken subscriber number. A leading "+" is self-identifying, so
+    // this is deliberately not country-gated.
+    p(EntityType.PHONE, String.raw`\+\d{1,3}(?:[\s\-/]?\(?\d{1,4}\)?){2,7}`, "e164", "International phone number (E.164) — any country"),
     p(EntityType.BIC, String.raw`\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b`, "bic"),
+    // Space-separated form: "RZBA AT WW", "NICA BE BB". Written as a separate
+    // pattern requiring a space between *every* group, rather than making the
+    // spaces optional above — optional spaces would let "GEBABEBB KBC" match
+    // as one 11-character code and claim the following word. Only a literal
+    // space is allowed, so a match cannot span a line break.
+    p(EntityType.BIC, String.raw`\b[A-Z]{4} [A-Z]{2} [A-Z0-9]{2}(?: [A-Z0-9]{3})?\b`, "bic", "BIC/SWIFT code (space-separated groups)"),
     p(EntityType.CREDIT_CARD, String.raw`\b(?:4[0-9]{3}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}|5[1-5][0-9]{2}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}|3[47][0-9]{2}[\s\-]?[0-9]{6}[\s\-]?[0-9]{5})\b`, "luhn"),
     p(EntityType.VIN, String.raw`\b[A-HJ-NPR-Z0-9]{17}\b`, "vin"),
     p(EntityType.IP_ADDRESS, String.raw`\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b`),
@@ -59,7 +142,7 @@ const SHARED: CountryConfig = {
     p(EntityType.IMEI, String.raw`\b\d{2}[\-\s]\d{6}[\-\s]\d{6}[\-\s]\d\b`, "imei", "formatted"),
     p(EntityType.GPS_COORDINATES, String.raw`-?(?:[1-8]?\d(?:\.\d{4,})|90(?:\.0{4,}))\s*[,;/]\s*-?(?:1[0-7]\d(?:\.\d{4,})|180(?:\.0{4,})|\d{1,2}(?:\.\d{4,}))`),
     p(EntityType.UUID, String.raw`\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b`),
-    p(EntityType.SOCIAL_HANDLE, String.raw`(?<!\w)@[a-zA-Z][a-zA-Z0-9_.]{1,29}\b`),
+    p(EntityType.SOCIAL_HANDLE, String.raw`(?<![\p{L}\p{N}_])@\p{L}[\p{L}\p{N}_.]{1,29}\b`),
     // --- Secret / API Key (known prefixes — always active) ---
     p(EntityType.SECRET, String.raw`\bAKIA[A-Z0-9]{16}\b`, null, "AWS Access Key ID"),
     p(EntityType.SECRET, String.raw`\bgh[poas]_[a-zA-Z0-9]{36,}\b`, null, "GitHub token"),
@@ -81,35 +164,18 @@ const SHARED: CountryConfig = {
     p(EntityType.SECRET, String.raw`\bxapp-\d[\d\-]{20,}`, null, "Slack app numeric token"),
     p(EntityType.SECRET, String.raw`\bxapp-[a-zA-Z0-9\-]{20,}`, null, "Slack app token"),
     p(EntityType.SECRET, String.raw`\bdapi[a-f0-9]{32,}\b`, null, "Databricks PAT"),
+    // Discord bot token (3-segment base64 with numeric first segment)
+    p(EntityType.SECRET, String.raw`\b[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,}\b`, null, "Discord bot token"),
+    // PEM private key headers
+    p(EntityType.SECRET, String.raw`-----BEGIN\s(?:RSA\s)?PRIVATE\sKEY-----[\s\S]{0,16384}?-----END\s(?:RSA\s)?PRIVATE\sKEY-----`, null, "PEM private key"),
+    // AWS Secret Access Key (40 chars, base64 with +/ after an AKIA line)
+    p(EntityType.SECRET, String.raw`(?<=aws_secret_access_key\s{0,4}[:=]\s{0,4})[A-Za-z0-9+/]{40}`, null, "AWS Secret Access Key"),
     // --- Secret / API Key (connection strings with embedded credentials) ---
-    p(EntityType.SECRET, String.raw`(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq):\/\/[^\s:]+:[^\s@]+@[^\s]+`, null, "Connection string with credentials"),
+    p(EntityType.SECRET, String.raw`(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq):\/\/[^\s:]{1,256}:[^\s@]{1,256}@[^\s]+`, null, "Connection string with credentials"),
     // --- Secret / API Key (assignment-based: KEY=value or KEY: value) ---
-    p(EntityType.SECRET, String.raw`(?<=[:=] )\S{8,}|(?<=[:=])\S{8,}`, "high_entropy", "Assigned secret value", [
-      "key", "token", "secret", "password", "credential",
-      "api_key", "apikey", "api-key", "auth", "bearer",
-      "aws_secret_access_key", "access_key", "private_key",
-      "wachtwoord", "mot de passe", "Passwort", "Schlüssel",
-      "clé", "sleutel", "lösenord", "hasło", "heslo",
-      "jelszó", "contraseña", "senha", "parola",
-      "AES_KEY", "ENCRYPTION_KEY", "SIGNING_KEY",
-      "ACCOUNT_SID", "AUTH_TOKEN", "TWILIO",
-      "RAILS_SECRET", "SECRET_KEY_BASE", "DATABASE_URL",
-      "NPM_TOKEN", "DIGITALOCEAN", "GOOGLE_API",
-      "kľúč", "nøkkel", "nyckel", "avain", "lykill",
-      "DB_PASS", "DB_PASSWORD", "DATASOURCE_PASSWORD",
-      "JWT_SIGNING", "SIGNING_KEY",
-      "passwd", "Kennwort",
-    ], true),
+    p(EntityType.SECRET, String.raw`(?<=[:=] )\S{8,}|(?<=[:=])\S{8,}`, "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
     // --- Secret / API Key (entropy-based fallback for longer tokens) ---
-    p(EntityType.SECRET, String.raw`\b[A-Za-z0-9_\-+/]{24,}[A-Za-z0-9_\-+/=]*\b`, "high_entropy", "High-entropy token", [
-      "key", "token", "secret", "password", "credential",
-      "api_key", "apikey", "api-key", "auth", "bearer",
-      "aws_secret_access_key", "access_key", "private_key",
-      "wachtwoord", "mot de passe", "Passwort", "Schlüssel",
-      "clé", "sleutel", "lösenord", "hasło", "heslo",
-      "jelszó", "contraseña", "senha", "parola",
-      "kľúč", "nøkkel", "nyckel", "avain", "lykill",
-    ], true),
+    p(EntityType.SECRET, String.raw`\b[A-Za-z0-9_\-+/]{24,}[A-Za-z0-9_\-+/=]*\b`, "high_entropy", "High-entropy token", SECRET_CONTEXT, true),
     p(EntityType.DOB, String.raw`\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b`, null, "DD/MM/YYYY", DOB_CONTEXT, true),
     p(EntityType.DATE_OF_DEATH, String.raw`\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b`, null, "", DATE_OF_DEATH_CONTEXT, true),
     p(EntityType.DOB, String.raw`\b(?:19|20)\d{2}[/.\-](?:0[1-9]|1[0-2])[/.\-](?:0[1-9]|[12][0-9]|3[01])\b`, null, "ISO YYYY-MM-DD", DOB_ISO_CONTEXT, true),
@@ -187,6 +253,11 @@ const AT: CountryConfig = {
     p(EntityType.IBAN, String.raw`\bAT\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bATU\d{8}\b`),
     p(EntityType.PHONE, String.raw`\b0\d{3,4}[\s\-]?\d{5,8}\b`),
+    // Short area codes (Vienna is "01") split across three groups:
+    // "01 53460 2215". The pattern above requires 3-4 digits after the trunk
+    // 0, so it never matched these. Both separators are mandatory here, which
+    // keeps "01 2025" (a date fragment) out.
+    p(EntityType.PHONE, String.raw`\b0\d{1,4}[\s\-/]\d{3,7}[\s\-/]\d{2,6}\b`, null, "Austrian national phone — short area code, grouped"),
     p(EntityType.PHONE, String.raw`\+43\s?\d{3,4}[\s\-]?\d{5,8}`),
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-ZÄÖÜ]{1,2}\s?\d{1,5}\s?[A-Z]{1,2}\b`, null, "", ["Kennzeichen", "Nummernschild", "Kfz-Kennzeichen"], true),
     p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{3}\b`, null, "", ["PLZ", "Postleitzahl", "Adresse", "Anschrift", "Straße", "Str.", "Gasse", "Weg", "Platz", "Postal:", "Wohnort"], true),

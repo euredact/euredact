@@ -1,7 +1,15 @@
 export enum EntityType {
   NAME = "NAME",
   ADDRESS = "ADDRESS",
-  IBAN = "IBAN",
+  /**
+   * Canonical name for a bank account identifier. `IBAN` is kept below as a
+   * legacy alias with the same value, so `EntityType.IBAN === EntityType.BANK_ACCOUNT`
+   * and existing code keeps working — but the emitted value, and therefore the
+   * `[BANK_ACCOUNT]` placeholder written into redacted text, is canonical.
+   */
+  BANK_ACCOUNT = "BANK_ACCOUNT",
+  /** @deprecated legacy alias of {@link EntityType.BANK_ACCOUNT} */
+  IBAN = "BANK_ACCOUNT",
   BIC = "BIC",
   CREDIT_CARD = "CREDIT_CARD",
   PHONE = "PHONE",
@@ -31,6 +39,15 @@ export enum EntityType {
   SECRET = "SECRET",
   OTHER = "OTHER",
 }
+
+/**
+ * Legacy type names accepted on input and mapped to their canonical form.
+ * Kept in sync with the pipeline canon (config/entity_types.json →
+ * legacy_aliases). The engine never *emits* these names.
+ */
+export const LEGACY_TYPE_ALIASES: Record<string, string> = {
+  IBAN: "BANK_ACCOUNT",
+};
 
 export enum DetectionSource {
   RULES = "rules",

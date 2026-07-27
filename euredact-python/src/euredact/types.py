@@ -7,11 +7,18 @@ from enum import Enum
 
 
 class EntityType(str, Enum):
-    """PII entity categories. Shared between rule engine and cloud tier."""
+    """PII entity categories. Shared between rule engine and cloud tier.
+
+    Names are canonical. ``EntityType.IBAN`` is kept as a **legacy alias** of
+    :attr:`BANK_ACCOUNT` so existing code continues to work, but the emitted
+    value — and therefore the ``[BANK_ACCOUNT]`` placeholder written into
+    redacted text — is the canonical name.
+    """
 
     NAME = "NAME"  # [CLOUD EXTENSION]
     ADDRESS = "ADDRESS"  # [CLOUD EXTENSION]
-    IBAN = "IBAN"
+    BANK_ACCOUNT = "BANK_ACCOUNT"
+    IBAN = "BANK_ACCOUNT"  # legacy alias -> BANK_ACCOUNT
     BIC = "BIC"
     CREDIT_CARD = "CREDIT_CARD"
     PHONE = "PHONE"
@@ -40,6 +47,23 @@ class EntityType(str, Enum):
     SOCIAL_HANDLE = "SOCIAL_HANDLE"
     SECRET = "SECRET"
     OTHER = "OTHER"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "EntityType | None":
+        """Resolve legacy type names so ``EntityType("IBAN")`` keeps working."""
+        if isinstance(value, str):
+            canonical = LEGACY_TYPE_ALIASES.get(value.upper())
+            if canonical is not None:
+                return cls(canonical)
+        return None
+
+
+# Legacy type names accepted on input and mapped to their canonical form.
+# Kept in sync with the pipeline canon (config/entity_types.json →
+# legacy_aliases). The engine never *emits* these names.
+LEGACY_TYPE_ALIASES: dict[str, str] = {
+    "IBAN": "BANK_ACCOUNT",
+}
 
 
 class DetectionSource(str, Enum):

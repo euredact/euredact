@@ -3,7 +3,70 @@
 from __future__ import annotations
 
 from euredact.rules.countries._base import CountryConfig, PatternDef
+from euredact.rules.validators import IBAN_LENGTHS
 from euredact.types import EntityType
+
+
+def _build_iban_pattern() -> str:
+    """Build a country-independent IBAN pattern from the ISO 13616 length table.
+
+    An IBAN carries its own country code and a mod-97 checksum, so it is
+    self-identifying and must never depend on the caller's ``countries=[...]``
+    setting — a Belgian account in an Austrian file is still an account.
+
+    Each alternative pins the *exact* character count for its country, which
+    stops the match absorbing a following word: without it, greedy matching
+    turns ``BE68 5390 0754 7034 KBC`` into one over-long candidate that fails
+    mod-97 and is lost entirely.
+    """
+    alternatives = [
+        # 2-letter country + 2 check digits, then exactly (length - 4) more
+        # alphanumerics, each optionally preceded by a space or hyphen.
+        f"{code}\\d{{2}}(?:[ \\-]?[A-Z0-9]){{{length - 4}}}"
+        for code, length in sorted(IBAN_LENGTHS.items())
+    ]
+    return r"\b(?:" + "|".join(alternatives) + r")\b"
+
+
+_GENERIC_IBAN = _build_iban_pattern()
+
+
+SECRET_CONTEXT = [
+    # English
+    "key", "token", "secret", "password", "credential",
+    "api_key", "apikey", "api-key", "auth", "bearer",
+    "aws_secret_access_key", "access_key", "private_key",
+    "AES_KEY", "ENCRYPTION_KEY", "SIGNING_KEY",
+    "ACCOUNT_SID", "AUTH_TOKEN", "TWILIO",
+    "RAILS_SECRET", "SECRET_KEY_BASE", "DATABASE_URL",
+    "NPM_TOKEN", "DIGITALOCEAN", "GOOGLE_API",
+    "DB_PASS", "DB_PASSWORD", "DATASOURCE_PASSWORD",
+    "JWT_SIGNING", "passwd", "DISCORD_TOKEN",
+    # Dutch
+    "wachtwoord", "sleutel", "geheim",
+    # French
+    "mot de passe", "mot_de_passe", "clé", "jeton",
+    # German
+    "Passwort", "Kennwort", "Schlüssel", "Geheimnis",
+    # Italian
+    "chiave", "segreto",
+    # Spanish
+    "contraseña", "clave",
+    # Portuguese
+    "senha", "chave",
+    # Polish
+    "hasło", "klucz",
+    # Czech/Slovak
+    "heslo", "kľúč",
+    # Hungarian
+    "jelszó", "kulcs",
+    # Romanian
+    "parola",
+    # Nordic
+    "lösenord", "nøkkel", "nyckel", "avain", "lykill",
+    # Greek
+    "κωδικός",
+]
 
 
 class SharedConfig(CountryConfig):
@@ -16,9 +79,31 @@ class SharedConfig(CountryConfig):
             # --- Email ---
             PatternDef(
                 entity_type=EntityType.EMAIL,
-                pattern=r"\b[\w._%+\-]+@[\w.\-]+\.[a-zA-Z]{2,}\b",
+                pattern=r"\b[\w._%+\-]+@(?:[\w\-]+\.)+[a-zA-Z]{2,}\b",
                 validator=None,
                 description="Email address (RFC 5322 simplified)",
+            ),
+            # --- IBAN (any country) ---
+            # Structure + mod-97 only. Country-specific IBAN patterns still
+            # exist and win on identical spans; this one guarantees an IBAN is
+            # never missed just because its country was not requested.
+            PatternDef(
+                entity_type=EntityType.IBAN,
+                pattern=_GENERIC_IBAN,
+                validator="iban",
+                description="IBAN — any country (ISO 13616, mod-97 validated)",
+            ),
+            # --- International phone (E.164, any country) ---
+            # Runs alongside the per-country patterns, which each hard-code a
+            # single grouping and miss the rest: "+43 664 8213 907" was
+            # invisible to the Austrian pattern, which expects an unbroken
+            # subscriber number. A leading "+" is self-identifying, so this is
+            # deliberately not country-gated.
+            PatternDef(
+                entity_type=EntityType.PHONE,
+                pattern=r"\+\d{1,3}(?:[\s\-/]?\(?\d{1,4}\)?){2,7}",
+                validator="e164",
+                description="International phone number (E.164) — any country",
             ),
             # --- BIC/SWIFT ---
             PatternDef(
@@ -26,6 +111,18 @@ class SharedConfig(CountryConfig):
                 pattern=r"\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b",
                 validator="bic",
                 description="BIC/SWIFT code (8 or 11 characters)",
+            ),
+            # Space-separated form: "RZBA AT WW", "NICA BE BB". Written as a
+            # separate pattern requiring a space between *every* group, rather
+            # than making the spaces optional in the pattern above — optional
+            # spaces would let "GEBABEBB KBC" match as one 11-character code
+            # and claim the following word. Only a literal space is allowed,
+            # so a match cannot span a line break.
+            PatternDef(
+                entity_type=EntityType.BIC,
+                pattern=r"\b[A-Z]{4} [A-Z]{2} [A-Z0-9]{2}(?: [A-Z0-9]{3})?\b",
+                validator="bic",
+                description="BIC/SWIFT code (space-separated groups)",
             ),
             # --- Credit Card (Visa, Mastercard, Amex) ---
             PatternDef(
@@ -246,35 +343,41 @@ class SharedConfig(CountryConfig):
                 validator=None,
                 description="Twilio Account SID",
             ),
+            # Discord bot token (3-segment base64 with numeric first segment)
+            PatternDef(
+                entity_type=EntityType.SECRET,
+                pattern=r"\b[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,}\b",
+                validator=None,
+                description="Discord bot token",
+            ),
+            # PEM private key headers
+            PatternDef(
+                entity_type=EntityType.SECRET,
+                pattern=r"-----BEGIN\s(?:RSA\s)?PRIVATE\sKEY-----[\s\S]{0,16384}?-----END\s(?:RSA\s)?PRIVATE\sKEY-----",
+                validator=None,
+                description="PEM private key",
+            ),
+            # AWS Secret Access Key (40 chars, base64 with +/ after an AKIA line)
+            PatternDef(
+                entity_type=EntityType.SECRET,
+                pattern=r"(?<=aws_secret_access_key = )[A-Za-z0-9+/]{40}|(?<=aws_secret_access_key=)[A-Za-z0-9+/]{40}",
+                validator=None,
+                description="AWS Secret Access Key",
+            ),
             # --- Secret / API Key (connection strings with embedded credentials) ---
             PatternDef(
                 entity_type=EntityType.SECRET,
-                pattern=r"(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq)://[^\s:]+:[^\s@]+@[^\s]+",
+                pattern=r"(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq)://[^\s:]{1,256}:[^\s@]{1,256}@[^\s]+",
                 validator=None,
                 description="Connection string with embedded credentials",
             ),
-            # --- Secret / API Key (assignment-based: KEY=value or KEY = value) ---
+            # --- Secret / API Key (assignment-based: KEY=value or KEY: value) ---
             PatternDef(
                 entity_type=EntityType.SECRET,
                 pattern=r"(?<=[:=] )[^\s]{8,}|(?<=[:=])[^\s]{8,}",
                 validator="high_entropy",
                 description="Assigned secret value",
-                context_keywords=[
-                    "key", "token", "secret", "password", "credential",
-                    "api_key", "apikey", "api-key", "auth", "bearer",
-                    "aws_secret_access_key", "access_key", "private_key",
-                    "wachtwoord", "mot de passe", "Passwort", "Schlüssel",
-                    "clé", "sleutel", "lösenord", "hasło", "heslo",
-                    "jelszó", "contraseña", "senha", "parola",
-                    "AES_KEY", "ENCRYPTION_KEY", "SIGNING_KEY",
-                    "ACCOUNT_SID", "AUTH_TOKEN", "TWILIO",
-                    "RAILS_SECRET", "SECRET_KEY_BASE", "DATABASE_URL",
-                    "NPM_TOKEN", "DIGITALOCEAN", "GOOGLE_API",
-                    "kľúč", "nøkkel", "nyckel", "avain", "lykill",
-                    "DB_PASS", "DB_PASSWORD", "DATASOURCE_PASSWORD",
-                    "JWT_SIGNING", "SIGNING_KEY",
-                    "passwd", "Kennwort",
-                ],
+                context_keywords=SECRET_CONTEXT,
                 requires_context=True,
             ),
             # --- Secret / API Key (entropy-based fallback for longer tokens) ---
@@ -283,15 +386,7 @@ class SharedConfig(CountryConfig):
                 pattern=r"\b[A-Za-z0-9_\-+/]{24,}[A-Za-z0-9_\-+/=]*\b",
                 validator="high_entropy",
                 description="High-entropy token near context keyword",
-                context_keywords=[
-                    "key", "token", "secret", "password", "credential",
-                    "api_key", "apikey", "api-key", "auth", "bearer",
-                    "aws_secret_access_key", "access_key", "private_key",
-                    "wachtwoord", "mot de passe", "Passwort", "Schlüssel",
-                    "clé", "sleutel", "lösenord", "hasło", "heslo",
-                    "jelszó", "contraseña", "senha", "parola",
-                    "kľúč", "nøkkel", "nyckel", "avain", "lykill",
-                ],
+                context_keywords=SECRET_CONTEXT,
                 requires_context=True,
             ),
             # --- Date of Birth (EU formats, requires context) ---
