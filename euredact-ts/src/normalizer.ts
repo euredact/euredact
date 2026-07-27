@@ -5,28 +5,27 @@ export function normalize(text: string): [string, number[] | null] {
 }
 
 function buildOffsetMapping(original: string, normalized: string): number[] {
-  const nfdOriginal = original.normalize("NFD");
-  const nfdNormalized = normalized.normalize("NFD");
+  // Precompute cumulative NFD lengths for normalized characters
+  const normNfdCum = [0];
+  for (let i = 0; i < normalized.length; i++) {
+    normNfdCum.push(normNfdCum[i] + normalized[i].normalize("NFD").length);
+  }
 
-  // Build: normalized index -> original index via NFD as intermediate
+  // Precompute cumulative NFD lengths for original characters
+  const origNfdCum = [0];
+  for (let i = 0; i < original.length; i++) {
+    origNfdCum.push(origNfdCum[i] + original[i].normalize("NFD").length);
+  }
+
+  // Two-pointer scan: map each normalized position to its original position
   const normToOrig: number[] = [];
+  let origPtr = 0;
   for (let normIdx = 0; normIdx < normalized.length; normIdx++) {
-    const nfdOfNormChar = normalized[normIdx].normalize("NFD");
-    let nfdStart = 0;
-    for (let i = 0; i < normIdx; i++) {
-      nfdStart += normalized[i].normalize("NFD").length;
+    const nfdStart = normNfdCum[normIdx];
+    while (origPtr + 1 < original.length && origNfdCum[origPtr + 1] <= nfdStart) {
+      origPtr++;
     }
-    let targetOrig = 0;
-    let running = 0;
-    for (let oi = 0; oi < original.length; oi++) {
-      const nfdOc = original[oi].normalize("NFD");
-      if (running + nfdOc.length > nfdStart) {
-        targetOrig = oi;
-        break;
-      }
-      running += nfdOc.length;
-    }
-    normToOrig.push(targetOrig);
+    normToOrig.push(origPtr);
   }
   return normToOrig;
 }

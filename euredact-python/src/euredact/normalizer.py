@@ -36,49 +36,26 @@ def _build_offset_mapping(original: str, normalized: str) -> list[int]:
     """Build mapping from normalized character positions to original positions.
 
     Uses NFD as intermediate to align characters between original and NFC.
+    Runs in O(n) using cumulative prefix sums and a two-pointer scan.
     """
-    nfd_original = unicodedata.normalize("NFD", original)
-    nfd_normalized = unicodedata.normalize("NFD", normalized)
+    # Precompute cumulative NFD lengths for normalized characters
+    norm_nfd_cum = [0]
+    for ch in normalized:
+        norm_nfd_cum.append(norm_nfd_cum[-1] + len(unicodedata.normalize("NFD", ch)))
 
-    # Both NFD forms should be identical
-    # Build: original char index -> NFD index range
-    orig_to_nfd: list[int] = []
-    nfd_idx = 0
-    for char in original:
-        nfd_char = unicodedata.normalize("NFD", char)
-        orig_to_nfd.append(nfd_idx)
-        nfd_idx += len(nfd_char)
+    # Precompute cumulative NFD lengths for original characters
+    orig_nfd_cum = [0]
+    for ch in original:
+        orig_nfd_cum.append(orig_nfd_cum[-1] + len(unicodedata.normalize("NFD", ch)))
 
-    # Build: NFD index -> normalized char index
-    nfd_to_norm: list[int] = []
-    nfd_idx = 0
-    for norm_idx, char in enumerate(normalized):
-        nfd_char = unicodedata.normalize("NFD", char)
-        for _ in nfd_char:
-            nfd_to_norm.append(norm_idx)
-        nfd_idx += len(nfd_char)
-
-    # Build: normalized index -> original index
-    # For each normalized position, find which original character maps to it
+    # Two-pointer scan: map each normalized position to its original position
     norm_to_orig: list[int] = []
-    orig_char_idx = 0
-    orig_nfd_pos = 0
+    orig_ptr = 0
     for norm_idx in range(len(normalized)):
-        nfd_of_norm_char = unicodedata.normalize("NFD", normalized[norm_idx])
-        nfd_start = sum(
-            len(unicodedata.normalize("NFD", normalized[i]))
-            for i in range(norm_idx)
-        )
-        # Find which original character this NFD position belongs to
-        target_orig = 0
-        running = 0
-        for oi, oc in enumerate(original):
-            nfd_oc = unicodedata.normalize("NFD", oc)
-            if running + len(nfd_oc) > nfd_start:
-                target_orig = oi
-                break
-            running += len(nfd_oc)
-        norm_to_orig.append(target_orig)
+        nfd_start = norm_nfd_cum[norm_idx]
+        while orig_ptr + 1 < len(original) and orig_nfd_cum[orig_ptr + 1] <= nfd_start:
+            orig_ptr += 1
+        norm_to_orig.append(orig_ptr)
 
     return norm_to_orig
 

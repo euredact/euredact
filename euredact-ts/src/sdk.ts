@@ -17,6 +17,11 @@ class ReferentialMapper {
     }
     return this.mapping.get(text)!;
   }
+
+  clear(): void {
+    this.counters.clear();
+    this.mapping.clear();
+  }
 }
 
 export interface RedactOptions {
@@ -27,17 +32,39 @@ export interface RedactOptions {
   cache?: boolean;
 }
 
+const DEFAULT_MAX_INPUT_LENGTH = 10_485_760;  // ~10 MB of text
+
 export class EuRedact {
   private engine = new RuleEngine();
   private cache = new ResultCache();
   private referentialMapper = new ReferentialMapper();
+  private maxInputLength: number;
+
+  constructor(options?: { maxInputLength?: number }) {
+    this.maxInputLength = options?.maxInputLength ?? DEFAULT_MAX_INPUT_LENGTH;
+  }
 
   addCustomPattern(name: string, pattern: string): void {
     this.engine.addCustomPattern(name, pattern);
     this.cache.clear();
   }
 
+  /** Clear the result cache and referential integrity mappings.
+   *  Call this in long-running processes to free PII from memory. */
+  clear(): void {
+    this.cache.clear();
+    this.referentialMapper.clear();
+  }
+
   redact(text: string, options: RedactOptions = {}): RedactResult {
+    if (text.length > this.maxInputLength) {
+      throw new Error(
+        `Input text length (${text.length.toLocaleString()} chars) exceeds the maximum ` +
+        `(${this.maxInputLength.toLocaleString()} chars). Split the input or ` +
+        `increase maxInputLength when constructing EuRedact.`
+      );
+    }
+
     const {
       countries = null,
       mode = "rules",

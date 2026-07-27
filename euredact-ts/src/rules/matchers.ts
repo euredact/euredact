@@ -34,10 +34,11 @@ export class MultiPatternMatcher {
     this.compiled = true;
   }
 
-  scan(text: string): RawMatch[] {
+  scan(text: string, countryCodes: Set<string> | null = null): RawMatch[] {
     if (!this.compiled) this.compile();
     const matches: RawMatch[] = [];
     for (const { regex, patternDef, countryCode } of this.patterns) {
+      if (countryCodes !== null && !countryCodes.has(countryCode)) continue;
       regex.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = regex.exec(text)) !== null) {

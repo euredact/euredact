@@ -39,19 +39,36 @@ class ReferentialMapper:
             self._mapping[text] = f"{type_label}_{n}"
         return self._mapping[text]
 
+    def clear(self) -> None:
+        """Remove all stored PII mappings from memory."""
+        self._counters.clear()
+        self._mapping.clear()
+
 
 class EuRedact:
     """Main EuRedact SDK orchestrator."""
 
-    def __init__(self) -> None:
+    DEFAULT_MAX_INPUT_LENGTH = 10_485_760  # ~10 MB of text
+
+    def __init__(self, *, max_input_length: int = DEFAULT_MAX_INPUT_LENGTH) -> None:
         self._engine = RuleEngine()
         self._cache = ResultCache()
         self._referential_mapper = ReferentialMapper()
+        self._max_input_length = max_input_length
 
     def add_custom_pattern(self, name: str, pattern: str) -> None:
         """Register a custom regex pattern detected as *name*."""
         self._engine.add_custom_pattern(name, pattern)
         self._cache.clear()
+
+    def clear(self) -> None:
+        """Clear the result cache and referential integrity mappings.
+
+        Call this in long-running processes to free PII from memory.
+        The cache and mapper will be rebuilt as new texts are processed.
+        """
+        self._cache.clear()
+        self._referential_mapper.clear()
 
     def redact(
         self,
@@ -74,6 +91,14 @@ class EuRedact:
                 engine applies keyword and structural (JSON/CSV header)
                 checks before emitting a date detection.
         """
+        # Step 0: Input size guard
+        if len(text) > self._max_input_length:
+            raise ValueError(
+                f"Input text length ({len(text):,} chars) exceeds the maximum "
+                f"({self._max_input_length:,} chars). Split the input or "
+                f"increase max_input_length when constructing EuRedact."
+            )
+
         # Step 1: Normalize
         normalized_text, offset_mapping = normalize(text)
 

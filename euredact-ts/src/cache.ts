@@ -23,10 +23,10 @@ export class ResultCache {
   key(text: string, countries: string[], mode: string): string {
     const sorted = [...countries].sort();
     const raw = `${text}|${sorted.join("|")}|${mode}`;
-    // Use multiple FNV-1a hashes on different slices for reduced collisions
+    // Include raw length to reduce collision risk alongside dual FNV-1a hashes
     const h1 = fnv1aHash(raw);
     const h2 = fnv1aHash(raw.slice(Math.floor(raw.length / 2)) + raw.slice(0, Math.floor(raw.length / 2)));
-    return h1 + h2;
+    return `${raw.length}:${h1}${h2}`;
   }
 
   get(key: string): RedactResult | null {

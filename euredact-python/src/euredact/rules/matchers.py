@@ -110,19 +110,26 @@ class MultiPatternMatcher:
         A.make_automaton()
         self._ac_automaton = A
 
-    def scan(self, text: str) -> list[RawMatch]:
-        """Scan text against all patterns."""
+    def scan(self, text: str, country_codes: set[str] | None = None) -> list[RawMatch]:
+        """Scan text against patterns.
+
+        If *country_codes* is provided, only patterns belonging to those
+        countries are executed, skipping irrelevant ones for a significant
+        speed-up when the caller specifies a country subset.
+        """
         if not self._compiled:
             self.compile()
 
         if self._ac_automaton is not None:
-            return self._scan_ac(text)
-        return self._scan_sequential(text)
+            return self._scan_ac(text, country_codes)
+        return self._scan_sequential(text, country_codes)
 
-    def _scan_sequential(self, text: str) -> list[RawMatch]:
-        """Scan all patterns sequentially. Optimal for short texts."""
+    def _scan_sequential(self, text: str, country_codes: set[str] | None = None) -> list[RawMatch]:
+        """Scan patterns sequentially. Optimal for short texts."""
         matches: list[RawMatch] = []
         for regex, pdef, country_code in self._patterns:
+            if country_codes is not None and country_code not in country_codes:
+                continue
             for m in regex.finditer(text):
                 matches.append(
                     RawMatch(
@@ -133,7 +140,7 @@ class MultiPatternMatcher:
                 )
         return matches
 
-    def _scan_ac(self, text: str) -> list[RawMatch]:
+    def _scan_ac(self, text: str, country_codes: set[str] | None = None) -> list[RawMatch]:
         """AC-accelerated scan for long texts.
 
         Phase 1: AC automaton finds prefix hits → targeted regex on regions.
@@ -154,6 +161,8 @@ class MultiPatternMatcher:
             window_end = min(len(text), end_pos + 200)
 
             for compiled, pdef, code in patterns:
+                if country_codes is not None and code not in country_codes:
+                    continue
                 for m in compiled.finditer(text, window_start, window_end):
                     key = (m.start(), m.end(), id(pdef))
                     if key not in seen:
@@ -168,6 +177,8 @@ class MultiPatternMatcher:
 
         # Phase 2: no-prefix patterns (full scan, but fewer patterns)
         for regex, pdef, code in self._no_prefix:
+            if country_codes is not None and code not in country_codes:
+                continue
             for m in regex.finditer(text):
                 matches.append(
                     RawMatch(
