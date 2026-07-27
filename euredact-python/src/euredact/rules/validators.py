@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-
 # Total IBAN length per country (ISO 13616 registry). Also used to build the
 # country-independent IBAN pattern in euredact.rules.countries._shared, so an
 # IBAN is detected on its own structure rather than on the caller's

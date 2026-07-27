@@ -21,10 +21,10 @@ import euredact
 
 result = euredact.redact("Mijn BSN is 111222333 en IBAN NL91ABNA0417164300.")
 print(result.redacted_text)
-# "Mijn BSN is [NATIONAL_ID] en IBAN [IBAN]."
+# "Mijn BSN is [NATIONAL_ID] en IBAN [BANK_ACCOUNT]."
 
 print(result.detections)
-# [Detection(entity_type=<EntityType.NATIONAL_ID>, ...), Detection(entity_type=<EntityType.IBAN>, ...)]
+# [Detection(entity_type=<EntityType.NATIONAL_ID>, ...), Detection(entity_type=<EntityType.BANK_ACCOUNT>, ...)]
 ```
 
 ## Features
@@ -232,7 +232,7 @@ class Detection:
 String enum with all supported PII categories:
 
 ```
-NAME              ADDRESS           IBAN              BIC
+NAME              ADDRESS           BANK_ACCOUNT      BIC
 CREDIT_CARD       PHONE             EMAIL             DOB
 DATE_OF_DEATH     NATIONAL_ID       SSN               TAX_ID
 PASSPORT          DRIVERS_LICENSE   RESIDENCE_PERMIT  LICENSE_PLATE
@@ -248,6 +248,110 @@ plain string (e.g. `"EMPLOYEE_ID"`) rather than an `EntityType` enum member.
 #### `DetectionSource`
 
 String enum: `"rules"` or `"cloud"`.
+
+## Country codes
+
+`countries=[...]` accepts **ISO 3166-1 alpha-2** codes. The two EU/VAT
+spellings are accepted as equivalents:
+
+| ISO 3166-1 | EU/VAT | |
+|---|---|---|
+| `GB` | `UK` | United Kingdom |
+| `GR` | `EL` | Greece |
+
+Codes are case-insensitive and whitespace-tolerant. An **unrecognised** code
+does not raise — it emits an `UnknownCountryWarning` and detection continues
+with the shared, country-independent patterns:
+
+```python
+euredact.redact(text, countries=["ZZ"])
+# UnknownCountryWarning: Unknown country code: 'ZZ'. Continuing with shared
+# country-independent patterns only (email, IBAN, international phone, ...).
+```
+
+This is deliberate. Raising on an unknown locale invites callers to wrap the
+call in `try/except` and skip redaction entirely — failing open, with
+unredacted PII in the output.
+
+## Country-independent detection
+
+`countries=[...]` narrows which country-specific patterns run. It does **not**
+gate identifiers that carry their own evidence:
+
+| Type | Why it ignores `countries` |
+|---|---|
+| `BANK_ACCOUNT` (IBAN) | carries an ISO 3166 country code and a mod-97 checksum |
+| `PHONE` (with `+` prefix) | an E.164 country prefix is self-identifying |
+| `EMAIL`, `CREDIT_CARD`, `VIN`, `IMEI`, `IP_ADDRESS`, `UUID`, `SECRET` | no national form to gate on |
+
+So a Belgian IBAN in a document processed with `countries=["AT"]` is still
+detected — cross-border traffic (a foreign invoice in a local file, an
+employee paid to a foreign account) does not leak:
+
+```python
+euredact.redact("Rekening: BE68 5390 0754 7034", countries=["AT"])
+# -> 'Rekening: [BANK_ACCOUNT]'
+```
+
+International phone numbers are matched by a generic E.164 pattern (`+`
+followed by 8-15 digits, any grouping or separators, including `(0)` trunk
+prefixes) that runs alongside the per-country patterns. National-format numbers
+without a `+` prefix still require the relevant country to be requested, since
+`0664 8213907` is only recognisable as Austrian in context.
+
+## BIC detection
+
+BIC is the only bank identifier in the engine with **no check digit** — IBAN
+has mod-97, VAT has country-specific checksums. ISO 9362 structure alone
+cannot decide a match, because characters 5-6 of ordinary uppercase words are
+frequently valid ISO 3166 country codes (`DRINGEND` → `GE`, `HOSPITAL` →
+`IT`). Detection is therefore gated:
+
+| Stage | Condition | Result |
+|---|---|---|
+| Gate 0 | the token also occurs as an ordinary lowercase word in the same document | never emitted |
+| Tier 1 | registry hit on the BIC6 institution+country prefix | emitted |
+| Gate 2 | heading / shouted-word shape | never emitted |
+| Tier 2 | `BIC`/`SWIFT` keyword, an IBAN, or a bank block in the enclosing line, record or paragraph | emitted |
+| — | none of the above | never emitted |
+
+The context window is the enclosing **line, record or paragraph**, not a
+character count — a banking cue often sits several fields away in the same
+CSV row.
+
+### Supplying your own BIC registry
+
+The package bundles **no licensed BIC data**. The authoritative SWIFTRef BIC
+Directory is a commercial product, and redistributing it inside a package
+requires a specific redistribution licence. What ships is a small seed list of
+BIC6 prefixes for major European banks, compiled from publicly published bank
+data.
+
+Deployments holding a licensed directory install it at startup:
+
+```python
+import euredact
+
+# A path to a newline-delimited file of BICs...
+euredact.set_bic_registry("/etc/euredact/swiftref-bics.txt")
+
+# ...an iterable...
+euredact.set_bic_registry({"ABNANL2A", "INGBNL2A", "BBRUBE"})
+
+# ...or any membership callable.
+euredact.set_bic_registry(lambda bic: bic in my_directory)
+
+# Remove it again:
+euredact.set_bic_registry(None)
+```
+
+Entries may be full BIC8/BIC11 codes or bare BIC6 prefixes; both are matched,
+case-insensitively and ignoring spaces.
+
+The registry is an **accept** signal, never a filter. A code missing from it
+falls through to the context gate and is still detected when banking context
+is present, so a stale list costs a little recall on bare, contextless BICs —
+it never causes a leak. Annual review is sufficient.
 
 ## Custom Patterns
 
@@ -389,7 +493,7 @@ import euredact
 text = "BSN 111222333 en later weer 111222333, IBAN NL91ABNA0417164300."
 result = euredact.redact(text, referential_integrity=True)
 print(result.redacted_text)
-# "BSN NATIONAL_ID_1 en later weer NATIONAL_ID_1, IBAN IBAN_1."
+# "BSN NATIONAL_ID_1 en later weer NATIONAL_ID_1, IBAN BANK_ACCOUNT_1."
 ```
 
 The mapping is scoped to the `EuRedact` instance. The module-level `redact()`

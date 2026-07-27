@@ -1,6 +1,6 @@
 {
   "name": "euredact",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "European PII redaction SDK -- fast, zero-dependency, rule-based detection and redaction of personal data across 31 European countries",
   "license": "Apache-2.0",
   "type": "module",
@@ -53,8 +53,12 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "postbuild:cjs": "echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
-    "test": "node --import tsx src/__tests__/run.ts",
-    "prepublishOnly": "npm run build"
+    "test": "npm run test:spec",
+    "benchmark": "node --import tsx src/__tests__/benchmark.ts",
+    "prepublishOnly": "npm run build",
+    "test:spec": "node --import tsx src/__tests__/spec.ts",
+    "test:eval": "node --import tsx src/__tests__/run.ts",
+    "test:eval:full": "node --max-old-space-size=8192 --import tsx src/__tests__/evalFull.ts"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

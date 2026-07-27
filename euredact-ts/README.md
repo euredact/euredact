@@ -166,7 +166,7 @@ interface Detection {
 String enum with all supported PII categories:
 
 ```
-NAME              ADDRESS           IBAN              BIC
+NAME              ADDRESS           BANK_ACCOUNT      BIC
 CREDIT_CARD       PHONE             EMAIL             DOB
 DATE_OF_DEATH     NATIONAL_ID       SSN               TAX_ID
 PASSPORT          DRIVERS_LICENSE   RESIDENCE_PERMIT  LICENSE_PLATE
@@ -177,6 +177,76 @@ SOCIAL_HANDLE     SECRET            OTHER
 ```
 
 For custom patterns, `entityType` is a plain string (e.g. `"EMPLOYEE_ID"`).
+
+## Country codes
+
+`countries` accepts **ISO 3166-1 alpha-2** codes. The two EU/VAT spellings are
+accepted as equivalents: `GB`/`UK` and `GR`/`EL`. Codes are case-insensitive
+and whitespace-tolerant.
+
+An **unrecognised** code does not throw — it logs an `[euredact]` warning and
+detection continues with the shared, country-independent patterns. Throwing on
+an unknown locale invites callers to wrap the call in `try/catch` and skip
+redaction entirely, failing open with unredacted PII.
+
+## Country-independent detection
+
+`countries` narrows which country-specific patterns run. It does **not** gate
+identifiers that carry their own evidence:
+
+| Type | Why it ignores `countries` |
+|---|---|
+| `BANK_ACCOUNT` (IBAN) | carries an ISO 3166 country code and a mod-97 checksum |
+| `PHONE` (with `+` prefix) | an E.164 country prefix is self-identifying |
+| `EMAIL`, `CREDIT_CARD`, `VIN`, `IMEI`, `IP_ADDRESS`, `UUID`, `SECRET` | no national form to gate on |
+
+```ts
+redact("Rekening: BE68 5390 0754 7034", { countries: ["AT"] });
+// -> 'Rekening: [BANK_ACCOUNT]'
+```
+
+## BIC detection
+
+BIC is the only bank identifier here with **no check digit**, and characters
+5-6 of ordinary uppercase words are frequently valid ISO 3166 country codes
+(`DRINGEND` -> `GE`, `HOSPITAL` -> `IT`). Detection is therefore gated:
+
+| Stage | Condition | Result |
+|---|---|---|
+| Gate 0 | the token also occurs as an ordinary lowercase word in the same document | never emitted |
+| Tier 1 | registry hit on the BIC6 institution+country prefix | emitted |
+| Gate 2 | heading / shouted-word shape | never emitted |
+| Tier 2 | `BIC`/`SWIFT` keyword, an IBAN, or a bank block in the enclosing line, record or paragraph | emitted |
+| — | none of the above | never emitted |
+
+The package bundles **no licensed BIC data** — only a small seed list of BIC6
+prefixes compiled from publicly published bank data. Deployments holding a
+licensed directory install it at startup:
+
+```ts
+import { setBicRegistry } from "euredact";
+
+setBicRegistry(["ABNANL2A", "INGBNL2A", "BBRUBE"]);   // iterable
+setBicRegistry(bic => myDirectory.has(bic));          // membership callable
+setBicRegistry(null);                                 // remove
+```
+
+The registry is an **accept** signal, never a filter: a code missing from it
+falls through to the context gate and is still detected when banking context is
+present. A stale list costs a little recall on bare, contextless BICs — it
+never causes a leak. Annual review is sufficient.
+
+## `IBAN` is now `BANK_ACCOUNT`
+
+The canonical type name is `BANK_ACCOUNT`; `IBAN` was a legacy alias.
+`detection.entityType` is now `"BANK_ACCOUNT"` and the placeholder written into
+redacted text is `[BANK_ACCOUNT]`.
+
+`EntityType.IBAN` is kept as an alias with the same value, so
+`EntityType.IBAN === EntityType.BANK_ACCOUNT` and code referring to the member
+keeps working. Code matching the *string* `"IBAN"` — or the `[IBAN]`
+placeholder — must be updated. `LEGACY_TYPE_ALIASES` publishes the mapping.
+
 
 ## Custom Patterns
 
