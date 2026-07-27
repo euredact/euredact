@@ -171,6 +171,18 @@ _DATE_PATTERN_FULL = re.compile(r"^\d{2}[-/.]\d{2}[-/.]\d{4}$|^\d{4}[-/.]\d{2}[-
 _HYPHEN_COMPOUND_BEFORE = re.compile(r"[A-Za-zÄÖÜäöüß]-$")
 _CURRENCY_PLATE = re.compile(r"^(?:EUR|USD|GBP|CHF|SEK|NOK|DKK|ISK|CZK|PLN|HUF|RON|BGN|HRK)\s", re.IGNORECASE)
 
+# Standards and classification prefixes that are plate-shaped once a letter and
+# digits follow: "ATC-N06", "ICD-O3". None is a German district code, but the
+# guard is still gated on the absence of a plate cue, so a genuine plate that
+# happens to collide is not lost.
+_STANDARDS_PREFIX = {"ICD", "ISO", "DIN", "IEC", "RFC", "DSM", "ATC", "MDR"}
+
+_PLATE_CUE_NEAR = re.compile(
+    r"(?:Kennzeichen|Nummernschild|Kfz|Fahrzeug|amtliche[sn]?\s+Kennz|"
+    r"nummerplaat|plaque\s+d'immatriculation|license\s+plate|number\s+plate)",
+    re.IGNORECASE,
+)
+
 _NOT_CITY_CODES = {
     "ID", "NR", "NO", "ST", "DR", "MR", "MS", "HR", "FR",
     "IM", "IN", "OR", "IF", "IS", "IT", "AT", "AD", "AG", "AV",
@@ -380,6 +392,14 @@ def suppress_plate_in_compound(text: str, match: RawMatch) -> bool:
 
     matched = match.text.strip()
     parts = re.split(r"[\s\-]+", matched)
+
+    # A standards or classification reference, not a plate — unless a plate
+    # cue nearby says otherwise.
+    if parts and parts[0].upper() in _STANDARDS_PREFIX:
+        before, after = _get_context(text, match.start, match.end)
+        if not _PLATE_CUE_NEAR.search(before + after):
+            return True
+
     if parts and parts[0] in _NOT_CITY_CODES:
         # Check if digits continue after (part of longer number)
         after_char = text[match.end:match.end + 1] if match.end < len(text) else ""

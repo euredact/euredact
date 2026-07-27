@@ -89,7 +89,14 @@ class DEConfig(CountryConfig):
             # Format: 1-3 letter city code + 1-2 letters + 1-4 digits
             PatternDef(
                 entity_type=EntityType.LICENSE_PLATE,
-                pattern=r"\b[A-ZÄÖÜ]{1,3}[\s\-]?[A-Z]{1,2}[\s\-]?\d{1,4}[EH]?\b",
+                # The separator after the city code is mandatory. When it was
+                # optional, a contiguous letter run split across both groups and
+                # the hyphen was consumed as the *second* separator, so any
+                # "LETTERS-DIGITS" token matched: ICD-10 parsed as city "IC" +
+                # letters "D" + "-" + "10", and ISO-9001, COVID-19, RFC-2822,
+                # POL-2025 likewise. A real plate always separates the city code
+                # (that is where the seal sits): "B-AB 1234", "M-XY 99".
+                pattern=r"\b[A-ZÄÖÜ]{1,3}[\s\-][A-Z]{1,2}[\s\-]?\d{1,4}[EH]?\b",
                 validator=None,
                 description="German license plate — city code + letters + digits",
             ),

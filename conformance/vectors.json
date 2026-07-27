@@ -1,0 +1,230 @@
+{
+  "version": 1,
+  "description": "Language-neutral conformance vectors for the euRedact rule engine. Both the Python and the TypeScript SDK run these, so cross-SDK parity is a test rather than an assumption. Each case is input plus an expectation; no language-specific detail belongs here.",
+  "schema": {
+    "id": "unique, kebab-case",
+    "text": "input passed to redact()",
+    "countries": "list of ISO 3166-1 alpha-2 codes, or null for no country hint",
+    "mustDetect": "map of entity type -> exact list of detected texts for that type, in document order",
+    "mustNotDetect": "list of entity types that must produce no detection"
+  },
+  "cases": [
+    {
+      "id": "de-plate-icd10-bare",
+      "text": "ICD-10",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-icd10-in-clinical-text",
+      "text": "Diagnose: Diabetes mellitus Typ 2 (ICD-10: E11.9) gesichert.",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-icd10-in-prose",
+      "text": "Der ICD-10 Katalog wird verwendet.",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-iso9001",
+      "text": "Referenz ISO-9001: siehe Anlage.",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-standards-run",
+      "text": "Zertifiziert nach ISO-9001 und DIN-4102.",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-en1090",
+      "text": "EN-1090",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-rfc2822",
+      "text": "RFC-2822",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-covid19",
+      "text": "COVID-19",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-sars2",
+      "text": "SARS-2",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-gdpr2016",
+      "text": "GDPR-2016",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-dsm5",
+      "text": "DSM-5",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-atc-n06",
+      "text": "Referenz ATC-N06 im Bericht.",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-iec61508",
+      "text": "IEC-61508",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-doc-refs",
+      "text": "Vorgang POL-2025, Rechnung INV-2026, Meldung INC-2026.",
+      "countries": ["DE"],
+      "mustNotDetect": ["LICENSE_PLATE"]
+    },
+    {
+      "id": "de-plate-real-spaced",
+      "text": "Kennzeichen B-AB 1234 notiert.",
+      "countries": ["DE"],
+      "mustDetect": { "LICENSE_PLATE": ["B-AB 1234"] }
+    },
+    {
+      "id": "de-plate-real-short",
+      "text": "Kennzeichen M-XY 99 notiert.",
+      "countries": ["DE"],
+      "mustDetect": { "LICENSE_PLATE": ["M-XY 99"] }
+    },
+    {
+      "id": "de-plate-real-two-letter-city",
+      "text": "Kennzeichen HH-AB 123 notiert.",
+      "countries": ["DE"],
+      "mustDetect": { "LICENSE_PLATE": ["HH-AB 123"] }
+    },
+    {
+      "id": "de-plate-real-unspaced",
+      "text": "Kennzeichen B-AB1234 notiert.",
+      "countries": ["DE"],
+      "mustDetect": { "LICENSE_PLATE": ["B-AB1234"] }
+    },
+    {
+      "id": "de-plate-standards-prefix-with-cue-still-detected",
+      "text": "Kennzeichen ATC-N 06 notiert.",
+      "countries": ["DE"],
+      "mustDetect": { "LICENSE_PLATE": ["ATC-N 06"] }
+    },
+    {
+      "id": "at-plate-unaffected",
+      "text": "Kennzeichen W 12345 X",
+      "countries": ["AT"],
+      "mustDetect": { "LICENSE_PLATE": ["W 12345 X"] }
+    },
+    {
+      "id": "be-plate-unaffected",
+      "text": "nummerplaat 1-ABC-123",
+      "countries": ["BE"],
+      "mustDetect": { "LICENSE_PLATE": ["1-ABC-123"] }
+    },
+    {
+      "id": "nl-plate-unaffected",
+      "text": "Kenteken 12-ABC-3",
+      "countries": ["NL"],
+      "mustDetect": { "LICENSE_PLATE": ["12-ABC-3"] }
+    },
+
+    {
+      "id": "bic-allcaps-word-rejected",
+      "text": "DRINGEND: Frau Yilmaz ist verantwortlich.",
+      "countries": ["DE"],
+      "mustNotDetect": ["BIC"]
+    },
+    {
+      "id": "bic-heading-rejected",
+      "text": "QUEEN ELIZABETH HOSPITAL BIRMINGHAM",
+      "countries": ["UK"],
+      "mustNotDetect": ["BIC"]
+    },
+    {
+      "id": "bic-registry-hit",
+      "text": "ABNANL2A",
+      "countries": ["NL"],
+      "mustDetect": { "BIC": ["ABNANL2A"] }
+    },
+    {
+      "id": "bic-context-gated",
+      "text": "IBAN: BE68 5390 0754 7034 - BIC: GEBABEBB",
+      "countries": ["BE"],
+      "mustDetect": { "BIC": ["GEBABEBB"], "BANK_ACCOUNT": ["BE68 5390 0754 7034"] }
+    },
+    {
+      "id": "bic-space-separated",
+      "text": "SWIFT: RZBA AT WW",
+      "countries": ["AT"],
+      "mustDetect": { "BIC": ["RZBA AT WW"] }
+    },
+    {
+      "id": "postal-not-shredding-svnr",
+      "text": "Anschrift: Hauptstrasse 5, 1010 Wien\nSV-Nummer: 1268 040390",
+      "countries": ["AT"],
+      "mustDetect": { "POSTAL_CODE": ["1010"], "NATIONAL_ID": ["1268 040390"] }
+    },
+    {
+      "id": "postal-sentence-final",
+      "text": "Domicilio: Palma, 13867. Pagos a IBAN.",
+      "countries": ["ES"],
+      "mustDetect": { "POSTAL_CODE": ["13867"] }
+    },
+    {
+      "id": "postal-country-prefixed",
+      "text": "Anschrift: A-1010 Wien",
+      "countries": ["AT"],
+      "mustDetect": { "POSTAL_CODE": ["1010"] }
+    },
+    {
+      "id": "phone-e164-austrian-grouped",
+      "text": "Telefon: +43 664 8213 907",
+      "countries": ["AT"],
+      "mustDetect": { "PHONE": ["+43 664 8213 907"] }
+    },
+    {
+      "id": "phone-austrian-national-short-area-code",
+      "text": "Tel: 01 53460 2215",
+      "countries": ["AT"],
+      "mustDetect": { "PHONE": ["01 53460 2215"] }
+    },
+    {
+      "id": "iban-cross-border",
+      "text": "Rekening: BE68 5390 0754 7034 bij KBC.",
+      "countries": ["AT"],
+      "mustDetect": { "BANK_ACCOUNT": ["BE68 5390 0754 7034"] }
+    },
+    {
+      "id": "iban-no-country-hint",
+      "text": "Payment to BE68 5390 0754 7034 please.",
+      "countries": null,
+      "mustDetect": { "BANK_ACCOUNT": ["BE68 5390 0754 7034"] }
+    },
+    {
+      "id": "country-code-iso-gb",
+      "text": "NHS Number: 943 476 5919",
+      "countries": ["GB"],
+      "mustDetect": { "HEALTH_INSURANCE": ["943 476 5919"] }
+    },
+    {
+      "id": "email-unicode-local-part",
+      "text": "Mail: petras_ž@example.com",
+      "countries": ["NL"],
+      "mustDetect": { "EMAIL": ["petras_ž@example.com"] }
+    }
+  ]
+}

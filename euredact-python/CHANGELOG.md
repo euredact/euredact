@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **German `LICENSE_PLATE` matched standards codes and document references.**
+  With `countries=["DE"]`, `ICD-10`, `ISO-9001`, `EN-1090`, `DIN-4102`,
+  `RFC-2822`, `COVID-19`, `POL-2025` and similar were replaced with
+  `[LICENSE_PLATE]`, corrupting the returned text —
+  `Diagnose: ... ([LICENSE_PLATE]: E11.9)`. Measured at 98 occurrences across
+  68 documents in a 5,010-document corpus, and the same token shape occurs
+  14,563 times corpus-wide, so the blast radius grows sharply if `DE` is passed
+  for a cross-border document.
+
+  The cause was not that the letter group after the hyphen was optional — it
+  never was. The *first* separator was optional, so a contiguous letter run
+  split across both groups and the hyphen was consumed as the second
+  separator: `ICD-10` parsed as city `IC` + letters `D` + `-` + `10`. The
+  separator after the city code is now mandatory, which is correct for a real
+  plate (`B-AB 1234`, `M-XY 99`) since that is where the seal sits.
+
+  A standards-prefix guard (`ICD`, `ISO`, `DIN`, `IEC`, `RFC`, `DSM`, `ATC`,
+  `MDR`) covers the residue that is genuinely plate-shaped, such as `ATC-N06`.
+  It is gated on the absence of a plate cue, so `Kennzeichen ATC-N 06` is still
+  detected.
+
+### Added
+
+- **Shared conformance suite** (`conformance/vectors.json`). Language-neutral
+  input/expectation pairs run by both SDKs, so a behavioural difference between
+  Python and TypeScript fails a test rather than surfacing later as a corpus
+  diff. Verified to work: reverting the plate fix in one engine alone fails
+  five shared vectors.
+
 ## 0.3.0 (2026-07-27)
 
 ### Measured effect

@@ -135,6 +135,14 @@ function suppressPhoneDateOverlap(_text: string, match: RawMatch): boolean {
   return DATE_PATTERN_FULL.test(match.text.trim());
 }
 
+// Standards and classification prefixes that are plate-shaped once a letter and
+// digits follow: "ATC-N06", "ICD-O3". None is a German district code, but the
+// guard is still gated on the absence of a plate cue, so a genuine plate that
+// happens to collide is not lost.
+const STANDARDS_PREFIX = new Set(["ICD", "ISO", "DIN", "IEC", "RFC", "DSM", "ATC", "MDR"]);
+
+const PLATE_CUE_NEAR = /(?:Kennzeichen|Nummernschild|Kfz|Fahrzeug|amtliche[sn]?\s+Kennz|nummerplaat|plaque\s+d'immatriculation|license\s+plate|number\s+plate)/i;
+
 const NOT_CITY_CODES = new Set([
   "ID","NR","NO","ST","DR","MR","MS","HR","FR","IM","IN","OR","IF","IS","IT","AT","AD","AG","AV",
   "BE","DE","EU","NL","LU","WS","SS","IP",
@@ -152,6 +160,14 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
   }
   const matched = match.text.trim();
   const parts = matched.split(/[\s\-]+/);
+
+  // A standards or classification reference, not a plate — unless a plate cue
+  // nearby says otherwise.
+  if (parts.length > 0 && STANDARDS_PREFIX.has(parts[0].toUpperCase())) {
+    const [b, a] = getContext(text, match.start, match.end);
+    if (!PLATE_CUE_NEAR.test(b + a)) return true;
+  }
+
   if (parts.length > 0 && NOT_CITY_CODES.has(parts[0])) {
     const afterChar = match.end < text.length ? text[match.end] : "";
     const beforeChar = match.start > 0 ? text[match.start - 1] : "";

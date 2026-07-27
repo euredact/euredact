@@ -235,7 +235,13 @@ const DE: CountryConfig = {
     p(EntityType.PHONE, String.raw`\b0[1-9]\d{1,4}[\s/\-]?\d{3,8}\b`),
     p(EntityType.PHONE, String.raw`\+49\s?\d{2,5}[\s/\-]?\d{3,8}\b`),
     p(EntityType.PASSPORT, String.raw`\b[CFGHJK][0-9A-Z]{8,9}\b`, null, "", ["Reisepass", "passport", "Passnummer", "Reisepassnummer", "Reisepass Nummer", "Reisepass-Nr", "Pass Nr"], true),
-    p(EntityType.LICENSE_PLATE, String.raw`\b[A-ZÄÖÜ]{1,3}[\s\-]?[A-Z]{1,2}[\s\-]?\d{1,4}[EH]?\b`),
+    // The separator after the city code is mandatory. When it was optional, a
+    // contiguous letter run split across both groups and the hyphen was
+    // consumed as the *second* separator, so any "LETTERS-DIGITS" token
+    // matched: ICD-10 parsed as city "IC" + letters "D" + "-" + "10", and
+    // ISO-9001, COVID-19, RFC-2822, POL-2025 likewise. A real plate always
+    // separates the city code: "B-AB 1234", "M-XY 99".
+    p(EntityType.LICENSE_PLATE, String.raw`\b[A-ZÄÖÜ]{1,3}[\s\-][A-Z]{1,2}[\s\-]?\d{1,4}[EH]?\b`),
     p(EntityType.POSTAL_CODE, String.raw`\b\d{5}\b`, null, "", ["PLZ", "Postleitzahl", "postal code", "postcode", "Anschrift", "Adresse", "Wohnort", "Ort", "Stadt", "wohnt", "wohnhaft", "Straße", "Str.", "Weg", "Platz", "Allee", "Ring"], true),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\bHR[AB]\s?\d{4,6}\b`),
     p(EntityType.SSN, String.raw`\b\d{2}[\s]?\d{6}[\s]?[A-Z][\s]?\d{3}\b`, null, "", ["Rentenversicherung", "RV-Nummer", "Sozialversicherung", "SV-Nummer", "Versicherungsnummer", "Rentenversicherungsnummer", "Sozialversicherungsnummer"], true),
