@@ -73,10 +73,16 @@ jobs:
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
+      # Node 20 ships npm 10, which predates OIDC trusted publishing. Kept to a
+      # major range rather than @latest so a bad npm release cannot break the
+      # release pipeline, and rather than a pin so it does not go stale.
+      - run: npm install -g npm@^11
       - run: npm ci
       - run: npm run build
-      # TODO: Migrate from NPM_TOKEN to OIDC trusted publishing once
-      # configured on npmjs.com — see https://docs.npmjs.com/generating-provenance-statements
+      # Authenticates via OIDC trusted publishing — no NPM_TOKEN. Requires a
+      # trusted publisher on npmjs.com for this package: organisation
+      # "euredact", repository "euredact", workflow "publish.yml", environment
+      # blank (this job declares none; if one is configured there it must
+      # match). Provenance is implicit under trusted publishing; the flag is
+      # kept so the intent survives if the auth method ever changes back.
       - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
