@@ -28,6 +28,28 @@ jobs:
       - run: ruff check src/
       - run: python -m pytest tests/ -x -q
 
+  # The optional extras swap the scan path underneath the engine. Both the
+  # accelerated and the pure-Python configurations must pass, or installing an
+  # extra could silently change what gets redacted — which is exactly how
+  # `pip install euredact[fast]` once stopped redacting private keys.
+  test-python-no-extras:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: euredact-python
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . pytest pytest-asyncio
+      - name: Confirm no accelerator is installed
+        run: |
+          python -c "import euredact.rules.matchers as m; assert not m._HAS_AC and not m._HAS_RE2, 'extras leaked into the minimal job'"
+      - run: python -m pytest tests/ -x -q
+
   test-ts:
     runs-on: ubuntu-latest
     permissions:
