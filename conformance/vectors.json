@@ -500,6 +500,144 @@
           "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----"
         ]
       }
+    },
+    {
+      "id": "be-invalid-nrn-is-not-a-phone",
+      "text": "Rijksregisternummer: 85.03.19-284.73",
+      "countries": [
+        "BE"
+      ],
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "be-invalid-nrn-is-not-a-phone-2",
+      "text": "Nationaal nummer 82.09.04-317.68",
+      "countries": [
+        "BE"
+      ],
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "be-valid-nrn-still-national-id",
+      "text": "Rijksregisternummer: 85.03.19-284.79",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "85.03.19-284.79"
+        ]
+      }
+    },
+    {
+      "id": "se-phone-survives-failed-personnummer",
+      "text": "Telefon: 0708787668",
+      "countries": [
+        "SE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "0708787668"
+        ]
+      }
+    },
+    {
+      "id": "international-phone-unaffected-by-fragment-rule",
+      "text": "Tel: +32 498 22 67 31",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "+32 498 22 67 31"
+        ]
+      }
+    },
+    {
+      "id": "boundary-cyrillic-glued-national-id",
+      "text": "ЕГН7523169263",
+      "countries": null,
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "7523169263"
+        ]
+      }
+    },
+    {
+      "id": "boundary-polish-glued-national-id",
+      "text": "PESELŁ44051401359",
+      "countries": null,
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "44051401359"
+        ]
+      }
+    },
+    {
+      "id": "boundary-czech-glued-national-id",
+      "text": "čísloř7401011233",
+      "countries": null,
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "7401011233"
+        ]
+      }
+    },
+    {
+      "id": "boundary-german-glued-tax-id",
+      "text": "Steuerß12345678911",
+      "countries": null,
+      "mustDetect": {
+        "TAX_ID": [
+          "12345678911"
+        ]
+      }
+    },
+    {
+      "id": "boundary-lithuanian-glued-national-id",
+      "text": "kodasž38605181232",
+      "countries": null,
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "38605181232"
+        ]
+      }
+    },
+    {
+      "id": "boundary-greek-email-local-part",
+      "text": "Mail: αλέξης@example.gr",
+      "countries": null,
+      "mustDetect": {
+        "EMAIL": [
+          "αλέξης@example.gr"
+        ]
+      }
+    },
+    {
+      "id": "boundary-lithuanian-email-local-part",
+      "text": "Mail: petras_ž@example.com",
+      "countries": null,
+      "mustDetect": {
+        "EMAIL": [
+          "petras_ž@example.com"
+        ]
+      }
+    },
+    {
+      "id": "countries-list-not-bare-string",
+      "text": "Werknemer met BSN 111222333",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "111222333"
+        ]
+      }
     }
   ]
 }

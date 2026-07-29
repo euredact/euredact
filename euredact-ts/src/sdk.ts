@@ -56,6 +56,35 @@ export interface RedactOptions {
 
 const DEFAULT_MAX_INPUT_LENGTH = 10_485_760;  // ~10 MB of text
 
+/**
+ * Reject a bare string where a list of country codes is expected.
+ *
+ * `countries: "NL"` is iterable, so it walks into the codes "N" and "L".
+ * Neither resolves, so nothing is declared — and every detection that *does*
+ * carry a country is then flagged `outOfScope`. A caller following the
+ * documented pattern of filtering on that field silently keeps none of them,
+ * while `redactedText` still looks perfectly correct. The failure direction is
+ * "no PII here", from a one-character typo.
+ *
+ * This already threw in Node, but by accident and only once something happened
+ * to call `.map` on it — deep in the call, with a message naming neither the
+ * argument nor the fix.
+ *
+ * A wrong *code* is data and only warns; raising there would invite callers to
+ * wrap redaction in try/catch and skip it. A wrong *type* is a programming
+ * error with no correct interpretation to fall back on.
+ */
+function checkCountryArg(value: unknown, param: string): void {
+  if (typeof value === "string") {
+    throw new TypeError(
+      `${param} must be an array of country codes, not a bare string. ` +
+      `Pass ${param}: ["${value}"] rather than ${param}: "${value}" — a string ` +
+      `is iterated character by character, which silently declares nothing and ` +
+      `flags every detection outOfScope.`
+    );
+  }
+}
+
 export class EuRedact {
   private engine = new RuleEngine();
   private cache = new ResultCache();
@@ -79,6 +108,9 @@ export class EuRedact {
   }
 
   redact(text: string, options: RedactOptions = {}): RedactResult {
+    checkCountryArg(options.countries, "countries");
+    checkCountryArg(options.countryHint, "countryHint");
+
     if (text.length > this.maxInputLength) {
       throw new Error(
         `Input text length (${text.length.toLocaleString()} chars) exceeds the maximum ` +
@@ -123,7 +155,7 @@ export class EuRedact {
       scores,
     } = this.engine.detectWithEvidence(
       normalizedText, countries, countryHint,
-      context !== null ? context.evidence() : null,
+      context !== null ? context.evidence : null,
     );
     if (context !== null) context.add(evidence, chunkOffset);
     let detections = rawDetections;

@@ -14,6 +14,7 @@ import warnings
 
 import pytest
 
+import euredact
 from euredact.rules.registry import CountryRegistry, UnknownCountryWarning
 from euredact.sdk import EuRedact
 from euredact.types import LEGACY_TYPE_ALIASES, EntityType
@@ -181,3 +182,39 @@ class TestAustrianNationalPhone:
     def test_date_fragments_are_not_phones(self, sdk, text):
         result = sdk.redact(text, countries=["AT"])
         assert EntityType.PHONE not in _types(result)
+
+class TestCountryArgumentType:
+    """A bare string must be rejected, not iterated character by character.
+
+    ``countries="NL"`` walked into the codes "N" and "L". Neither resolves, so
+    nothing was declared, and every detection carrying a country came back
+    ``out_of_scope=True`` — while ``redacted_text`` still looked correct. The
+    README tells callers to filter on exactly that field, so a documented
+    pipeline silently kept none of them. It failed toward "no PII here".
+    """
+
+    @pytest.mark.parametrize("param", ["countries", "country_hint"])
+    def test_bare_string_raises(self, param):
+        with pytest.raises(TypeError, match="not a bare string"):
+            euredact.redact("BSN 111222333", **{param: "NL"})
+
+    @pytest.mark.parametrize("param", ["countries", "country_hint"])
+    def test_the_message_shows_the_fix(self, param):
+        with pytest.raises(TypeError) as exc:
+            euredact.redact("x", **{param: "NL"})
+        assert f"{param}=['NL']" in str(exc.value)
+
+    def test_batch_entry_points_are_guarded_too(self):
+        with pytest.raises(TypeError, match="not a bare string"):
+            euredact.redact_batch(["BSN 111222333"], countries="NL")
+
+    def test_a_list_is_unaffected(self):
+        result = euredact.redact("Werknemer met BSN 111222333", countries=["NL"])
+        assert [d.out_of_scope for d in result.detections] == [False]
+
+    def test_an_unknown_code_still_only_warns(self):
+        """A wrong *code* is data; a wrong *type* is a programming error.
+        Raising on the former would invite callers to skip redaction."""
+        with pytest.warns(UnknownCountryWarning):
+            result = euredact.redact("Werknemer met BSN 111222333", countries=["ZZ"])
+        assert result.detections, "detection must continue on an unknown code"

@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.3.3 (2026-07-29)
+
+### Fixed
+
+- **A bare string for `countries` silently discarded every detection.**
+  `countries="NL"` is iterable, so it was walked into the codes `"N"` and `"L"`.
+  Neither resolves, so nothing was declared — and every detection carrying a
+  country came back flagged out of scope, while the redacted text still looked
+  correct. The README tells callers to filter on exactly that field, so a
+  documented pipeline kept none of them. It failed toward "no PII here", from a
+  one-character typo.
+
+  Both SDKs now raise `TypeError` naming the argument and showing the fix, on
+  every entry point. A wrong *code* still only warns: raising there would invite
+  callers to wrap redaction in try/except and skip it. A wrong *type* is a
+  programming error with no correct interpretation to fall back on.
+
+- **The generic phone pattern claimed fragments of rejected identifiers.**
+  `Rijksregisternummer: 85.03.19-284.73` was reported as a `PHONE`. The Belgian
+  national-number pattern matched the whole value and failed its checksum; the
+  separator-tolerant phone pattern then took characters 3-14 of it.
+
+  A candidate covering only *part* of a rejected identifier is a fragment of
+  that identifier, not a separate entity, and is now dropped. An equal span is
+  left alone: that is two schemes competing for the whole value, and demoting
+  those is what previously handed a Swedish phone number to a Danish CPR.
+
+  Fragment detection ignores the declared country by design. It removes
+  candidates, so making it country-aware would let `countries` change which
+  spans are found — the invariant in `test_invariant_generation.py`.
+
+  No measurable cost: recall, precision and type-correct rate are unchanged on
+  all 152,300 corpus documents.
+
+- **`DocumentContext.evidence` was a method while `.size` was a getter.** The
+  inconsistency was the hazard rather than the style: `ctx.size()` and
+  `ctx.evidence` both *succeed* and return something useless — a number is not
+  callable, a function object is truthy — so the mistake surfaced later as an
+  empty result. `evidence` is now a getter, and the wrong form throws.
+  (The Python SDK keeps `evidence()`, following its own idiom.)
+
+- Node already handled non-ASCII word boundaries correctly; the matching Python
+  fix means both runtimes now agree on all five cases. They are pinned as
+  shared conformance vectors, since the divergence was undetectable by testing
+  either package alone.
+
+### Known issues
+
+- A checksum-invalid identifier occupying a span no other detector claims can
+  still be reported under the wrong type — `7401011234` with `countries` `["CZ"]`
+  is masked as a Romanian `PHONE` at `countryConfidence` 0. The span *is*
+  redacted; only the label is wrong. The fragment rule above does not apply
+  because the spans are equal rather than nested.
+
 ## 0.3.2 (2026-07-29)
 
 ### Changed

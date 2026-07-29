@@ -39,6 +39,31 @@ def _validate_custom_pattern(pattern: str) -> None:
         )
 
 
+def check_country_arg(value: object, param: str) -> None:
+    """Reject a bare string where a list of country codes is expected.
+
+    ``countries="NL"`` is iterable, so Python walks it into the codes ``"N"``
+    and ``"L"``. Neither resolves, so nothing is declared — and every detection
+    that *does* carry a country is then flagged ``out_of_scope``. A caller
+    following the documented pattern of filtering on that field silently keeps
+    none of them, while ``redacted_text`` still looks perfectly correct. The
+    failure direction is "no PII here", from a one-character typo.
+
+    A wrong *code* is data and only warns (see ``CountryRegistry.warn_unknown``)
+    — raising there would invite callers to wrap redaction in try/except and
+    skip it. A wrong *type* is a programming error, surfaces immediately, and
+    has no correct interpretation to fall back on.
+    """
+    if isinstance(value, (str, bytes)):
+        shown = value.decode(errors="replace") if isinstance(value, bytes) else value
+        raise TypeError(
+            f"{param} must be a list of country codes, not a bare string. "
+            f"Pass {param}=[{shown!r}] rather than {param}={shown!r} — a string "
+            f"is iterated character by character, which silently declares "
+            f"nothing and flags every detection out_of_scope."
+        )
+
+
 class RuleEngine:
     """The core rule-based PII detection engine.
 
@@ -135,6 +160,9 @@ class RuleEngine:
         It is scored alongside this text's own evidence but is **not** returned,
         so a caller accumulating evidence never counts it twice.
         """
+        check_country_arg(country_codes, "countries")
+        check_country_arg(country_hint, "country_hint")
+
         raw_matches = self.generate_candidates(text)
 
         # The declared countries are a scoring signal from here on: they rank
@@ -226,16 +254,50 @@ class RuleEngine:
         # phone number — and demoting on it cost every PHONE candidate in the
         # document its rank, which is how a Dutch mobile came back as a Danish
         # NATIONAL_ID even after the digits were correctly ranked.
-        # Zones are per entity type. A failed checksum means "these digits are
-        # not a valid X" — that is evidence against X, not against the span.
-        # Demoting every type at once meant Sweden's own personnummer checksum
-        # failing on 0708787668 demoted the Swedish *phone* candidate for the
-        # same digits, handing the span to a Danish CPR that happened to
-        # validate. Worth 878 mistyped phone numbers on 30,000 documents.
+        # Two rules, because a failed checksum carries two different messages
+        # depending on how the spans line up.
+        #
+        # Same type, any containment: "these digits are not a valid X" is
+        # evidence against X, not against the span. Demoting *every* type on an
+        # equal span meant Sweden's own personnummer checksum failing on
+        # 0708787668 demoted the Swedish *phone* candidate for the same digits,
+        # handing the span to a Danish CPR that happened to validate — 878
+        # mistyped phone numbers per 30,000 documents.
+        #
+        # Any type, strict subset: a candidate covering only *part* of a
+        # rejected identifier is a fragment of it, not a different entity. The
+        # generic separator-tolerant phone pattern claimed characters 3-14 of
+        # the rejected Belgian national number in
+        # "Rijksregisternummer: 85.03.19-284.73" and reported it as a PHONE.
+        # This is the case the original suppression zones were written for —
+        # licence-plate fragments inside an invalid IBAN — which the per-type
+        # split above had given up along with the over-reach.
+        #
+        # An equal span is two schemes competing for the whole value; a strict
+        # subset is one scheme picking over another's wreckage.
+        corroborated: list[tuple[int, int, object]] = [
+            (start, end, etype)
+            for start, end, cc, etype in failed_spans
+            if not country_scores or cc in ("SHARED", "CUSTOM") or cc in country_scores
+        ]
+        corroborated.sort()
+
+        # Fragment detection deliberately ignores corroboration and uses every
+        # failed span, because it *removes* candidates and must therefore be
+        # country-blind. Gating it on the document's countries made the set of
+        # spans found depend on `countries=`, which is precisely invariant I1 —
+        # caught by tests/test_invariant_generation.py within seconds of being
+        # written. Demotion may be country-aware because it only reorders; a
+        # demoted candidate still claims a span nothing else wants.
+        #
+        # Kept unmerged: merging adjacent spans would invent strict-subset
+        # relationships that neither original span had.
+        all_failed = sorted((start, end) for start, end, _cc, _et in failed_spans)
+        strict_starts = [f[0] for f in all_failed]
+
         by_type: dict[object, list[tuple[int, int]]] = {}
-        for start, end, cc, etype in failed_spans:
-            if not country_scores or cc in ("SHARED", "CUSTOM") or cc in country_scores:
-                by_type.setdefault(etype, []).append((start, end))
+        for start, end, etype in corroborated:
+            by_type.setdefault(etype, []).append((start, end))
 
         # Merge overlapping zones per type and index them for O(log n)
         # containment checks instead of O(n) per match.
@@ -295,6 +357,27 @@ class RuleEngine:
                     zone_starts, zone_ends = zone
                     idx = bisect.bisect_right(zone_starts, match.start) - 1
                     demoted = idx >= 0 and zone_ends[idx] >= match.end
+            # Strict subset of a rejected identifier, whatever its type: the
+            # candidate covers only part of something already recognised and
+            # rejected, so it is a fragment of that, not a separate entity.
+            #
+            # Dropped rather than demoted. Demotion cannot help here: nothing
+            # else wants a fragment, so a demoted candidate still wins its span
+            # by default — the generic phone pattern kept claiming characters
+            # 3-14 of a rejected Belgian national number. Dropping is safe in a
+            # way that whole-span deletion was not, because the characters stay
+            # covered by whatever claims the enclosing span, or by nothing —
+            # and "nothing" is the right answer for the tail of a rejected
+            # identifier.
+            fragment = False
+            if match.pattern_def.validator is None and not demoted:
+                hi = bisect.bisect_right(strict_starts, match.start)
+                for zs, ze in all_failed[:hi]:
+                    if match.end <= ze and (match.start > zs or match.end < ze):
+                        fragment = True
+                        break
+            if fragment:
+                continue
 
             if demoted:
                 priority = -1

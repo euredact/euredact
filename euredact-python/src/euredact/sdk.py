@@ -10,7 +10,7 @@ from typing import Iterator
 from euredact.cache import ResultCache
 from euredact.normalizer import map_offset_to_original, normalize
 from euredact.rules.context import DocumentContext
-from euredact.rules.engine import RuleEngine
+from euredact.rules.engine import RuleEngine, check_country_arg
 from euredact.rules.evidence import weights_to_ranking
 from euredact.types import EntityType, RedactResult
 
@@ -112,7 +112,12 @@ class EuRedact:
                 engine applies keyword and structural (JSON/CSV header)
                 checks before emitting a date detection.
         """
-        # Step 0: Input size guard
+        # Step 0: argument and input-size guards. The country check runs here
+        # as well as in the engine so that a bare string is rejected before any
+        # work happens, and on every entry point that funnels through redact().
+        check_country_arg(countries, "countries")
+        check_country_arg(country_hint, "country_hint")
+
         if len(text) > self._max_input_length:
             raise ValueError(
                 f"Input text length ({len(text):,} chars) exceeds the maximum "

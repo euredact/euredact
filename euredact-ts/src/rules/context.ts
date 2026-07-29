@@ -40,8 +40,20 @@ export class DocumentContext {
     }
   }
 
-  /** Everything recorded so far, spans rebased to the whole document. */
-  evidence(): CountryEvidence[] {
+  /**
+   * Everything recorded so far, spans rebased to the whole document.
+   *
+   * A getter, to match {@link DocumentContext.size}. These were a method and a
+   * getter on the same class, which is a trip hazard rather than a style
+   * question: `ctx.size()` and `ctx.evidence` both *succeed* and return
+   * something useless — a number is not callable, and a function object is
+   * truthy — so the mistake surfaces later as an empty result rather than as
+   * an error. Both are property reads now, and the wrong form throws.
+   *
+   * Returns a fresh copy each call, so mutating it cannot corrupt the context.
+   * (The Python SDK spells this `evidence()`, following its own idiom.)
+   */
+  get evidence(): CountryEvidence[] {
     return [...this.items];
   }
 

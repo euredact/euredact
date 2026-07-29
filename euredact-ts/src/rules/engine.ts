@@ -232,6 +232,24 @@ export class RuleEngine {
       if (list) list.push([f.start, f.end]);
       else zonesByType.set(f.etype, [[f.start, f.end]]);
     }
+
+    // Any type, strict subset: a candidate covering only *part* of a rejected
+    // identifier is a fragment of it, not a different entity. The generic
+    // separator-tolerant phone pattern claimed characters 3-14 of the rejected
+    // Belgian national number in "Rijksregisternummer: 85.03.19-284.73" and
+    // reported it as a PHONE. An equal span is two schemes competing for the
+    // whole value; a strict subset is one picking over another's wreckage.
+    //
+    // Deliberately ignores corroboration and uses every failed span, because it
+    // *removes* candidates and must therefore be country-blind — gating it on
+    // the document's countries would make the set of spans found depend on
+    // `countries`, which is invariant I1.
+    //
+    // Kept unmerged: merging adjacent spans would invent strict-subset
+    // relationships that neither original span had.
+    const allFailed = failedSpans
+      .map(f => [f.start, f.end] as [number, number])
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     const mergedZones = new Map<string, { starts: number[]; ends: number[] }>();
     for (const [etype, spans] of zonesByType) {
       spans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -276,6 +294,22 @@ export class RuleEngine {
           const idx = lo - 1;
           demoted = idx >= 0 && zone.ends[idx] >= match.end;
         }
+      }
+
+      // Dropped rather than demoted. Demotion cannot help here: nothing else
+      // wants a fragment, so a demoted candidate still wins its span by
+      // default — the generic phone pattern kept claiming the tail of the
+      // rejected national number.
+      if (match.patternDef.validator === null && !demoted) {
+        let fragment = false;
+        for (const [zs, ze] of allFailed) {
+          if (zs > match.start) break;
+          if (match.end <= ze && (match.start > zs || match.end < ze)) {
+            fragment = true;
+            break;
+          }
+        }
+        if (fragment) continue;
       }
 
       let priority: number;

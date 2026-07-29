@@ -202,8 +202,8 @@ test("a context carries the document forward", () => {
 test("context spans point into the whole document", () => {
   const ctx = new DocumentContext();
   sdk.redact(PAGE_1, { context: ctx, chunkOffset: 500 });
-  assert.ok(ctx.evidence().length > 0);
-  for (const ev of ctx.evidence()) {
+  assert.ok(ctx.evidence.length > 0);
+  for (const ev of ctx.evidence) {
     assert.ok(ev.span[0] >= 500 && ev.span[1] <= 500 + PAGE_1.length);
   }
 });
@@ -217,7 +217,7 @@ test("returned detections stay chunk-relative", () => {
 test("re-running a chunk does not let it vote twice", () => {
   const ctx = new DocumentContext();
   for (let i = 0; i < 5; i++) sdk.redact(PAGE_1, { context: ctx, chunkOffset: 0 });
-  const keys = ctx.evidence().map(e => `${e.span[0]}:${e.span[1]}:${e.source}`);
+  const keys = ctx.evidence.map(e => `${e.span[0]}:${e.span[1]}:${e.source}`);
   assert.equal(keys.length, new Set(keys).size);
 });
 
@@ -239,6 +239,35 @@ test("a context cannot hide a span", () => {
   wrong.add([{ country: "DK", source: "ibanPrefix", logOdds: 4.0, span: [0, 10] }]);
   assert.equal(spans(sdk.redact(PAGE_1, { context: wrong, cache: false })),
                spans(sdk.redact(PAGE_1, { cache: false })));
+});
+
+// ── Argument types ─────────────────────────────────────────────────────
+
+for (const param of ["countries", "countryHint"]) {
+  test(`a bare string for ${param} is rejected`, () => {
+    // "NL" is iterable, so it walks into the codes "N" and "L". Neither
+    // resolves, so nothing is declared and every detection carrying a country
+    // comes back outOfScope — while redactedText still looks correct.
+    assert.throws(() => sdk.redact("BSN 111222333", { [param]: "NL" } as never),
+                  (e: unknown) => e instanceof TypeError && /not a bare string/.test((e as Error).message));
+  });
+}
+
+test("an unknown code still only warns", () => {
+  // A wrong code is data; a wrong type is a programming error.
+  assert.ok(sdk.redact("Werknemer met BSN 111222333", { countries: ["ZZ"], cache: false })
+               .detections.length > 0);
+});
+
+test("DocumentContext exposes evidence and size the same way", () => {
+  // Both property reads: a method and a getter on one class is a trip hazard,
+  // because ctx.size() and ctx.evidence both succeed and return something
+  // useless rather than erroring.
+  const ctx = new DocumentContext();
+  sdk.redact(PAGE_1, { context: ctx });
+  assert.ok(Array.isArray(ctx.evidence));
+  assert.equal(ctx.size, ctx.evidence.length);
+  assert.throws(() => (ctx as never as { evidence: () => void }).evidence(), TypeError);
 });
 
 // ── Report ─────────────────────────────────────────────────────────────

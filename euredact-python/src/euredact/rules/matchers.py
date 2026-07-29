@@ -90,6 +90,68 @@ def _silence_stderr() -> Iterator[None]:
         os.close(saved_fd)
 
 
+# Python's \b is Unicode-aware: a Cyrillic or accented letter counts as a word
+# character, so "\b\d{10}\b" does not match the digits in "ЕГН7523169263". JS's
+# \b is ASCII-only, so Node matched and redacted exactly those cases and Python
+# did not — five of five, across the alphabets this engine targets.
+#
+# Which rule is "right" is arguable: Python's is self-consistent, JS's is
+# script-dependent. But for a redaction tool the argument is settled by the
+# failure direction. Python's principled rule leaves a national ID glued to a
+# non-ASCII letter unredacted; JS's limitation catches it. Over-detection is
+# recoverable, a silent miss is not.
+#
+# So \b is rewritten at compile time rather than in 303 pattern sources.
+# re.ASCII is not usable here: it would also narrow \w, breaking Unicode e-mail
+# local parts, which are deliberately supported.
+#
+# The rewrite is a *union* of both readings, not a swap to the ASCII one.
+# Neither alone is sufficient, and swapping regresses the other direction:
+#
+#   "ЕГН7523169263"           needs the ASCII reading   (Н and 7 are both
+#                             word characters to Python, so no boundary)
+#   "Mail: αλέξης@example.gr" needs the Unicode reading (α is not an ASCII
+#                             word character, so no boundary)
+#
+# Taking either one alone trades one silent miss for another — swapping to
+# ASCII-only was measured to drop the Greek address entirely. The union fires
+# wherever *either* reading sees a boundary, which is the over-detecting
+# direction on both counts and matches what Node already does on all seven
+# cases.
+_ASCII_WORD_BOUNDARY = (
+    r"(?:\b|(?<![0-9A-Za-z_])(?=[0-9A-Za-z_])|(?<=[0-9A-Za-z_])(?![0-9A-Za-z_]))"
+)
+
+
+def _ascii_word_boundaries(pattern: str) -> str:
+    """Rewrite every ``\b`` in *pattern* to the union boundary above.
+
+    Skips escaped backslashes and character classes, where ``\b`` means a
+    backspace rather than a boundary. Neither occurs in the shipped patterns
+    today; the scan is here so that adding one cannot silently corrupt it.
+    """
+    out: list[str] = []
+    i = 0
+    in_class = False
+    while i < len(pattern):
+        ch = pattern[i]
+        if ch == "\\" and i + 1 < len(pattern):
+            nxt = pattern[i + 1]
+            if nxt == "b" and not in_class:
+                out.append(_ASCII_WORD_BOUNDARY)
+            else:
+                out.append(pattern[i:i + 2])
+            i += 2
+            continue
+        if ch == "[":
+            in_class = True
+        elif ch == "]":
+            in_class = False
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def _max_match_width(pattern: str) -> int:
     """Longest string *pattern* can match, or a huge number if unbounded.
 
@@ -149,14 +211,14 @@ class MultiPatternMatcher:
 
     def add_pattern(self, pattern_def: PatternDef, country_code: str) -> None:
         """Add a single pattern."""
-        compiled = re.compile(pattern_def.pattern, re.UNICODE)
+        compiled = re.compile(_ascii_word_boundaries(pattern_def.pattern), re.UNICODE)
         self._patterns.append((compiled, pattern_def, country_code))
         self._compiled = False
 
     def add_country(self, config: CountryConfig) -> None:
         """Add a country's patterns."""
         for pdef in config.patterns:
-            compiled = re.compile(pdef.pattern, re.UNICODE)
+            compiled = re.compile(_ascii_word_boundaries(pdef.pattern), re.UNICODE)
             self._patterns.append((compiled, pdef, config.code))
         self._compiled = False
 
@@ -176,6 +238,9 @@ class MultiPatternMatcher:
         codes and secrets), and those that can match further than the window
         overlap, which the sliding window could otherwise straddle.
         """
+        # The *original* source goes to RE2, not the rewritten one: RE2's \b is
+        # already ASCII-only, so the semantics match, while the rewrite uses
+        # lookbehind that RE2 cannot compile.
         automaton = _re2.Set.SearchSet()
         self._re2_slot = []
         added = 0
