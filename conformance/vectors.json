@@ -638,6 +638,52 @@
           "111222333"
         ]
       }
+    },
+    {
+      "id": "ip-address-not-re-cut-by-national-id",
+      "text": "Login-Versuche: 194.232.104.77 (09.04.2026)",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "IP_ADDRESS": [
+          "194.232.104.77"
+        ]
+      }
+    },
+    {
+      "id": "ip-address-not-re-cut-blind",
+      "text": "VPN-Konzentrator: 185.220.101.47",
+      "countries": null,
+      "mustDetect": {
+        "IP_ADDRESS": [
+          "185.220.101.47"
+        ]
+      }
+    },
+    {
+      "id": "spaced-phone-not-truncated",
+      "text": "Bel ons op 06 12 34 56 78",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "06 12 34 56 78"
+        ]
+      }
+    },
+    {
+      "id": "equal-span-priority-still-prefers-validated",
+      "text": "Rekening: BE68 5390 0754 7034",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "BE68 5390 0754 7034"
+        ]
+      }
     }
   ]
 }

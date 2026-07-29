@@ -4,6 +4,28 @@
 
 ### Fixed
 
+- **A shorter validated match could re-cut a longer one and leak the
+  remainder.** Under `countries` `["NL"]` the Dutch national-ID pattern
+  validates on `194.232.104`, outranked the IP address `194.232.104.77`, and
+  left `.77` in the output. The TypeScript SDK did the same with no country
+  declared at all.
+
+  Span length now outranks every other signal, including validation. Priority
+  still decides between candidates of *equal* length, which is where it was
+  always meant to apply — a valid IBAN beats a coincidental match on the same
+  characters. Masking more than necessary is recoverable; masking less is not.
+
+- **`countries` could change which spans were found, not just how they were
+  labelled.** Promotion depends on whether the document corroborates a
+  country, so the declared country decided which of two overlapping candidates
+  won. Two cases were found, the second only after fixing the first.
+
+  Ordering between different spans is now country-blind by construction —
+  length, then the span's structural tier, then leftmost — and `(length, start)`
+  identifies a span uniquely, so the country-aware signals can only choose the
+  **label within a span**, never its extent. The invariant holds by design
+  rather than by test.
+
 - **A bare string for `countries` silently discarded every detection.**
   `countries="NL"` is iterable, so it was walked into the codes `"N"` and `"L"`.
   Neither resolves, so nothing was declared — and every detection carrying a

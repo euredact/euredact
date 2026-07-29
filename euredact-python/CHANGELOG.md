@@ -4,6 +4,28 @@
 
 ### Fixed
 
+- **A shorter validated match could re-cut a longer one and leak the
+  remainder.** Under `countries` `["NL"]` the Dutch national-ID pattern
+  validates on `194.232.104`, outranked the IP address `194.232.104.77`, and
+  left `.77` in the output. The TypeScript SDK did the same with no country
+  declared at all.
+
+  Span length now outranks every other signal, including validation. Priority
+  still decides between candidates of *equal* length, which is where it was
+  always meant to apply — a valid IBAN beats a coincidental match on the same
+  characters. Masking more than necessary is recoverable; masking less is not.
+
+- **`countries` could change which spans were found, not just how they were
+  labelled.** Promotion depends on whether the document corroborates a
+  country, so the declared country decided which of two overlapping candidates
+  won. Two cases were found, the second only after fixing the first.
+
+  Ordering between different spans is now country-blind by construction —
+  length, then the span's structural tier, then leftmost — and `(length, start)`
+  identifies a span uniquely, so the country-aware signals can only choose the
+  **label within a span**, never its extent. The invariant holds by design
+  rather than by test.
+
 - **A bare string for `countries` silently discarded every detection.**
   `countries="NL"` is iterable, so it was walked into the codes `"N"` and `"L"`.
   Neither resolves, so nothing was declared — and every detection carrying a
@@ -48,6 +70,22 @@
 
   Costs about 20% latency on short documents from the added lookarounds.
   Accuracy on the corpus is unchanged.
+
+### Added
+
+- **`make check` and `make verify`.** One entry point for every check.
+  `make check` is what CI runs; `make verify` adds the corpus checks CI cannot
+  run, because the corpus lives outside the repository.
+
+  - `tests/sweep.py` — structural properties over ~187,000 documents: offsets
+    index the text, spans do not overlap, detection is deterministic, the cache
+    is transparent, and no country argument changes which spans are found. Both
+    ranking bugs above were found here; the twenty-document version that runs in
+    CI showed nothing.
+  - `scripts/parity.py` — do both SDKs mask the same *characters*, over whole
+    corpora. Conformance vectors pin named cases; this is the broad counterpart,
+    and it is how a 19,014-character gap was found that no vector showed.
+
 
 ### Known issues
 

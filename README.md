@@ -191,6 +191,31 @@ Full corpus, 152,300 documents:
 Blind detection is within 0.3 points of hinted, so the engine does not need to
 be told the country.
 
+## Running the checks
+
+```bash
+make check     # lint + both test suites + conformance   (what CI runs)
+make verify    # check + corpus sweep + cross-SDK parity + accuracy
+```
+
+`make check` needs nothing but the repo. `make verify` also runs the checks
+that need the generated corpus, which lives outside the repository — set
+`EUREDACT_CORPUS` if yours is not at `../Data-Generation`.
+
+The split matters. The corpus checks are where ranking bugs surface: a sweep of
+structural properties over ~187,000 documents found a case where a shorter
+validated match re-cut a longer one and left part of an IP address in the
+output. The same properties over twenty documents in CI showed nothing.
+
+| target | what it checks |
+|---|---|
+| `make sweep` | offsets, non-overlap, determinism, cache transparency, and that `countries` never changes which spans are found |
+| `make parity` | do both SDKs mask the same characters, over whole corpora |
+| `make eval` | recall and precision |
+| `make bench` | latency, both runtimes |
+
+Run `make help` for the full list.
+
 ## Repository Structure
 
 ```

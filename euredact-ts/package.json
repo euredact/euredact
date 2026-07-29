@@ -60,7 +60,8 @@
     "test:eval": "node --import tsx src/__tests__/run.ts",
     "test:eval:full": "node --max-old-space-size=8192 --import tsx src/__tests__/evalFull.ts",
     "test:conformance": "node --import tsx src/__tests__/conformance.ts",
-    "test:inference": "node --import tsx src/__tests__/inference.ts"
+    "test:inference": "node --import tsx src/__tests__/inference.ts",
+    "dump": "node --import tsx src/__tests__/dump.ts"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

@@ -48,18 +48,29 @@ them on the current ground truth rather than carrying forward an older run —
 comparing a new engine against numbers measured on different labels is not a
 comparison.
 
-## 3. Run the CI gate locally before pushing
-
-The publish workflow gates on these. Running them first turns a failed release
-run into a local fix.
+## 3. Run the checks locally before pushing
 
 ```bash
-cd euredact-python && ruff check src/ && python -m pytest tests/ -x -q
-cd ../euredact-ts   && npx tsc --noEmit && npm run build && npm test
+make verify
 ```
 
-`ruff check src/` has caught a real import-format error that would otherwise
-have failed the release. Do not skip it because the tests pass.
+`make check` alone is only what CI runs — lint, both suites, conformance. It
+does **not** cover the corpus, because the corpus lives outside the repository.
+`make verify` adds the three that need it:
+
+- **`make sweep`** — structural properties over every document we have
+  (~187,000). This is where the ranking bugs live. `countries=["NL"]` turning
+  the IP address `194.232.104.77` into a national ID and leaving `.77` in the
+  output was found here; the twenty-document version in CI said nothing.
+- **`make parity`** — do both SDKs mask the same characters? Conformance
+  vectors pin named cases; this compares whole corpora. TypeScript was once
+  leaving 19,014 characters unmasked that Python caught, and no vector showed it.
+- **`make eval`** — recall and precision, so a number quoted in the changelog
+  is one that was just measured rather than carried forward.
+
+Run `make verify` after any change to ranking, suppression or validation, not
+just before a release. `ruff` alone has caught a real import-format error that
+would otherwise have failed the release, so do not skip the fast half either.
 
 ## 4. Commit, then tag *that* commit
 

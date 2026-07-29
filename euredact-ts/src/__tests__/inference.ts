@@ -270,6 +270,84 @@ test("DocumentContext exposes evidence and size the same way", () => {
   assert.throws(() => (ctx as never as { evidence: () => void }).evidence(), TypeError);
 });
 
+// ── Structural invariants ──────────────────────────────────────────────
+//
+// Properties that must hold for every input, mirroring the Python suite
+// (tests/test_structural_invariants.py). Sweeping these over the corpus is
+// what found the truncation leak below.
+
+const STRUCTURAL_DOCS = [
+  "Login-Versuche: 194.232.104.77 (09.04.2026, 22:14 Uhr)",
+  "VPN-Konzentrator: 185.220.101.47",
+  "Bel ons op 06 12 34 56 78 of mail info@example.nl",
+  "Werknemer met BSN 111222333 en rijksregisternummer 85.07.30-033.61",
+  "Rekening: BE68 5390 0754 7034 - BIC: GEBABEBB, BTW BE0123456749",
+  "Rijksregisternummer: 85.03.19-284.73",
+  "Telefon: 0708787668",
+  "ЕГН7523169263",
+  "Mail: αλέξης@example.gr",
+  "geen pii hier",
+  "",
+];
+
+for (const [i, text] of STRUCTURAL_DOCS.entries()) {
+  test(`offsets index the original text (doc ${i})`, () => {
+    for (const d of sdk.redact(text, { detectDates: true, cache: false }).detections) {
+      assert.ok(d.start >= 0 && d.start < d.end && d.end <= text.length);
+      assert.equal(text.slice(d.start, d.end), d.text);
+    }
+  });
+
+  test(`detections never overlap (doc ${i})`, () => {
+    const spans = sdk.redact(text, { detectDates: true, cache: false })
+      .detections.map(d => [d.start, d.end]).sort((a, b) => a[0] - b[0]);
+    for (let k = 1; k < spans.length; k++) assert.ok(spans[k][0] >= spans[k - 1][1]);
+  });
+
+  test(`redactedText is exactly the reported spans replaced (doc ${i})`, () => {
+    const r = sdk.redact(text, { detectDates: true, cache: false });
+    let expected = text;
+    for (const d of [...r.detections].sort((a, b) => b.start - a.start)) {
+      expected = expected.slice(0, d.start) + `[${String(d.entityType)}]` + expected.slice(d.end);
+    }
+    assert.equal(r.redactedText, expected);
+  });
+
+  test(`detection is deterministic (doc ${i})`, () => {
+    const once = () => JSON.stringify(sdk.redact(text, { detectDates: true, cache: false })
+      .detections.map(d => [d.start, d.end, String(d.entityType), d.country]));
+    assert.equal(once(), once());
+  });
+
+  test(`no country argument changes which spans are found (doc ${i})`, () => {
+    const spansOf = (kw: object) => JSON.stringify(
+      sdk.redact(text, { detectDates: true, cache: false, ...kw })
+         .detections.map(d => [d.start, d.end]).sort((a, b) => a[0] - b[0] || a[1] - b[1]));
+    const baseline = spansOf({});
+    for (const arg of [null, [], ["NL"], ["BE"], ["ZZ"], ["NL", "BE"]]) {
+      assert.equal(spansOf({ countries: arg }), baseline, `countries=${JSON.stringify(arg)}`);
+      assert.equal(spansOf({ countryHint: arg }), baseline, `countryHint=${JSON.stringify(arg)}`);
+    }
+  });
+}
+
+test("a shorter validated match never re-cuts a longer one", () => {
+  // Both runtimes reported the Dutch national ID "194.232.104" here and left
+  // ".77" in the output. Priority outranked span length.
+  for (const cc of [null, ["NL"], ["AT"]]) {
+    const r = sdk.redact("Login-Versuche: 194.232.104.77 (09.04.2026)",
+                         { countries: cc, cache: false });
+    assert.ok(r.detections.some(d => d.text === "194.232.104.77"),
+              `truncated under countries=${JSON.stringify(cc)}`);
+    assert.ok(!r.redactedText.includes(".77"), "the tail leaked");
+  }
+});
+
+test("priority still decides between equal spans", () => {
+  const r = sdk.redact("Rekening: BE68 5390 0754 7034", { countries: ["BE"], cache: false });
+  assert.ok(r.detections.some(d => d.entityType === EntityType.BANK_ACCOUNT));
+});
+
 // ── Report ─────────────────────────────────────────────────────────────
 
 console.log(`\n${passed} passed, ${failures.length} failed`);

@@ -336,7 +336,7 @@ class RuleEngine:
         # (priority, in_scope, start, end, match, prebuilt). in_scope ranks
         # candidates within a priority tier; it never removes any.
         candidates: list[
-            tuple[int, float, int, int, int, RawMatch | None, Detection | None]
+            tuple[int, int, float, int, int, int, RawMatch | None, Detection | None]
         ] = []
         for match, has_valid_validator in validated:
             # A validator-less match inside a failed-validation span used to be
@@ -381,6 +381,7 @@ class RuleEngine:
 
             if demoted:
                 priority = -1
+                blind_priority = -1
             elif has_valid_validator:
                 # A passing checksum normally outranks everything. But a
                 # checksum only says the digits fit *some* national scheme, and
@@ -404,28 +405,32 @@ class RuleEngine:
                     or match.country_code in country_scores
                 )
                 priority = 3 if vouched else 1
+                blind_priority = 3
             elif match.country_code == "CUSTOM":
                 priority = 2
+                blind_priority = 2
             elif match.pattern_def.entity_type == EntityType.POSTAL_CODE:
                 # A bare digit run is the weakest evidence in the engine and
                 # must never re-cut a span a structured detector claims
                 # (PHONE, SSN, NATIONAL_ID, BANK_ACCOUNT, VAT...). Postal
                 # codes take unclaimed spans only, whatever the span lengths.
                 priority = 0
+                blind_priority = 0
             else:
                 priority = 1
+                blind_priority = 1
 
             in_scope = 1 if (declared is None or match.country_code in declared) else 0
             country_score = country_scores.get(match.country_code, 0.0)
             candidates.append(
-                (priority, country_score, in_scope,
+                (blind_priority, priority, country_score, in_scope,
                  match.start, match.end, match, None)
             )
 
         # Structural detectors (JSON field names, CSV headers). These arrive as
         # finished Detections, carry no RawMatch, and are not suppressed.
         for d in detect_structural_dob(text):
-            candidates.append((1, 0.0, 1, d.start, d.end, None, d))
+            candidates.append((1, 1, 0.0, 1, d.start, d.end, None, d))
 
         # Deduplicate: validated > custom > regex-only, then longer wins
         detections = self._deduplicate(text, candidates, declared)
@@ -449,7 +454,7 @@ class RuleEngine:
     def _deduplicate(
         text: str,
         candidates: list[
-            tuple[int, float, int, int, int, RawMatch | None, Detection | None]
+            tuple[int, int, float, int, int, int, RawMatch | None, Detection | None]
         ],
         declared: set[str] | None = None,
     ) -> list[Detection]:
@@ -471,24 +476,51 @@ class RuleEngine:
         if not candidates:
             return []
 
-        # Sort by (priority, span_length) descending. Stable, so ties fall back
-        # to pattern registration order, as before.
+        # Ordering between *different* spans is country-blind; the country
+        # only ever picks the winner among candidates covering the *same* span.
+        #
+        # That split is what makes invariant I1 structural rather than merely
+        # tested. Country-aware promotion had twice decided which span won:
+        # under countries=["NL"] a validated national ID outranked a longer IP
+        # address and exposed ".77", and two equal-length candidates at
+        # different offsets swapped places. Both were found by sweeping the
+        # corpus, not by reasoning, and both are impossible now — the key below
+        # is country-blind up to and including `start`, and (length, start)
+        # already identifies a span uniquely.
+        #
+        # Ordering, in words: longest first (a shorter match winning re-cuts a
+        # longer one and leaks the remainder), then the structural tier, then
+        # leftmost. Only after a span is fixed do the country-aware fields
+        # break the tie, deciding the label rather than the extent.
+        #
+        # The structural tier is a property of the *span*, not of the candidate:
+        # the best tier anything claiming those exact characters can offer. Used
+        # per candidate it would also discriminate *within* a span, where the
+        # country-aware tier is supposed to have the final word — that silently
+        # disabled country inference entirely, handing every ambiguous value to
+        # whichever foreign scheme happened to validate.
+        span_tier: dict[tuple[int, int], int] = {}
+        for c in candidates:
+            key = (c[4], c[5])
+            if c[0] > span_tier.get(key, -2):
+                span_tier[key] = c[0]
+
         sorted_cands = sorted(
             candidates,
-            # Span length outranks scope: preferring the declared country over
-            # the longest match can truncate an entity. Measured: with
-            # countries=["BE"], the Belgian phone pattern claims 11 of the 14
-            # characters of "06 12 34 56 78" and leaves three digits exposed.
-            # Scope only breaks ties between candidates of equal length, so it
-            # can change WHICH country is attributed, never WHAT is masked.
-            key=lambda c: (c[0], c[4] - c[3], c[1], c[2]),
-            reverse=True,
+            key=lambda c: (
+                -(c[5] - c[4]),                # longest first    } country-blind
+                -span_tier[(c[4], c[5])],      # best tier here   } — decides
+                c[4],                          # leftmost         } WHICH span
+                -c[1],                         # country priority } country-aware
+                -c[2],                         # country evidence } — decides the
+                -c[3],                         # declared scope   } LABEL only
+            ),
         )
         result: list[Detection] = []
         occupied: set[int] = set()
         span_verdicts: dict[tuple[object, int, int], bool] = {}
 
-        for _priority, _score, in_scope, start, end, match, prebuilt in sorted_cands:
+        for _bp, _prio, _score, in_scope, start, end, match, prebuilt in sorted_cands:
             if any(p in occupied for p in range(start, end)):
                 continue
 

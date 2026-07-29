@@ -266,6 +266,7 @@ export class RuleEngine {
     }
 
     interface Candidate {
+      blindPriority: number;
       priority: number;
       length: number;
       countryScore: number;
@@ -313,8 +314,10 @@ export class RuleEngine {
       }
 
       let priority: number;
+      let blindPriority: number;
       if (demoted) {
         priority = -1;
+        blindPriority = -1;
       } else if (hasValidValidator) {
         // A passing checksum normally outranks everything. But a checksum only
         // says the digits fit *some* national scheme, and weak ones fit by luck
@@ -327,21 +330,26 @@ export class RuleEngine {
         // themselves — an IBAN emits evidence for its own country — so a
         // foreign IBAN in a domestic invoice keeps its rank.
         priority = corroborated(match.countryCode) ? 3 : 1;
+        blindPriority = 3;
       } else if (match.countryCode === "CUSTOM") {
         priority = 2;
+        blindPriority = 2;
       } else if (match.patternDef.entityType === EntityType.POSTAL_CODE) {
         // A bare digit run is the weakest evidence in the engine and must never
         // re-cut a span a structured detector claims (PHONE, SSN, NATIONAL_ID,
         // BANK_ACCOUNT, VAT...). Postal codes take unclaimed spans only,
         // whatever the span lengths.
         priority = 0;
+        blindPriority = 0;
       } else {
         priority = 1;
+        blindPriority = 1;
       }
 
       const country = (match.countryCode !== "SHARED" && match.countryCode !== "CUSTOM")
         ? match.countryCode : null;
       candidates.push({
+        blindPriority,
         priority,
         length: match.end - match.start,
         countryScore: countryScores.get(match.countryCode) ?? 0,
@@ -360,7 +368,8 @@ export class RuleEngine {
     }
 
     for (const d of detectStructuralDob(text)) {
-      candidates.push({ priority: 1, length: d.end - d.start, countryScore: 0, inScope: 1, det: d });
+      candidates.push({ blindPriority: 1, priority: 1, length: d.end - d.start,
+                        countryScore: 0, inScope: 1, det: d });
     }
 
     const detections = this.deduplicate(candidates);
@@ -383,20 +392,55 @@ export class RuleEngine {
    * demoted (-1). Within a tier, longer span wins, then country evidence.
    */
   private deduplicate(
-    candidates: Array<{ priority: number; length: number; countryScore: number; inScope: number; det: Detection }>,
+    candidates: Array<{ blindPriority: number; priority: number; length: number;
+                        countryScore: number; inScope: number; det: Detection }>,
   ): Detection[] {
     if (candidates.length === 0) return [];
-    // Span length outranks scope: preferring the declared country over the
-    // longest match can truncate an entity. Measured: with countries ["BE"],
-    // the Belgian phone pattern claims 11 of the 14 characters of
-    // "06 12 34 56 78" and leaves three digits exposed. Scope only breaks ties
-    // between candidates of equal length, so it can change WHICH country is
-    // attributed, never WHAT is masked.
+
+    // The structural tier is a property of the *span*, not of the candidate:
+    // the best tier anything claiming those exact characters can offer. Used
+    // per candidate it would also discriminate *within* a span, where the
+    // country-aware tier must have the final word — that silently disabled
+    // country inference entirely in the Python SDK, handing every ambiguous
+    // value to whichever foreign scheme happened to validate.
+    const spanTier = new Map<string, number>();
+    for (const c of candidates) {
+      const key = `${c.det.start}:${c.det.end}`;
+      const seen = spanTier.get(key);
+      if (seen === undefined || c.blindPriority > seen) spanTier.set(key, c.blindPriority);
+    }
+    const tierOf = (c: { det: Detection }) => spanTier.get(`${c.det.start}:${c.det.end}`)!;
+    // Span length outranks *everything*, including validation.
+    //
+    // A shorter candidate winning re-cuts a longer one and leaves the
+    // remainder in the clear, which is a leak. Two measured cases:
+    //
+    //   "06 12 34 56 78"   the Belgian phone pattern claimed 11 of 14
+    //                      characters and exposed three digits
+    //   "194.232.104.77"   the Dutch national-ID pattern validates on
+    //                      "194.232.104" and outranked the IP address,
+    //                      leaving ".77" in the output
+    //
+    // The second also broke invariant I1 in the Python SDK, where promotion
+    // depends on whether the document corroborates the country, so `countries`
+    // decided which span won. Ranking length first removes both — a redaction
+    // tool masking more than it must is recoverable; masking less is not.
+    //
+    // Priority still decides between candidates of *equal* length, which is
+    // where it matters: a valid IBAN beats a coincidental phone match on the
+    // same characters.
+    // Ordering between *different* spans is country-blind; the country only
+    // ever picks the winner among candidates covering the *same* span. That
+    // split makes invariant I1 structural rather than merely tested: the key is
+    // country-blind up to and including `start`, and (length, start) already
+    // identifies a span uniquely.
     const sorted = [...candidates].sort((a, b) =>
-      b.priority - a.priority ||
-      b.length - a.length ||
-      b.countryScore - a.countryScore ||
-      b.inScope - a.inScope);
+      b.length - a.length ||               // longest first     } country-blind
+      tierOf(b) - tierOf(a) ||             // best tier here    } — decides
+      a.det.start - b.det.start ||         // leftmost          } WHICH span
+      b.priority - a.priority ||           // country priority  } country-aware
+      b.countryScore - a.countryScore ||   // country evidence  } — decides the
+      b.inScope - a.inScope);              // declared scope    } LABEL only
     const result: Detection[] = [];
     const occupied = new Set<number>();
     for (const { det } of sorted) {
