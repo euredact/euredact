@@ -488,6 +488,18 @@
       "mustNotDetect": [
         "LICENSE_PLATE"
       ]
+    },
+    {
+      "id": "secret-pem-private-key-exceeds-scan-window",
+      "text": "Deployment config:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEAMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----"
+        ]
+      }
     }
   ]
 }

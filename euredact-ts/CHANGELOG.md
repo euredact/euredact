@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.2 (2026-07-29)
+
+### Fixed — security
+
+- **Installing the optional `fast` extra disabled private-key redaction.**
+  Prefix-indexed patterns are only run over a bounded window after their prefix
+  hit, but 15 SECRET patterns can match beyond it — the PEM private-key pattern
+  matches up to 16 KB. With `pyahocorasick` installed those matches were never
+  found, and a PEM block passed through into `redacted_text` unmasked.
+
+  Reproduced on 0.3.1, identical input:
+
+  ```
+                            SECRET spans   key material in output?
+  with    pyahocorasick     [15]           LEAKED
+  without pyahocorasick     [542, 15]      not leaked
+  ```
+
+  Patterns whose maximum match width exceeds the window are now routed to the
+  sequential path. Verified: the two scan paths produce identical output on
+  12,000 corpus documents, where they previously diverged.
+
+  Affects anyone who installed `euredact[fast]`. The pure-Python default was
+  never affected, and the TypeScript package does not window its scans so was
+  never affected either.
+
+- `tests/test_scan_path_parity.py` runs **both** scan paths in one process and
+  compares them, so the optional extra can no longer change behaviour silently.
+  A >200-character PEM block is now a shared conformance vector.
+
 ## 0.3.1 (2026-07-27)
 
 ### Fixed

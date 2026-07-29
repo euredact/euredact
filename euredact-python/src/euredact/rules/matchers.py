@@ -38,6 +38,29 @@ class RawMatch:
     country_code: str
 
 
+# How far past a prefix hit the AC path lets a pattern match. Any pattern that
+# can match further than this must not be prefix-indexed — see _build_ac.
+_AC_WINDOW = 200
+
+
+def _max_match_width(pattern: str) -> int:
+    """Longest string *pattern* can match, or a huge number if unbounded.
+
+    Uses the stdlib parser rather than inspecting the source, so quantifiers,
+    alternation and nesting are all accounted for. Anything that cannot be
+    analysed is treated as unbounded, which is the safe direction: the pattern
+    falls back to a full scan rather than being silently windowed.
+    """
+    try:
+        import re._parser as _parser  # Python 3.11+
+    except ImportError:  # pragma: no cover - older interpreters
+        import sre_parse as _parser  # type: ignore[no-redef]
+    try:
+        return int(_parser.parse(pattern).getwidth()[1])
+    except Exception:  # noqa: BLE001 - an unparseable pattern is treated as unbounded
+        return _AC_WINDOW + 1
+
+
 def _extract_literal_prefix(pattern: str) -> str | None:
     """Extract a literal prefix (>= 2 chars) from a regex pattern, skipping \\b."""
     prefix: list[str] = []
@@ -89,13 +112,23 @@ class MultiPatternMatcher:
         self._compiled = True
 
     def _build_ac(self) -> None:
-        """Build Aho-Corasick automaton from patterns with literal prefixes."""
+        """Build Aho-Corasick automaton from patterns with literal prefixes.
+
+        A prefix-indexed pattern is only ever run over a bounded window after
+        its prefix hit (see :meth:`_scan_ac`), so a pattern whose match can be
+        longer than that window would be silently truncated. Those patterns are
+        routed to the sequential path instead.
+
+        This is not hypothetical: the PEM private-key pattern matches up to
+        16 KB, and before this check ``pip install euredact[fast]`` stopped
+        redacting private keys altogether — the block was left in the output.
+        """
         prefix_map: dict[str, list[tuple[re.Pattern[str], PatternDef, str]]] = {}
         self._no_prefix = []
 
         for compiled, pdef, code in self._patterns:
             prefix = _extract_literal_prefix(pdef.pattern)
-            if prefix:
+            if prefix and _max_match_width(pdef.pattern) <= _AC_WINDOW:
                 prefix_map.setdefault(prefix, []).append((compiled, pdef, code))
             else:
                 self._no_prefix.append((compiled, pdef, code))
