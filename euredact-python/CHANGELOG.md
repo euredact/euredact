@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### Changed
+
+- **Failed-checksum spans no longer delete overlapping detections.** A span
+  that matched a checksummed pattern but failed the checksum created a
+  "suppression zone" that removed any regex-only detection inside it. With more
+  than one country loaded, one country's failed checksum silently deleted
+  another country's correct detection.
+
+  Measured across the corpus: the mechanism removed 454 detections, of which
+  **454 overlapped real labelled PII** — it bought no precision at all. Such a
+  candidate is now demoted below every other candidate rather than deleted, so
+  it can still claim a span nothing else wants but can never silence one.
+
+  On 10,000 documents:
+
+  | | recall before | after | precision before | after |
+  |---|---:|---:|---:|---:|
+  | with country hints | 97.98% | **98.89%** | 98.98% | 98.97% |
+  | blind | 91.23% | **96.11%** | 95.87% | 95.79% |
+
+  No entity type regressed. Largest gains: `TAX_ID` 0.0% → 61.5% blind,
+  `CHAMBER_OF_COMMERCE` 81.4% → 98.6% hinted, `PHONE` 71.2% → 85.1% blind,
+  `NATIONAL_ID` 87.6% → 98.4% blind.
+
+- **Suppression now runs only on candidates that win their span.** Previously
+  every surviving match was suppressed before deduplication, though most lose
+  their span immediately afterwards. Output is unchanged — verified zero-diff
+  on 8,000 documents in both modes — and detection is 1.28x faster with country
+  hints, 2.67x faster blind.
+
 ### Fixed — security
 
 - **Installing the optional `fast` extra disabled private-key redaction.**

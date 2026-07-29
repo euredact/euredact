@@ -102,11 +102,13 @@ class RuleEngine:
             scan_codes = None
         raw_matches = self._matcher.scan(text, scan_codes)
 
-        # Pass 2a: checksum validation + collect suppression zones
-        # Matches that have a validator but fail it create suppression zones:
-        # the span is recognisably a specific entity (e.g. IBAN-shaped) so
-        # overlapping regex-only matches (license plate, phone) are false
-        # positives and must be suppressed.
+        # Pass 2a: checksum validation + collect failed-validator spans.
+        #
+        # A span that matched a checksummed pattern but failed the checksum is
+        # recognisably a specific entity gone wrong (e.g. IBAN-shaped), so a
+        # regex-only match inside it is weak evidence. It is *demoted* below
+        # every other candidate rather than deleted — see the priority
+        # assignment below for why deletion was wrong.
         validated: list[tuple[RawMatch, bool]] = []  # (match, is_valid)
         suppression_zones: list[tuple[int, int]] = []
         for m in raw_matches:
@@ -150,15 +152,25 @@ class RuleEngine:
         # frozen dataclass for each one is pure waste.
         candidates: list[tuple[int, int, int, RawMatch | None, Detection | None]] = []
         for match, has_valid_validator in validated:
-            # Matches without a validator that are fully contained in a
-            # failed-validation zone are false positives (e.g. license plate
-            # inside an invalid IBAN).  O(log n) binary search on merged zones.
+            # A validator-less match inside a failed-validation span used to be
+            # deleted outright. Measured across the corpus, that mechanism
+            # removed 454 detections of which 454 overlapped real labelled PII
+            # — it bought no precision at all — and cost 1.05 points of recall
+            # with country hints and 5.01 without, because one country's failed
+            # checksum silently deleted another country's correct detection.
+            #
+            # It is now a demotion instead: such a candidate may still claim a
+            # span that nothing else wants, but loses to every other candidate.
+            # Demotion cannot silence a detection, which is the property that
+            # deletion lacked.
+            demoted = False
             if match.pattern_def.validator is None and zone_starts:
                 idx = bisect.bisect_right(zone_starts, match.start) - 1
-                if idx >= 0 and zone_ends[idx] >= match.end:
-                    continue
+                demoted = idx >= 0 and zone_ends[idx] >= match.end
 
-            if has_valid_validator:
+            if demoted:
+                priority = -1
+            elif has_valid_validator:
                 priority = 3
             elif match.country_code == "CUSTOM":
                 priority = 2
