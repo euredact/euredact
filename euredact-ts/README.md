@@ -43,7 +43,11 @@ console.log(result.detections);
 - **Custom patterns:** register your own regex patterns for domain-specific PII
 - **Checksum validation:** IBAN mod-97, Luhn (credit cards/IMEI), and 30+
   country-specific validators
-- **Priority-aware deduplication:** validated (checksum) > custom > regex-only
+- **Priority-aware deduplication:** validated (checksum, corroborated by the
+  document's country) > custom > regex-only
+- **Country self-detection:** infers a document's countries from the entities
+  that carry one, so an ambiguous value resolves without the caller naming a
+  country — and `countries` never gates what is looked for
 - **Context-aware:** keyword proximity checks and structural detection (JSON field
   names, CSV headers) for ambiguous patterns
 - **Zero runtime dependencies**
@@ -73,10 +77,16 @@ Main entry point. Detects and redacts PII in the given text.
 
 ```ts
 interface RedactOptions {
-  countries?: string[] | null; // Country codes (e.g. ["NL", "BE"]) — null loads all
-  referentialIntegrity?: boolean;      // Replace with consistent labels (default: false)
-  detectDates?: boolean;       // Include DOB/date-of-death detections (default: false)
-  cache?: boolean;             // Enable result caching (default: true)
+  countries?: string[] | null;    // Scope. Flags anything attributed elsewhere as
+                                  // outOfScope. Never gates what is looked for.
+  countryHint?: string[] | null;  // A prior only — resolves ambiguity without
+                                  // narrowing scope or flagging anything
+  context?: DocumentContext | null; // Share country evidence across the chunks
+                                  // of one document (see "Chunked documents")
+  chunkOffset?: number;           // Where this chunk starts in the document
+  referentialIntegrity?: boolean; // Replace with consistent labels (default: false)
+  detectDates?: boolean;          // Include DOB/date-of-death detections (default: false)
+  cache?: boolean;                // Enable result caching (default: true)
 }
 ```
 
@@ -158,6 +168,28 @@ interface Detection {
   source: DetectionSource;         // "rules" or "cloud"
   country: string | null;          // ISO code or null for shared/custom patterns
   confidence: string;              // Confidence level
+  countryConfidence?: number;      // How strongly the document supports `country`,
+                                   // in [0, 1]. 0 means the attribution rests on
+                                   // a checksum alone.
+  outOfScope?: boolean;            // Attributed outside the declared `countries`.
+                                   // Flagged, never dropped.
+}
+```
+
+#### `RedactResult`
+
+```ts
+interface RedactResult {
+  redactedText: string;
+  detections: Detection[];
+  source: string;
+  degraded: boolean;
+
+  // Country inference — see "Country-independent detection"
+  inferredCountries: Array<[string, number]>; // [country, confidence], strongest first
+  evidence: CountryEvidence[];                // every signal, with the span behind it
+  detectionMode: string;                      // "declared" if countries was passed,
+                                              // "inferred" otherwise
 }
 ```
 
@@ -191,19 +223,106 @@ redaction entirely, failing open with unredacted PII.
 
 ## Country-independent detection
 
-`countries` narrows which country-specific patterns run. It does **not** gate
-identifiers that carry their own evidence:
+**`countries` never gates detection.** Every pattern runs on every document,
+whatever you pass. The country you declare decides *how a match is labelled*,
+never *whether it is found*.
 
-| Type | Why it ignores `countries` |
-|---|---|
-| `BANK_ACCOUNT` (IBAN) | carries an ISO 3166 country code and a mod-97 checksum |
-| `PHONE` (with `+` prefix) | an E.164 country prefix is self-identifying |
-| `EMAIL`, `CREDIT_CARD`, `VIN`, `IMEI`, `IP_ADDRESS`, `UUID`, `SECRET` | no national form to gate on |
+This is the engine's central invariant, enforced by
+`src/__tests__/inference.ts`: no value of `countries` may change which spans are
+detected. A wrong or missing country cannot cause a miss — silent recall loss is
+invisible in testing and surfaces in a breach report, whereas a false positive
+is recoverable.
+
+It was not always so. `countries: ["BE"]` used to make a valid Dutch BSN vanish
+entirely, because the Dutch patterns were never run:
+
+```ts
+redact("Werknemer met BSN 111222333", { countries: ["BE"] });
+// before: 'Werknemer met BSN 111222333'   <- leaked
+// now:    'Werknemer met BSN [NATIONAL_ID]'
+```
+
+Entities found outside the countries you declared are **flagged, not dropped**:
+
+```ts
+const [det] = redact("BSN 111222333", { countries: ["BE"] }).detections;
+det.outOfScope; // true — detected, masked, and marked as outside your scope
+```
+
+So a Belgian IBAN in a document processed with `countries: ["AT"]` is still
+detected:
 
 ```ts
 redact("Rekening: BE68 5390 0754 7034", { countries: ["AT"] });
 // -> 'Rekening: [BANK_ACCOUNT]'
 ```
+
+### Which country a value belongs to
+
+Because every pattern runs, the same digits often match several countries'
+schemes. 36.6% of national-ID values in our corpus validate under more than one
+country's checksum, so the digits alone cannot decide it — the *document* does.
+
+The engine infers the document's countries from entities that carry their
+country in the string, then uses that to resolve the ambiguity:
+
+```ts
+redact("Bereikbaar op telefoon 0612345678, mail jan@test.nl");
+// inferredCountries: [["NL", 0.98]]   detections: [PHONE (NL), EMAIL]
+
+redact("Kontakt: 0612345678, e-mail jens@test.dk");
+// inferredCountries: [["DK", 0.98]]   detections: [NATIONAL_ID (DK), EMAIL]
+```
+
+Identical digits, different answer — `0612345678` is both a valid Dutch mobile
+number and a valid Danish CPR. Only the surrounding document distinguishes them.
+
+Every inference is auditable: `result.evidence` lists each signal, its weight,
+and the span that produced it, in document order.
+
+| Signal | Weight (log-odds) | Measured reliability |
+|---|---:|---|
+| `e164Prefix` | 4.00 (capped) | 41,402 / 41,402 |
+| `bicCountry` | 4.00 (capped) | 2,588 / 2,588 |
+| `emailTld` | 4.00 (capped) | 97,865 / 98,949 |
+| `vatPrefix` | 2.84 | 19,022 / 20,136 |
+| `ibanPrefix` | 1.94 | 110,572 / 126,428 |
+
+Weights are derived from the corpus, not chosen by hand, and are kept identical
+to the Python SDK's. The IBAN prefix being weakest is real: a Belgian IBAN in a
+Dutch invoice is ordinary, so an account's country is only weak evidence about
+the document's.
+
+Confidences are per-country and do **not** sum to 1 — document countries are not
+mutually exclusive. A Belgian supplier invoicing a German customer is genuinely
+both.
+
+## Chunked documents
+
+A long document is usually redacted in pieces. Each piece is scanned
+independently, so a chunk carrying no country signal of its own infers nothing —
+even when page 1 identified the document beyond doubt.
+
+```ts
+import { DocumentContext } from "euredact";
+
+const ctx = new DocumentContext();
+let offset = 0;
+for (const page of pages) {
+  const result = redact(page, { context: ctx, chunkOffset: offset });
+  offset += page.length;
+}
+
+// page 1: "Factuur — IBAN NL91ABNA0417164300, info@jansen.nl"
+// page 7: "Telefoon 0612345678"  -> PHONE (NL), not NATIONAL_ID (DK)
+```
+
+`chunkOffset` rebases spans recorded in the context so they point into the whole
+document; returned detections stay relative to the chunk you passed in. Caching
+is disabled automatically while a context is in use, because the result then
+depends on evidence the text alone does not determine.
+
+Reuse a context only for chunks of the **same** document.
 
 ## BIC detection
 
@@ -332,18 +451,35 @@ redact("identifier: xK9mPqR7vLnW2bFjY8cGhT4sDfAeU6iO").redactedText;
 
 ## Country Hints
 
-When you know which countries appear in your data, pass them explicitly:
+Two options tell the engine about country, and neither restricts what is looked
+for:
+
+| Option | Meaning |
+|---|---|
+| `countries` | **Scope.** Resolves ambiguity, and flags anything attributed elsewhere as `outOfScope`. |
+| `countryHint` | **Prior only.** Resolves ambiguity without narrowing scope or flagging anything. |
 
 ```ts
-const result = redact(text, { countries: ["NL", "BE"] });
+// You know this batch is Swedish, but don't want foreign PII marked out of scope:
+redact(text, { countryHint: ["SE"] });
+
+// You want anything non-Swedish flagged for review:
+redact(text, { countries: ["SE"] });
 ```
 
-This restricts pattern matching to Dutch and Belgian rules (plus shared patterns
-and custom patterns). Benefits:
+Declaring a country helps where a value is genuinely ambiguous and the document
+carries no other signal:
 
-- **Fewer false positives.** A 9-digit number that passes the Dutch BSN checksum
-  won't also be tested against unrelated country patterns.
-- **Faster.** Fewer patterns to compile and scan.
+```ts
+redact("Telefon: 0708787668", { countryHint: ["SE"] }).detections[0];
+// PHONE / SE — without the hint this is a valid Danish CPR and nothing says otherwise
+```
+
+`result.detectionMode` reports which happened: `"declared"` if you passed
+`countries`, `"inferred"` otherwise.
+
+Passing neither is safe, and is the right default for mixed-origin data: the
+engine infers what it can and reports it in `result.inferredCountries`.
 
 ## Referential Integrity
 
@@ -372,13 +508,17 @@ Input text
     |
     v
 [Pass 2a: Validation] -- Checksum validators (mod-97, Luhn, entropy, ...)
-    |                     Failed-validation spans become suppression zones
+    |                     Failed spans are recorded, per entity type
+    v
+[Evidence]     -- Which countries does this document belong to? From IBAN
+    |              prefixes, +CC codes, VAT prefixes, BIC, email ccTLDs
     v
 [Pass 2b: Suppression] -- Remove false positives (currency amounts, units,
-    |                      references, overlapping matches in suppression zones)
+    |                      references). Failed checksums demote same-type
+    |                      matches rather than deleting them
     v
-[Deduplication] -- Priority-aware: validated > custom > regex-only
-    |               Within same tier, longer span wins
+[Deduplication] -- Priority-aware, country-evidence-weighted
+    |               Longer span outranks declared country
     v
 [Replacement] -- Right-to-left substitution with [ENTITY_TYPE] labels
     |              or labels
@@ -389,16 +529,60 @@ RedactResult
 ### Suppression Zones
 
 When a regex matches a pattern that has a checksum validator but the checksum
-fails, the matched span becomes a "suppression zone." Any purely regex-based
-detection fully contained within that zone is suppressed as a false positive.
+fails, the span is recorded. A validator-less match of **the same entity type**
+contained in it is *demoted* below every other candidate — not deleted. A failed
+checksum is evidence against that type, not against the span, and demotion can
+never silence a detection the way deletion could.
 
 ### Deduplication Priority
 
-1. **Validated patterns** (checksum passes) -- highest priority
-2. **Custom patterns** (registered via `addCustomPattern()`)
-3. **Regex-only patterns** (no validator) -- lowest priority
+When multiple patterns match overlapping spans, the engine resolves conflicts
+using a priority system:
 
-Within the same tier, the longer span wins.
+| Tier | What |
+|---:|---|
+| 3 | **Validated** — a checksum validator passes *and* the document corroborates its country |
+| 2 | **Custom patterns** registered via `addCustomPattern()` |
+| 1 | **Regex-only**, and validated patterns whose country the document does not corroborate |
+| 0 | **Postal codes** — a bare digit run, the weakest evidence in the engine |
+| -1 | **Demoted** — a validator-less match inside a failed checksum of *its own type* |
+
+Within a tier, ranking is: longer span, then stronger country evidence, then
+whether the country was declared. **Span length outranks country** deliberately:
+preferring the declared country over the longest match truncates entities — with
+`countries: ["BE"]` the Belgian phone pattern claimed 11 of the 14 characters of
+`06 12 34 56 78` and left three digits exposed. Country can change *which*
+country is attributed, never *what* is masked.
+
+Two tiers are less obvious than they look:
+
+- **A passing checksum does not automatically win.** A weak checksum fits by
+  luck — a mod-11 scheme accepts a random number about one time in eleven — so a
+  validated candidate from a country the document shows no trace of drops to
+  tier 1. Entities that carry their own country vouch for themselves (an IBAN
+  emits evidence for its own country), so a foreign IBAN in a domestic invoice
+  keeps tier 3.
+- **Nothing is deleted for failing a checksum.** A failed checksum demotes
+  rather than removes, and only candidates of *the same entity type*: it is
+  evidence against that type, not against the span. Deleting instead removed 454
+  detections across the corpus, of which 454 overlapped real labelled PII.
+
+## Performance
+
+Measured on one core, all 31 countries loaded, `detectDates: true`. Cost scales
+with document length, so the input size is stated rather than averaged away.
+
+| Input | Latency | Throughput |
+|---|---:|---:|
+| Short record (186 chars) | 155 µs | 6,462 docs/s |
+| Real document (3,424 chars) | 1.56 ms | 643 docs/s |
+
+No optional accelerator is needed or offered. The Python SDK ships an
+`[fast]` extra (RE2 / Aho-Corasick) because CPython's regex engine is the
+bottleneck there; V8's has literal prefilters that make it unnecessary here.
+Measured on the same 611 documents, this SDK runs about 3× faster than the
+accelerated Python path, so adding a native addon — and with it the loss of
+bundler, edge-runtime and Deno compatibility — would buy nothing.
 
 ## CommonJS
 

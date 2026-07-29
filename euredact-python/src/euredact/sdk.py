@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from typing import Iterator
 
 from euredact.cache import ResultCache
 from euredact.normalizer import map_offset_to_original, normalize
+from euredact.rules.context import DocumentContext
 from euredact.rules.engine import RuleEngine
-from euredact.types import Detection, EntityType, RedactResult
+from euredact.rules.evidence import weights_to_ranking
+from euredact.types import EntityType, RedactResult
 
 # Date entity types — opt-in via detect_dates=True
 _DATE_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
@@ -75,6 +78,9 @@ class EuRedact:
         text: str,
         *,
         countries: list[str] | None = None,
+        country_hint: list[str] | None = None,
+        context: DocumentContext | None = None,
+        chunk_offset: int = 0,
         mode: str = "rules",
         referential_integrity: bool = False,
         detect_dates: bool = False,
@@ -85,6 +91,21 @@ class EuRedact:
         """Redact PII from text. Main entry point.
 
         Args:
+            countries: Scope. Detections attributed elsewhere are flagged
+                ``out_of_scope``, never dropped, and this also acts as a prior
+                when resolving which national scheme owns an ambiguous value.
+            country_hint: A prior only. Helps resolve ambiguity without
+                narrowing scope or flagging anything out of scope. Neither
+                argument gates what is looked for — see
+                ``tests/test_invariant_generation.py``.
+            context: Shares country evidence across the chunks of one
+                document, so a chunk carrying no country signal of its own is
+                still scored against what the rest of the document showed.
+                Pass the same object for every chunk, with *chunk_offset* set
+                to where the chunk starts in the whole document.
+            chunk_offset: Offset of this chunk within the document. Used only
+                to rebase spans recorded in *context*; the returned detections
+                are always relative to *text*.
             detect_dates: Include date-of-birth / date-of-death detections.
                 Off by default — bare dates without strong indicators are
                 better handled by the cloud LLM tier. When True, the rule
@@ -104,7 +125,14 @@ class EuRedact:
 
         # Step 2: Check cache
         countries_tuple = tuple(sorted(c.upper() for c in countries)) if countries else ("ALL",)
-        cache_mode = f"{mode}|dates={detect_dates}"
+        # country_hint changes attribution, so it must key the cache too.
+        hint_key = ",".join(sorted(c.upper() for c in country_hint)) if country_hint else ""
+        cache_mode = f"{mode}|dates={detect_dates}|hint={hint_key}"
+        # A context makes the result depend on evidence from other chunks, so
+        # the text no longer identifies the result. Caching is disabled rather
+        # than keyed on the context, whose contents change as chunks arrive.
+        if context is not None:
+            cache = False
         if cache:
             cache_key = self._cache.key(normalized_text, countries_tuple, cache_mode)
             cached = self._cache.get(cache_key)
@@ -112,19 +140,24 @@ class EuRedact:
                 return cached
 
         # Steps 3-6: Rule engine detection
-        detections = self._engine.detect(normalized_text, countries)
+        detections, evidence, country_scores = self._engine.detect_with_evidence(
+            normalized_text, countries, country_hint,
+            prior_evidence=context.evidence() if context is not None else None,
+        )
+        if context is not None:
+            context.add(evidence, chunk_offset)
 
         # Map offsets back to original text if normalization changed length
         if offset_mapping is not None:
+            # replace() rather than a field-by-field rebuild: this listed every
+            # field explicitly and so silently dropped any new one, which is
+            # how out_of_scope and country_confidence would have been lost on
+            # exactly the inputs that need normalising.
             detections = [
-                Detection(
-                    entity_type=d.entity_type,
+                replace(
+                    d,
                     start=map_offset_to_original(d.start, offset_mapping),
                     end=map_offset_to_original(d.end, offset_mapping),
-                    text=d.text,
-                    source=d.source,
-                    country=d.country,
-                    confidence=d.confidence,
                 )
                 for d in detections
             ]
@@ -152,11 +185,20 @@ class EuRedact:
 
         # Step 16: [COREF EXTENSION] — no-op
 
+        # Report the inference so it can be audited. Spans in `evidence` are
+        # offsets into the normalised text, matching `detections`.
+        ranked = sorted(
+            weights_to_ranking(country_scores).items(),
+            key=lambda kv: (-kv[1], kv[0]),
+        )
         result = RedactResult(
             redacted_text=redacted,
             detections=detections,
             source="rules",
             degraded=False,
+            inferred_countries=tuple(ranked),
+            evidence=tuple(evidence),
+            detection_mode="declared" if countries else "inferred",
         )
 
         # Step 17: Cache
@@ -170,6 +212,9 @@ class EuRedact:
         text: str,
         *,
         countries: list[str] | None = None,
+        country_hint: list[str] | None = None,
+        context: DocumentContext | None = None,
+        chunk_offset: int = 0,
         mode: str = "rules",
         referential_integrity: bool = False,
         detect_dates: bool = False,
@@ -189,6 +234,9 @@ class EuRedact:
             lambda: self.redact(
                 text,
                 countries=countries,
+                country_hint=country_hint,
+                context=context,
+                chunk_offset=chunk_offset,
                 mode=mode,
                 referential_integrity=referential_integrity,
                 detect_dates=detect_dates,
@@ -203,6 +251,7 @@ class EuRedact:
         texts: list[str],
         *,
         countries: list[str] | None = None,
+        country_hint: list[str] | None = None,
         mode: str = "rules",
         referential_integrity: bool = False,
         detect_dates: bool = False,
@@ -224,6 +273,7 @@ class EuRedact:
             self.redact(
                 text,
                 countries=countries,
+                country_hint=country_hint,
                 mode=mode,
                 referential_integrity=referential_integrity,
                 detect_dates=detect_dates,
@@ -237,6 +287,7 @@ class EuRedact:
         texts: list[str],
         *,
         countries: list[str] | None = None,
+        country_hint: list[str] | None = None,
         mode: str = "rules",
         referential_integrity: bool = False,
         detect_dates: bool = False,
@@ -262,6 +313,7 @@ class EuRedact:
                 return await self.aredact(
                     text,
                     countries=countries,
+                    country_hint=country_hint,
                     mode=mode,
                     referential_integrity=referential_integrity,
                     detect_dates=detect_dates,
@@ -275,6 +327,7 @@ class EuRedact:
         texts: Iterator[str],
         *,
         countries: list[str] | None = None,
+        country_hint: list[str] | None = None,
         mode: str = "rules",
         referential_integrity: bool = False,
         detect_dates: bool = False,
@@ -293,6 +346,7 @@ class EuRedact:
             yield self.redact(
                 text,
                 countries=countries,
+                country_hint=country_hint,
                 mode=mode,
                 referential_integrity=referential_integrity,
                 detect_dates=detect_dates,

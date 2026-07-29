@@ -17,7 +17,7 @@ import euredact
 
 result = euredact.redact("Mijn BSN is 111222333 en IBAN NL91ABNA0417164300.")
 print(result.redacted_text)
-# "Mijn BSN is [NATIONAL_ID] en IBAN [IBAN]."
+# "Mijn BSN is [NATIONAL_ID] en IBAN [BANK_ACCOUNT]."
 ```
 
 ### Node.js / TypeScript
@@ -44,9 +44,10 @@ console.log(result.redactedText);
 - **Secret/API key detection:** known-prefix patterns for AWS, GitHub, Stripe, OpenAI, Slack, JWT, SendGrid + Shannon entropy-based fallback for generic secrets near context keywords
 - **Context-aware:** keyword proximity checks and structural detection (JSON field names, CSV headers) for ambiguous patterns like dates of birth
 - **Custom patterns:** register your own regex patterns for domain-specific PII
-- **Priority-aware deduplication:** validated matches (checksum) > custom patterns > regex-only; suppression zones prevent false positives from claiming spans of failed-validation matches
+- **Priority-aware deduplication:** validated matches (checksum, corroborated by the document's country) > custom patterns > regex-only; a failed checksum demotes same-type matches rather than deleting them, so it can never silence a detection
+- **Country self-detection:** infers a document's countries from the entities that carry one — IBAN prefixes, `+CC` dialling codes, VAT prefixes, BIC, email ccTLDs — so an ambiguous value resolves without the caller naming a country. `countries` never gates what is looked for; it scores and flags
 - **Referential integrity:** consistent label mapping within a session (same PII value always gets the same label)
-- **Fast:** sub-millisecond per page, ~2,000 records/second
+- **Fast:** see [Performance](#performance)
 - **Zero required dependencies** in both Python and Node.js
 - **Thread-safe** (Python), immutable detection objects
 
@@ -131,13 +132,17 @@ Input text
     |
     v
 [Pass 2a: Validation] -- Checksum validators (mod-97, Luhn, entropy, ...)
-    |                     Failed-validation spans become suppression zones
+    |                     Failed spans are recorded, per entity type
+    v
+[Evidence]     -- Which countries does this document belong to? From IBAN
+    |              prefixes, +CC codes, VAT prefixes, BIC, email ccTLDs
     v
 [Pass 2b: Suppression] -- Remove false positives (currency amounts, units,
-    |                      references, overlapping matches in suppression zones)
+    |                      references). Failed checksums demote same-type
+    |                      matches rather than deleting them
     v
-[Deduplication] -- Priority-aware: validated > custom > regex-only
-    |               Within same tier, longer span wins
+[Deduplication] -- Priority-aware, country-evidence-weighted
+    |               Longer span outranks declared country
     v
 [Replacement] -- Right-to-left substitution with [ENTITY_TYPE] labels
     |              or referential-integrity labels
@@ -154,13 +159,37 @@ See the package-specific READMEs for full API documentation:
 
 ## Performance
 
-| Metric | Python | Node.js |
-|---|---|---|
-| Latency per page (~500 words) | < 1 ms | ~0.02 ms |
-| Throughput | ~2,000 records/s | ~50,000 records/s |
-| Memory per country | ~50 KB | ~50 KB |
+Measured on one core with all 31 countries loaded and date detection enabled,
+against 3,000 short records and 611 real documents. Cost scales with document
+length, so the input size is stated rather than averaged away.
 
-Python optionally uses `pyahocorasick` for Aho-Corasick accelerated pattern matching on large batches.
+| Input | Python | Python `[fast]` | Node.js |
+|---|---:|---:|---:|
+| Short record (186 chars) | 723 µs | **496 µs** | **155 µs** |
+| Real document (3,424 chars) | 10.4 ms | **5.4 ms** | **1.56 ms** |
+| Memory per country | ~50 KB | ~50 KB | ~50 KB |
+
+`pip install euredact[fast]` adds two optional accelerators (`google-re2`,
+`pyahocorasick`). Neither changes what is detected — `tests/test_scan_path_parity.py`
+runs every available scan path against the plain-Python one and requires them to
+agree.
+
+The TypeScript SDK needs no such extra and offers none: V8's regex engine has
+literal prefilters CPython lacks, so on the same documents it runs about 3×
+faster than the accelerated Python path. Adding a native addon there would cost
+bundler, edge-runtime and Deno compatibility for nothing.
+
+### Accuracy
+
+Full corpus, 152,300 documents:
+
+| | recall | precision |
+|---|---:|---:|
+| With country hints | 99.6% | 98.6% |
+| Blind (no `countries` passed) | 99.6% | 98.3% |
+
+Blind detection is within 0.3 points of hinted, so the engine does not need to
+be told the country.
 
 ## Repository Structure
 

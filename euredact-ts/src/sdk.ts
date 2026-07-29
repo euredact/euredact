@@ -1,6 +1,8 @@
 import { ResultCache } from "./cache.js";
 import { normalize, mapOffsetToOriginal } from "./normalizer.js";
 import { RuleEngine } from "./rules/engine.js";
+import { DocumentContext } from "./rules/context.js";
+import { weightsToRanking } from "./rules/evidence.js";
 import { EntityType, type Detection, type RedactResult } from "./types.js";
 
 const DATE_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
@@ -25,7 +27,27 @@ class ReferentialMapper {
 }
 
 export interface RedactOptions {
+  /**
+   * Scope. Detections attributed elsewhere are flagged `outOfScope`, never
+   * dropped, and this also acts as a prior when resolving which national
+   * scheme owns an ambiguous value. It does **not** gate what is looked for.
+   */
   countries?: string[] | null;
+  /**
+   * A prior only. Helps resolve ambiguity without narrowing scope or flagging
+   * anything out of scope.
+   */
+  countryHint?: string[] | null;
+  /**
+   * Shares country evidence across the chunks of one document, so a chunk
+   * carrying no country signal of its own is still scored against what the
+   * rest of the document showed. Pass the same object for every chunk, with
+   * `chunkOffset` set to where the chunk starts in the whole document.
+   */
+  context?: DocumentContext | null;
+  /** Offset of this chunk within the document. Used only to rebase spans
+   *  recorded in `context`; returned detections are relative to `text`. */
+  chunkOffset?: number;
   mode?: string;
   referentialIntegrity?: boolean;
   detectDates?: boolean;
@@ -67,18 +89,26 @@ export class EuRedact {
 
     const {
       countries = null,
+      countryHint = null,
+      context = null,
+      chunkOffset = 0,
       mode = "rules",
       referentialIntegrity = false,
       detectDates = false,
-      cache = true,
     } = options;
+    // A context makes the result depend on evidence from other chunks, so the
+    // text no longer identifies the result. Caching is disabled rather than
+    // keyed on the context, whose contents change as chunks arrive.
+    const cache = context !== null ? false : (options.cache ?? true);
 
     const [normalizedText, offsetMapping] = normalize(text);
 
     const countriesTuple = countries
       ? countries.map(c => c.toUpperCase()).sort()
       : ["ALL"];
-    const cacheMode = `${mode}|dates=${detectDates}`;
+    // countryHint changes attribution, so it must key the cache too.
+    const hintKey = countryHint ? countryHint.map(c => c.toUpperCase()).sort().join(",") : "";
+    const cacheMode = `${mode}|dates=${detectDates}|hint=${hintKey}`;
 
     let cacheKey: string | undefined;
     if (cache) {
@@ -87,7 +117,16 @@ export class EuRedact {
       if (cached !== null) return cached;
     }
 
-    let detections = this.engine.detect(normalizedText, countries);
+    const {
+      detections: rawDetections,
+      evidence,
+      scores,
+    } = this.engine.detectWithEvidence(
+      normalizedText, countries, countryHint,
+      context !== null ? context.evidence() : null,
+    );
+    if (context !== null) context.add(evidence, chunkOffset);
+    let detections = rawDetections;
 
     if (offsetMapping !== null) {
       detections = detections.map(d => ({
@@ -112,11 +151,19 @@ export class EuRedact {
       redacted = redacted.slice(0, det.start) + replacement + redacted.slice(det.end);
     }
 
+    // Report the inference so it can be audited. Spans in `evidence` are
+    // offsets into the normalised text, matching `detections`.
+    const inferredCountries = [...weightsToRanking(scores).entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+
     const result: RedactResult = {
       redactedText: redacted,
       detections,
       source: "rules",
       degraded: false,
+      inferredCountries,
+      evidence,
+      detectionMode: countries && countries.length ? "declared" : "inferred",
     };
 
     if (cache && cacheKey) {
@@ -127,10 +174,9 @@ export class EuRedact {
   }
 
   redactBatch(texts: string[], options: RedactOptions = {}): RedactResult[] {
-    const countries = options.countries ?? null;
-    this.engine.loadCountries(
-      countries ? countries.map(c => c.toUpperCase()) : null
-    );
+    // Generation is country-blind, so every country's patterns are loaded
+    // regardless of what the caller declared.
+    this.engine.loadCountries(null);
     return texts.map(text => this.redact(text, options));
   }
 }

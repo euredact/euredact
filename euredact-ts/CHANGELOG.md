@@ -2,6 +2,102 @@
 
 ## Unreleased
 
+### Changed
+
+- **`countries` no longer gates detection — it scores it.** Every pattern now
+  runs on every document regardless of what the caller declares. The declared
+  country decides how a match is *labelled*, never whether it is *found*.
+
+  This fixes a silent recall failure. `countries: ["BE"]` made a valid Dutch
+  BSN vanish entirely, because the Dutch patterns were never run:
+
+  ```ts
+  redact("Werknemer met BSN 111222333", { countries: ["BE"] });
+  // before: 'Werknemer met BSN 111222333'   <- leaked
+  // now:    'Werknemer met BSN [NATIONAL_ID]'
+  ```
+
+  Entities attributed outside the declared set are flagged via the new
+  `Detection.outOfScope`, not dropped. The invariant — no value of `countries`
+  may change which spans are detected — is enforced by
+  `src/__tests__/inference.ts`.
+
+  **Behaviour change for callers:** documents processed with a single
+  `countries` value will now detect *more* than before, including entities
+  belonging to other countries. Code that assumed every detection belonged to
+  the declared country should read `detection.country` or filter on
+  `outOfScope`.
+
+  This also closes a large gap against the Python SDK. Measured on 611 real
+  documents (mean 3,424 chars), comparing which characters each SDK masks:
+
+  | | documents masking identically | divergence | characters TS failed to mask |
+  |---|---:|---:|---:|
+  | before | 213 / 611 | 13.47% | 19,014 |
+  | after | **571 / 611** | **1.46%** | 1,021 |
+
+### Added
+
+- **Country inference.** The engine works out which countries a document
+  belongs to from entities that carry their country in the string — IBAN
+  prefixes, `+CC` dialling codes, VAT prefixes, BIC country codes, email
+  ccTLDs — and uses it to decide which national scheme owns an ambiguous
+  value. 36.6% of national-ID values in the corpus validate under more than one
+  country's checksum, so the digits alone cannot decide it.
+
+  ```ts
+  redact("Bereikbaar op telefoon 0612345678, mail jan@test.nl"); // -> PHONE (NL)
+  redact("Kontakt: 0612345678, e-mail jens@test.dk");            // -> NATIONAL_ID (DK)
+  ```
+
+  Identical digits: `0612345678` is both a valid Dutch mobile number and a
+  valid Danish CPR. Only the document distinguishes them.
+
+  Weights are derived from the corpus and kept identical to the Python SDK's.
+  Inference influences scoring only; it can never cause a miss.
+
+- `RedactResult.inferredCountries` — `[country, confidence]` pairs, strongest
+  first. Confidences are per-country and do not sum to 1: document countries
+  are not mutually exclusive, and a Belgian supplier invoicing a German
+  customer is genuinely both.
+- `RedactResult.evidence` — every signal behind the inference, with the span
+  that produced it, in document order. The audit trail for an attribution.
+- `RedactResult.detectionMode` — `"declared"` or `"inferred"`. Named
+  `detectionMode` rather than `mode` because `redact({ mode })` already means
+  the tier selector.
+- `Detection.countryConfidence` — how strongly the document supports the
+  attributed country, in [0, 1]. `0` is the signal that an attribution rests on
+  a checksum alone.
+- `Detection.outOfScope` — attributed outside the declared `countries`.
+- `countryHint` — a prior that resolves ambiguity **without** narrowing scope or
+  flagging anything out of scope, as distinct from `countries`, which does both.
+- **`DocumentContext`** — shares country evidence across the chunks of one
+  document, via `redact(text, { context, chunkOffset })`. Without it, a chunk
+  carrying no country signal of its own is scored as if the rest of the
+  document did not exist. Deduplicated so a re-run chunk cannot vote twice, and
+  spans are rebased by `chunkOffset`. Caching is disabled while a context is in
+  use, since the result no longer depends on the text alone.
+
+### Fixed
+
+- **A failed checksum no longer demotes unrelated entity types on the same
+  span.** A span that failed a checksum demoted *every* validator-less
+  candidate covering it, whatever its type. So Sweden's own personnummer
+  checksum failing on `0708787668` demoted the Swedish *phone* candidate for
+  the same digits, handing the span to a Danish CPR that happened to validate.
+  A failed checksum is evidence against *that type*, not against the span.
+
+- **A passing checksum from an uncorroborated country no longer outranks
+  everything.** A weak checksum fits by luck — a mod-11 scheme accepts a random
+  number about one time in eleven — so a validated candidate from a country the
+  document shows no trace of is now treated as coincidence rather than
+  evidence. Entities that carry their own country still vouch for themselves,
+  so a foreign IBAN in a domestic invoice keeps its rank.
+
+- **Deduplication no longer truncates an entity to honour the declared
+  country.** Span length now outranks scope, so preferring the declared
+  country can change *which* country is attributed but never *what* is masked.
+
 ### Fixed — security
 
 - **Installing the optional `fast` extra disabled private-key redaction.**

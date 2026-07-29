@@ -53,13 +53,14 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "postbuild:cjs": "echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
-    "test": "npm run test:spec && npm run test:conformance",
+    "test": "npm run test:spec && npm run test:inference && npm run test:conformance",
     "benchmark": "node --import tsx src/__tests__/benchmark.ts",
     "prepublishOnly": "npm run build",
     "test:spec": "node --import tsx src/__tests__/spec.ts",
     "test:eval": "node --import tsx src/__tests__/run.ts",
     "test:eval:full": "node --max-old-space-size=8192 --import tsx src/__tests__/evalFull.ts",
-    "test:conformance": "node --import tsx src/__tests__/conformance.ts"
+    "test:conformance": "node --import tsx src/__tests__/conformance.ts",
+    "test:inference": "node --import tsx src/__tests__/inference.ts"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

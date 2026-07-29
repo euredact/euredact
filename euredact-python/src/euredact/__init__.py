@@ -25,6 +25,7 @@ from typing import Iterator
 __version__ = "0.3.1"
 
 from euredact.rules.bic_registry import set_bic_registry
+from euredact.rules.context import DocumentContext
 from euredact.sdk import EuRedact
 from euredact.types import Detection, DetectionSource, EntityType, RedactResult
 
@@ -34,6 +35,7 @@ __all__ = [
     "aredact",
     "aredact_batch",
     "available_countries",
+    "DocumentContext",
     "clear",
     "set_bic_registry",
     "Detection",
@@ -88,6 +90,9 @@ def redact(
     text: str,
     *,
     countries: list[str] | None = None,
+    country_hint: list[str] | None = None,
+    context: DocumentContext | None = None,
+    chunk_offset: int = 0,
     mode: str = "rules",
     referential_integrity: bool = False,
     detect_dates: bool = False,
@@ -106,6 +111,9 @@ def redact(
     return _get_instance().redact(
         text,
         countries=countries,
+        country_hint=country_hint,
+        context=context,
+        chunk_offset=chunk_offset,
         mode=mode,
         referential_integrity=referential_integrity,
         detect_dates=detect_dates,
@@ -119,6 +127,9 @@ async def aredact(
     text: str,
     *,
     countries: list[str] | None = None,
+    country_hint: list[str] | None = None,
+    context: DocumentContext | None = None,
+    chunk_offset: int = 0,
     mode: str = "rules",
     referential_integrity: bool = False,
     detect_dates: bool = False,
@@ -132,6 +143,9 @@ async def aredact(
     return await _get_instance().aredact(
         text,
         countries=countries,
+        country_hint=country_hint,
+        context=context,
+        chunk_offset=chunk_offset,
         mode=mode,
         referential_integrity=referential_integrity,
         detect_dates=detect_dates,
@@ -143,6 +157,7 @@ def redact_batch(
     texts: list[str],
     *,
     countries: list[str] | None = None,
+    country_hint: list[str] | None = None,
     mode: str = "rules",
     referential_integrity: bool = False,
     detect_dates: bool = False,
@@ -156,6 +171,7 @@ def redact_batch(
     return _get_instance().redact_batch(
         texts,
         countries=countries,
+        country_hint=country_hint,
         mode=mode,
         referential_integrity=referential_integrity,
         detect_dates=detect_dates,
@@ -167,6 +183,7 @@ async def aredact_batch(
     texts: list[str],
     *,
     countries: list[str] | None = None,
+    country_hint: list[str] | None = None,
     mode: str = "rules",
     referential_integrity: bool = False,
     detect_dates: bool = False,
@@ -181,6 +198,7 @@ async def aredact_batch(
     return await _get_instance().aredact_batch(
         texts,
         countries=countries,
+        country_hint=country_hint,
         mode=mode,
         referential_integrity=referential_integrity,
         detect_dates=detect_dates,
@@ -193,6 +211,7 @@ def redact_iter(
     texts: Iterator[str],
     *,
     countries: list[str] | None = None,
+    country_hint: list[str] | None = None,
     mode: str = "rules",
     referential_integrity: bool = False,
     detect_dates: bool = False,
@@ -206,6 +225,7 @@ def redact_iter(
     return _get_instance().redact_iter(
         texts,
         countries=countries,
+        country_hint=country_hint,
         mode=mode,
         referential_integrity=referential_integrity,
         detect_dates=detect_dates,

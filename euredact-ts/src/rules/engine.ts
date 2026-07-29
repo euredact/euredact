@@ -1,8 +1,9 @@
-import { DetectionSource, EntityType, type CountryConfig, type Detection, type PatternDef } from "../types.js";
-import { MultiPatternMatcher } from "./matchers.js";
+import { DetectionSource, EntityType, type CountryConfig, type CountryEvidence, type Detection, type PatternDef } from "../types.js";
+import { MultiPatternMatcher, type RawMatch } from "./matchers.js";
 import { shouldSuppress } from "./suppressors.js";
 import { detectStructuralDob } from "./structural.js";
 import { COUNTRY_CONFIGS } from "./countries/index.js";
+import * as evidenceMod from "./evidence.js";
 
 /**
  * Heuristic to detect nested quantifiers that cause catastrophic backtracking.
@@ -109,109 +110,259 @@ export class RuleEngine {
     if (newCountries) this.matcher.compile();
   }
 
-  detect(text: string, countryCodes: string[] | null): Detection[] {
-    this.loadCountries(countryCodes);
+  /**
+   * Generate candidate matches. Country-blind, by contract.
+   *
+   * This is the only caller of {@link MultiPatternMatcher.scan}, and it takes
+   * no country argument. Which country the caller declared may influence how a
+   * match is *scored*; it may never influence whether the match is *found*.
+   * Before this held, `countries: ["BE"]` made a valid Dutch BSN vanish
+   * entirely because the Dutch patterns were never run.
+   */
+  generateCandidates(text: string): RawMatch[] {
+    this.loadCountries(null);
+    return this.matcher.scan(text, null);
+  }
 
-    // Scope the scan to requested countries for efficiency
-    // Resolve through the alias table so `countries: ["GB"]` actually scans
-    // the patterns registered under "UK".
-    let scanCodes: Set<string> | null = null;
+  detect(text: string, countryCodes: string[] | null, countryHint?: string[] | null): Detection[] {
+    return this.detectWithEvidence(text, countryCodes, countryHint).detections;
+  }
+
+  /**
+   * {@link RuleEngine.detect}, plus the country evidence it reasoned from.
+   *
+   * `countryCodes` is **scope**: it flags detections from elsewhere as
+   * `outOfScope` and, like `countryHint`, contributes a prior. `countryHint` is
+   * **only** a prior — it helps resolve ambiguity without marking anything out
+   * of scope. Neither gates what is looked for.
+   */
+  detectWithEvidence(
+    text: string,
+    countryCodes: string[] | null,
+    countryHint?: string[] | null,
+    priorEvidence?: CountryEvidence[] | null,
+  ): { detections: Detection[]; evidence: CountryEvidence[]; scores: Map<string, number> } {
+    const rawMatches = this.generateCandidates(text);
+
+    // The declared countries are a scoring signal from here on: they rank
+    // candidates and flag out-of-scope detections. They do not gate.
+    let declared: Set<string> | null = null;
     if (countryCodes !== null) {
-      scanCodes = new Set<string>();
+      declared = new Set<string>();
       for (const c of countryCodes) {
         const code = resolveCountryCode(c);
-        if (code !== null) scanCodes.add(code);
+        if (code === null) warnUnknownCountry(c);
+        else declared.add(code);
       }
-      scanCodes.add("SHARED");
-      scanCodes.add("CUSTOM");
+      declared.add("SHARED");
+      declared.add("CUSTOM");
     }
-    let rawMatches = this.matcher.scan(text, scanCodes);
 
-    // Matches that have a validator but fail it create suppression zones:
-    // the span is recognisably a specific entity (e.g. IBAN-shaped) so
-    // overlapping regex-only matches (license plate, phone) are false
-    // positives and must be suppressed.
-    const validated: Array<{ match: typeof rawMatches[0]; hasValidValidator: boolean }> = [];
-    const rawZones: Array<[number, number]> = [];
+    // The prior fed to the evidence bus. Declared countries count too — a
+    // caller naming a country is asserting context, which is exactly what a
+    // prior is — but a hint never narrows scope, so it is kept out of
+    // `declared` and cannot flag anything out of scope.
+    const prior = new Set<string>(declared ?? []);
+    for (const c of countryHint ?? []) {
+      const code = resolveCountryCode(c);
+      if (code === null) warnUnknownCountry(c);
+      else prior.add(code);
+    }
+
+    // Pass 1: checksum validation. A span that matched a checksummed pattern
+    // but failed the checksum is recorded with its country and entity type;
+    // what it is allowed to demote is decided below, once the document's
+    // countries are known.
+    const validated: Array<{ match: RawMatch; hasValidValidator: boolean }> = [];
+    const failedSpans: Array<{ start: number; end: number; code: string; etype: string }> = [];
     for (const m of rawMatches) {
-      const isValid = this.matcher.validate(m);
-      if (isValid) {
+      if (this.matcher.validate(m)) {
         validated.push({ match: m, hasValidValidator: m.patternDef.validator !== null });
       } else if (m.patternDef.validator !== null && !m.patternDef.requiresContext) {
-        rawZones.push([m.start, m.end]);
+        failedSpans.push({ start: m.start, end: m.end, code: m.countryCode,
+                           etype: String(m.patternDef.entityType) });
       }
     }
 
-    // Merge overlapping suppression zones for O(log n) containment checks
-    let zoneStarts: number[] = [];
-    let zoneEnds: number[] = [];
-    if (rawZones.length > 0) {
-      rawZones.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-      let [ms, me] = rawZones[0];
-      for (let i = 1; i < rawZones.length; i++) {
-        const [zs, ze] = rawZones[i];
-        if (zs <= me) { me = Math.max(me, ze); }
-        else { zoneStarts.push(ms); zoneEnds.push(me); ms = zs; me = ze; }
+    // Evidence pass: work out which countries this document belongs to, from
+    // the entities that carry their country in the string.
+    //
+    // Every surviving candidate is eligible, not only checksum-backed ones. An
+    // earlier version required a validator here, which silently dropped the
+    // email ccTLD — the second-strongest signal at 4.50 log-odds and present in
+    // 98,949 of 152,300 corpus documents — because EMAIL has nothing to
+    // checksum. Candidates that failed a validator never reach `validated`, so
+    // this admits the unvalidatable, not the invalid.
+    const evidenceDets: Detection[] = [];
+    for (const { match } of validated) {
+      if (!evidenceMod.EVIDENCE_TYPES.has(String(match.patternDef.entityType))) continue;
+      evidenceDets.push({
+        entityType: match.patternDef.entityType,
+        start: match.start, end: match.end, text: match.text,
+        source: DetectionSource.RULES,
+        country: (match.countryCode !== "SHARED" && match.countryCode !== "CUSTOM")
+          ? match.countryCode : null,
+        confidence: "high",
+      });
+    }
+    const countryEvidence = evidenceMod.collect(evidenceDets);
+    const countryScores = evidenceMod.accumulate(
+      priorEvidence && priorEvidence.length ? [...countryEvidence, ...priorEvidence] : countryEvidence,
+      prior,
+    );
+    const hasScores = countryScores.size > 0;
+    const corroborated = (code: string): boolean =>
+      !hasScores || code === "SHARED" || code === "CUSTOM" || countryScores.has(code);
+
+    // Now that the document's countries are known, decide which failed
+    // validators are entitled to demote anything. A checksum failure only means
+    // "not a valid X"; it says nothing about the span unless X was plausible
+    // here in the first place. A Belgian national-ID pattern failing on
+    // 0612345678 is not evidence against that span being a Dutch phone number.
+    //
+    // Zones are also per entity type. A failed checksum is evidence against
+    // *that type*, not against the span: Sweden's own personnummer checksum
+    // failing on 0708787668 used to demote the Swedish *phone* candidate for
+    // the same digits, handing the span to a Danish CPR that happened to
+    // validate. Worth 878 mistyped phone numbers per 30,000 documents.
+    const zonesByType = new Map<string, Array<[number, number]>>();
+    for (const f of failedSpans) {
+      if (!corroborated(f.code)) continue;
+      const list = zonesByType.get(f.etype);
+      if (list) list.push([f.start, f.end]);
+      else zonesByType.set(f.etype, [[f.start, f.end]]);
+    }
+    const mergedZones = new Map<string, { starts: number[]; ends: number[] }>();
+    for (const [etype, spans] of zonesByType) {
+      spans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const starts: number[] = [];
+      const ends: number[] = [];
+      let [ms, me] = spans[0];
+      for (let i = 1; i < spans.length; i++) {
+        const [zs, ze] = spans[i];
+        if (zs <= me) me = Math.max(me, ze);
+        else { starts.push(ms); ends.push(me); ms = zs; me = ze; }
       }
-      zoneStarts.push(ms);
-      zoneEnds.push(me);
+      starts.push(ms); ends.push(me);
+      mergedZones.set(etype, { starts, ends });
     }
 
-    // Build candidates with priority: validated (3) > custom (2) > regex-only (1)
-    const candidates: Array<{ det: Detection; score: number }> = [];
+    interface Candidate {
+      priority: number;
+      length: number;
+      countryScore: number;
+      inScope: number;
+      det: Detection;
+    }
+    const candidates: Candidate[] = [];
+
     for (const { match, hasValidValidator } of validated) {
       if (shouldSuppress(text, match)) continue;
-      // O(log n) binary-search containment check on merged zones
-      if (match.patternDef.validator === null && zoneStarts.length > 0) {
-        let lo = 0, hi = zoneStarts.length;
-        while (lo < hi) { const mid = (lo + hi) >>> 1; if (zoneStarts[mid] <= match.start) lo = mid + 1; else hi = mid; }
-        const idx = lo - 1;
-        if (idx >= 0 && zoneEnds[idx] >= match.end) continue;
+
+      // A validator-less match inside a failed-validation span of its own type
+      // is demoted below every other candidate rather than deleted. Demotion
+      // cannot silence a detection, which is the property deletion lacked:
+      // measured across the corpus, deletion removed 454 detections of which
+      // 454 overlapped real labelled PII.
+      let demoted = false;
+      if (match.patternDef.validator === null) {
+        const zone = mergedZones.get(String(match.patternDef.entityType));
+        if (zone) {
+          let lo = 0, hi = zone.starts.length;
+          while (lo < hi) {
+            const mid = (lo + hi) >>> 1;
+            if (zone.starts[mid] <= match.start) lo = mid + 1; else hi = mid;
+          }
+          const idx = lo - 1;
+          demoted = idx >= 0 && zone.ends[idx] >= match.end;
+        }
       }
 
-      // A bare digit run is the weakest evidence in the engine and must never
-      // re-cut a span a structured detector claims (PHONE, SSN, NATIONAL_ID,
-      // BANK_ACCOUNT, VAT...). Postal codes take unclaimed spans only,
-      // whatever the span lengths.
-      const priority = hasValidValidator
-        ? 3
-        : match.countryCode === "CUSTOM"
-          ? 2
-          : match.patternDef.entityType === EntityType.POSTAL_CODE
-            ? 0
-            : 1;
-      const spanLength = match.end - match.start;
-      const score = priority * 1_000_000 + spanLength;
+      let priority: number;
+      if (demoted) {
+        priority = -1;
+      } else if (hasValidValidator) {
+        // A passing checksum normally outranks everything. But a checksum only
+        // says the digits fit *some* national scheme, and weak ones fit by luck
+        // — a mod-11 scheme accepts a random number about one time in eleven.
+        // So a validated candidate from a country the document shows no trace
+        // of is treated as coincidence, not evidence.
+        //
+        // Concretely: the Dutch phone number 0612345678 also passes the Danish
+        // CPR checksum. Entities that carry their own country vouch for
+        // themselves — an IBAN emits evidence for its own country — so a
+        // foreign IBAN in a domestic invoice keeps its rank.
+        priority = corroborated(match.countryCode) ? 3 : 1;
+      } else if (match.countryCode === "CUSTOM") {
+        priority = 2;
+      } else if (match.patternDef.entityType === EntityType.POSTAL_CODE) {
+        // A bare digit run is the weakest evidence in the engine and must never
+        // re-cut a span a structured detector claims (PHONE, SSN, NATIONAL_ID,
+        // BANK_ACCOUNT, VAT...). Postal codes take unclaimed spans only,
+        // whatever the span lengths.
+        priority = 0;
+      } else {
+        priority = 1;
+      }
 
+      const country = (match.countryCode !== "SHARED" && match.countryCode !== "CUSTOM")
+        ? match.countryCode : null;
       candidates.push({
+        priority,
+        length: match.end - match.start,
+        countryScore: countryScores.get(match.countryCode) ?? 0,
+        inScope: declared === null || declared.has(match.countryCode) ? 1 : 0,
         det: {
           entityType: match.patternDef.entityType,
           start: match.start,
           end: match.end,
           text: match.text,
           source: DetectionSource.RULES,
-          country: (match.countryCode !== "SHARED" && match.countryCode !== "CUSTOM") ? match.countryCode : null,
+          country,
           confidence: "high",
+          outOfScope: declared !== null && country !== null && !declared.has(match.countryCode),
         },
-        score,
       });
     }
 
     for (const d of detectStructuralDob(text)) {
-      candidates.push({ det: d, score: 1_000_000 + (d.end - d.start) });
+      candidates.push({ priority: 1, length: d.end - d.start, countryScore: 0, inScope: 1, det: d });
     }
 
-    return this.deduplicate(candidates);
+    const detections = this.deduplicate(candidates);
+    detections.sort((a, b) => a.start - b.start || b.end - a.end);
+
+    // Attach the confidence behind each country attribution, so a caller can
+    // tell "Danish, and the document is plainly Danish" from "Danish, on a
+    // checksum alone".
+    const ranking = evidenceMod.weightsToRanking(countryScores);
+    for (const d of detections) {
+      d.countryConfidence = (d.country !== null ? ranking.get(d.country) : undefined) ?? 0;
+    }
+
+    return { detections, evidence: countryEvidence, scores: countryScores };
   }
 
   /**
    * Remove overlapping detections with priority-aware resolution.
-   * Priority: validated (3) > custom (2) > regex-only (1).
-   * Within the same tier, longer span wins.
+   * Priority: validated (3) > custom (2) > regex-only (1) > postal (0) >
+   * demoted (-1). Within a tier, longer span wins, then country evidence.
    */
-  private deduplicate(candidates: Array<{ det: Detection; score: number }>): Detection[] {
+  private deduplicate(
+    candidates: Array<{ priority: number; length: number; countryScore: number; inScope: number; det: Detection }>,
+  ): Detection[] {
     if (candidates.length === 0) return [];
-    const sorted = [...candidates].sort((a, b) => b.score - a.score);
+    // Span length outranks scope: preferring the declared country over the
+    // longest match can truncate an entity. Measured: with countries ["BE"],
+    // the Belgian phone pattern claims 11 of the 14 characters of
+    // "06 12 34 56 78" and leaves three digits exposed. Scope only breaks ties
+    // between candidates of equal length, so it can change WHICH country is
+    // attributed, never WHAT is masked.
+    const sorted = [...candidates].sort((a, b) =>
+      b.priority - a.priority ||
+      b.length - a.length ||
+      b.countryScore - a.countryScore ||
+      b.inScope - a.inScope);
     const result: Detection[] = [];
     const occupied = new Set<number>();
     for (const { det } of sorted) {

@@ -74,6 +74,27 @@ class DetectionSource(str, Enum):
 
 
 @dataclass(frozen=True)
+class CountryEvidence:
+    """One reason to believe a document belongs to a country.
+
+    Emitted by entities that carry their country in the string — an IBAN's
+    country code, a `+CC` dialling prefix, a VAT prefix, an email ccTLD.
+    Auditable by design: every inference traces back to the span and the source
+    that produced it.
+    """
+
+    country: str
+    """ISO 3166-1 alpha-2."""
+    source: str
+    """Which signal produced this — "iban_prefix", "e164_prefix", ..."""
+    log_odds: float
+    """Natural-log odds. Derived from the corpus, not hand-tuned; see
+    euredact.rules.evidence.WEIGHTS."""
+    span: tuple[int, int]
+    """Offsets into the text that was scanned."""
+
+
+@dataclass(frozen=True)
 class Detection:
     """A single PII detection in the input text."""
 
@@ -84,6 +105,12 @@ class Detection:
     source: DetectionSource
     country: str | None
     confidence: str = "high"
+    country_confidence: float = 0.0
+    """How strongly the document supports :attr:`country`, in [0, 1].
+
+    0.0 when no country was attributed or nothing corroborated it — which is
+    the signal that an attribution rests on a checksum alone.
+    """
     out_of_scope: bool = False
     """True when attributed to a country the caller did not declare.
 
@@ -101,3 +128,25 @@ class RedactResult:
     detections: list[Detection]
     source: str = "rules"
     degraded: bool = False
+
+    inferred_countries: tuple[tuple[str, float], ...] = ()
+    """Countries this document appears to belong to, strongest first, as
+    ``(country, confidence)`` with confidence in [0, 1].
+
+    Inferred from entities that carry their country in the string. Reported so
+    the inference can be audited; it influences which national scheme is
+    attributed to an ambiguous value, never which spans are found.
+    """
+
+    evidence: tuple[CountryEvidence, ...] = ()
+    """Every signal behind :attr:`inferred_countries`, with the span that
+    produced it. The audit trail for a country attribution."""
+
+    detection_mode: str = "declared"
+    """``"declared"`` when the caller passed ``countries=``, ``"inferred"``
+    when the country was worked out from the content.
+
+    Named ``detection_mode`` rather than ``mode`` because ``redact(mode=...)``
+    already means the tier selector (``"rules"`` / ``"cloud"``), which
+    :attr:`source` reports.
+    """

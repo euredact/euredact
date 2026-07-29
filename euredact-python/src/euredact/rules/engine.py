@@ -5,13 +5,15 @@ from __future__ import annotations
 import bisect
 import re
 import threading
+from dataclasses import replace
 
+from euredact.rules import evidence as evidence_mod
 from euredact.rules.countries._base import PatternDef
 from euredact.rules.matchers import MultiPatternMatcher, RawMatch
 from euredact.rules.registry import CountryRegistry
 from euredact.rules.structural import detect_structural_dob
 from euredact.rules.suppressors import should_suppress_claim, should_suppress_span
-from euredact.types import Detection, DetectionSource, EntityType
+from euredact.types import CountryEvidence, Detection, DetectionSource, EntityType
 
 # Heuristic to detect nested quantifiers that cause catastrophic backtracking.
 # After stripping escaped chars and character classes, look for an unbounded
@@ -108,6 +110,31 @@ class RuleEngine:
         Pass 1: Liberal pattern matching, country-blind
         Pass 2: Suppression filters + checksum validation, country-aware scoring
         """
+        return self.detect_with_evidence(text, country_codes)[0]
+
+    def detect_with_evidence(
+        self,
+        text: str,
+        country_codes: list[str] | None = None,
+        country_hint: list[str] | None = None,
+        prior_evidence: list[CountryEvidence] | None = None,
+    ) -> tuple[list[Detection], list[CountryEvidence], dict[str, float]]:
+        """:meth:`detect`, plus the country evidence it reasoned from.
+
+        Returns ``(detections, evidence, scores)`` where *scores* maps country
+        to accumulated log-odds. Exposed so a caller can audit why an ambiguous
+        value was attributed to one national scheme over another.
+
+        *country_codes* is **scope**: it flags detections from elsewhere as
+        ``out_of_scope`` and, like *country_hint*, contributes a prior.
+        *country_hint* is **only** a prior — it helps resolve ambiguity without
+        marking anything out of scope. Neither gates what is looked for.
+
+        *prior_evidence* is evidence carried in from elsewhere — earlier chunks
+        of the same document, via :class:`~euredact.rules.context.DocumentContext`.
+        It is scored alongside this text's own evidence but is **not** returned,
+        so a caller accumulating evidence never counts it twice.
+        """
         raw_matches = self.generate_candidates(text)
 
         # The declared countries are a scoring signal from here on: they rank
@@ -126,6 +153,18 @@ class RuleEngine:
                     resolved.add(match_code)
             declared = resolved | {"SHARED", "CUSTOM"}
 
+        # The prior fed to the evidence bus. Declared countries count too — a
+        # caller naming a country is asserting context, which is exactly what a
+        # prior is — but a hint never narrows scope, so it is kept out of
+        # `declared` and cannot flag anything out_of_scope.
+        prior: set[str] = set(declared) if declared else set()
+        for code in country_hint or ():
+            resolved_hint = self._registry.resolve(code)
+            if resolved_hint is None:
+                self._registry.warn_unknown(code)
+            else:
+                prior.add(resolved_hint)
+
         # Pass 2a: checksum validation + collect failed-validator spans.
         #
         # A span that matched a checksummed pattern but failed the checksum is
@@ -134,30 +173,88 @@ class RuleEngine:
         # every other candidate rather than deleted — see the priority
         # assignment below for why deletion was wrong.
         validated: list[tuple[RawMatch, bool]] = []  # (match, is_valid)
-        suppression_zones: list[tuple[int, int]] = []
+        failed_spans: list[tuple[int, int, str]] = []
         for m in raw_matches:
             is_valid = self._matcher.validate(m)
             if is_valid:
                 validated.append((m, m.pattern_def.validator is not None))
             elif m.pattern_def.validator is not None and not m.pattern_def.requires_context:
-                suppression_zones.append((m.start, m.end))
+                failed_spans.append(
+                    (m.start, m.end, m.country_code, m.pattern_def.entity_type)
+                )
 
-        # Merge overlapping suppression zones and build sorted index for
-        # O(log n) containment checks instead of O(n) per match.
-        zone_starts: list[int] = []
-        zone_ends: list[int] = []
-        if suppression_zones:
-            suppression_zones.sort()
-            ms, me = suppression_zones[0]
-            for zs, ze in suppression_zones[1:]:
+        # Evidence pass: work out which countries this document belongs to,
+        # from the entities that carry their country in the string. Runs on
+        # surviving candidates rather than final detections, because waiting
+        # for deduplication would mean deduplicating twice.
+        #
+        # Every surviving candidate is eligible, not only checksum-backed ones.
+        # An earlier version required a validator here, which silently dropped
+        # the email ccTLD — the second-strongest signal at 4.50 log-odds and
+        # present in 98,949 of 152,300 corpus documents — because EMAIL has
+        # nothing to checksum. That left most documents with no evidence at
+        # all. Candidates that failed a validator never reach `validated`, so
+        # this admits the unvalidatable, not the invalid.
+        #
+        # Emitters are self-gating on the evidence-bearing substring rather
+        # than the pattern's country: _emit_e164 requires a literal `+CC`, and
+        # collect() dedupes by (span, source), so eleven countries' phone
+        # patterns matching one number yield one piece of evidence, not eleven.
+        evidence_dets = [
+            Detection(
+                entity_type=m.pattern_def.entity_type,
+                start=m.start, end=m.end, text=m.text,
+                source=DetectionSource.RULES,
+                country=m.country_code if m.country_code not in ("SHARED", "CUSTOM") else None,
+            )
+            for m, _has_validator in validated
+            if m.pattern_def.entity_type in evidence_mod.EVIDENCE_TYPES
+        ]
+        country_evidence = evidence_mod.collect(evidence_dets)
+        # Score against this chunk's evidence plus whatever earlier chunks
+        # established. Only this chunk's is returned — see the docstring.
+        country_scores = evidence_mod.accumulate(
+            (country_evidence + prior_evidence) if prior_evidence else country_evidence,
+            prior,
+        )
+
+        # Now that the document's countries are known, decide which failed
+        # validators are entitled to demote anything. A checksum failure only
+        # means "not a valid X"; it says nothing about the span unless X was
+        # plausible here in the first place. A Belgian national-ID pattern
+        # failing on 0612345678 is not evidence against that span being a Dutch
+        # phone number — and demoting on it cost every PHONE candidate in the
+        # document its rank, which is how a Dutch mobile came back as a Danish
+        # NATIONAL_ID even after the digits were correctly ranked.
+        # Zones are per entity type. A failed checksum means "these digits are
+        # not a valid X" — that is evidence against X, not against the span.
+        # Demoting every type at once meant Sweden's own personnummer checksum
+        # failing on 0708787668 demoted the Swedish *phone* candidate for the
+        # same digits, handing the span to a Danish CPR that happened to
+        # validate. Worth 878 mistyped phone numbers on 30,000 documents.
+        by_type: dict[object, list[tuple[int, int]]] = {}
+        for start, end, cc, etype in failed_spans:
+            if not country_scores or cc in ("SHARED", "CUSTOM") or cc in country_scores:
+                by_type.setdefault(etype, []).append((start, end))
+
+        # Merge overlapping zones per type and index them for O(log n)
+        # containment checks instead of O(n) per match.
+        zones: dict[object, tuple[list[int], list[int]]] = {}
+        for etype, spans in by_type.items():
+            spans.sort()
+            starts: list[int] = []
+            ends: list[int] = []
+            ms, me = spans[0]
+            for zs, ze in spans[1:]:
                 if zs <= me:
                     me = max(me, ze)
                 else:
-                    zone_starts.append(ms)
-                    zone_ends.append(me)
+                    starts.append(ms)
+                    ends.append(me)
                     ms, me = zs, ze
-            zone_starts.append(ms)
-            zone_ends.append(me)
+            starts.append(ms)
+            ends.append(me)
+            zones[etype] = (starts, ends)
 
         # Pass 2b: build candidates with priority.
         # Priority: validated (3) > custom (2) > regex-only (1)
@@ -177,7 +274,7 @@ class RuleEngine:
         # (priority, in_scope, start, end, match, prebuilt). in_scope ranks
         # candidates within a priority tier; it never removes any.
         candidates: list[
-            tuple[int, int, int, int, RawMatch | None, Detection | None]
+            tuple[int, float, int, int, int, RawMatch | None, Detection | None]
         ] = []
         for match, has_valid_validator in validated:
             # A validator-less match inside a failed-validation span used to be
@@ -192,14 +289,38 @@ class RuleEngine:
             # Demotion cannot silence a detection, which is the property that
             # deletion lacked.
             demoted = False
-            if match.pattern_def.validator is None and zone_starts:
-                idx = bisect.bisect_right(zone_starts, match.start) - 1
-                demoted = idx >= 0 and zone_ends[idx] >= match.end
+            if match.pattern_def.validator is None:
+                zone = zones.get(match.pattern_def.entity_type)
+                if zone is not None:
+                    zone_starts, zone_ends = zone
+                    idx = bisect.bisect_right(zone_starts, match.start) - 1
+                    demoted = idx >= 0 and zone_ends[idx] >= match.end
 
             if demoted:
                 priority = -1
             elif has_valid_validator:
-                priority = 3
+                # A passing checksum normally outranks everything. But a
+                # checksum only says the digits fit *some* national scheme, and
+                # weak ones fit by luck — a mod-11 scheme accepts a random
+                # number about one time in eleven. So a validated candidate
+                # from a country the document shows no trace of is treated as
+                # coincidence, not evidence.
+                #
+                # Concretely: the Dutch phone number 0612345678 also passes the
+                # Danish CPR checksum. Without this, it is reported as a Danish
+                # NATIONAL_ID in a document that is otherwise unmistakably
+                # Dutch — measured at 306 phone numbers lost and 312 spurious
+                # national IDs on 3,000 documents.
+                #
+                # Entities that carry their own country vouch for themselves:
+                # an IBAN emits evidence for its own country, so a foreign IBAN
+                # in a domestic invoice keeps its rank.
+                vouched = (
+                    not country_scores
+                    or match.country_code in ("SHARED", "CUSTOM")
+                    or match.country_code in country_scores
+                )
+                priority = 3 if vouched else 1
             elif match.country_code == "CUSTOM":
                 priority = 2
             elif match.pattern_def.entity_type == EntityType.POSTAL_CODE:
@@ -212,27 +333,40 @@ class RuleEngine:
                 priority = 1
 
             in_scope = 1 if (declared is None or match.country_code in declared) else 0
+            country_score = country_scores.get(match.country_code, 0.0)
             candidates.append(
-                (priority, in_scope, match.start, match.end, match, None)
+                (priority, country_score, in_scope,
+                 match.start, match.end, match, None)
             )
 
         # Structural detectors (JSON field names, CSV headers). These arrive as
         # finished Detections, carry no RawMatch, and are not suppressed.
         for d in detect_structural_dob(text):
-            candidates.append((1, 1, d.start, d.end, None, d))
+            candidates.append((1, 0.0, 1, d.start, d.end, None, d))
 
         # Deduplicate: validated > custom > regex-only, then longer wins
         detections = self._deduplicate(text, candidates, declared)
 
         # Sort by position
         detections.sort(key=lambda d: (d.start, -d.end))
-        return detections
+
+        # Attach the confidence behind each country attribution, so a caller
+        # can tell "Danish, and the document is plainly Danish" from "Danish,
+        # on a checksum alone".
+        ranking = evidence_mod.weights_to_ranking(country_scores)
+        if ranking:
+            detections = [
+                replace(d, country_confidence=ranking[d.country])
+                if d.country in ranking else d
+                for d in detections
+            ]
+        return detections, country_evidence, country_scores
 
     @staticmethod
     def _deduplicate(
         text: str,
         candidates: list[
-            tuple[int, int, int, int, RawMatch | None, Detection | None]
+            tuple[int, float, int, int, int, RawMatch | None, Detection | None]
         ],
         declared: set[str] | None = None,
     ) -> list[Detection]:
@@ -264,14 +398,14 @@ class RuleEngine:
             # characters of "06 12 34 56 78" and leaves three digits exposed.
             # Scope only breaks ties between candidates of equal length, so it
             # can change WHICH country is attributed, never WHAT is masked.
-            key=lambda c: (c[0], c[3] - c[2], c[1]),
+            key=lambda c: (c[0], c[4] - c[3], c[1], c[2]),
             reverse=True,
         )
         result: list[Detection] = []
         occupied: set[int] = set()
         span_verdicts: dict[tuple[object, int, int], bool] = {}
 
-        for _priority, in_scope, start, end, match, prebuilt in sorted_cands:
+        for _priority, _score, in_scope, start, end, match, prebuilt in sorted_cands:
             if any(p in occupied for p in range(start, end)):
                 continue
 

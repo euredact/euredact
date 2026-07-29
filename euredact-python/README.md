@@ -42,16 +42,20 @@ print(result.detections)
 - **Checksum validation:** IBAN mod-97, Luhn (credit cards), and 30+ country-specific
   national ID checksums (e.g., Dutch BSN 11-proof, Belgian national number modulo)
 - **Priority-aware deduplication:** when matches overlap, validated patterns
-  (with passing checksums) win over custom patterns, which win over regex-only
-  patterns; suppression zones prevent false positives from claiming spans that
-  belong to a recognized-but-invalid pattern (e.g., license plate fragments
-  inside an invalid IBAN)
+  (with passing checksums, corroborated by the document's country) win over
+  custom patterns, which win over regex-only patterns; a failed checksum demotes
+  same-type matches rather than deleting them, so it can never silence a
+  detection
 - **Two-pass detection:** liberal regex matching followed by suppression filters
   that eliminate false positives
 - **Context-aware:** keyword proximity checks and structural detection (JSON field
   names, CSV headers) for ambiguous patterns like dates of birth
-- **Fast:** sub-millisecond per page, approximately 2,000 records/second
-- **Zero required dependencies** (`pyahocorasick` optional for acceleration)
+- **Country self-detection:** infers a document's countries from the entities
+  that carry one, so an ambiguous value resolves without the caller naming a
+  country — and `countries=` never gates what is looked for
+- **Fast:** ~0.5 ms for a short record, ~5 ms for a 3,400-character document
+  with `[fast]` installed (see [Performance](#performance))
+- **Zero required dependencies** (`pip install euredact[fast]` adds optional acceleration)
 - **Thread-safe,** immutable `Detection` objects (frozen dataclasses)
 
 ### Supported Countries
@@ -209,6 +213,12 @@ class RedactResult:
     detections: list[Detection] # All PII spans found
     source: str = "rules"       # Detection backend ("rules")
     degraded: bool = False      # True if the engine fell back to a simpler mode
+
+    # Country inference — see "Country-independent detection"
+    inferred_countries: tuple[tuple[str, float], ...] = ()  # (country, confidence), strongest first
+    evidence: tuple[CountryEvidence, ...] = ()              # every signal, with the span behind it
+    detection_mode: str = "declared"                        # "declared" if countries= was passed,
+                                                            # "inferred" otherwise
 ```
 
 #### `Detection`
@@ -225,6 +235,10 @@ class Detection:
     source: DetectionSource        # "rules" or "cloud"
     country: str | None            # ISO code of the matched country, or None for shared/custom patterns
     confidence: str = "high"       # Confidence level
+    country_confidence: float = 0.0  # How strongly the document supports `country`, in [0, 1].
+                                     # 0.0 means the attribution rests on a checksum alone.
+    out_of_scope: bool = False       # True when attributed outside the declared `countries`.
+                                     # Flagged, never dropped.
 ```
 
 #### `EntityType`
@@ -275,29 +289,85 @@ unredacted PII in the output.
 
 ## Country-independent detection
 
-`countries=[...]` narrows which country-specific patterns run. It does **not**
-gate identifiers that carry their own evidence:
+**`countries=[...]` never gates detection.** Every pattern runs on every
+document, whatever you pass. The country you declare decides *how a match is
+labelled*, never *whether it is found*.
 
-| Type | Why it ignores `countries` |
-|---|---|
-| `BANK_ACCOUNT` (IBAN) | carries an ISO 3166 country code and a mod-97 checksum |
-| `PHONE` (with `+` prefix) | an E.164 country prefix is self-identifying |
-| `EMAIL`, `CREDIT_CARD`, `VIN`, `IMEI`, `IP_ADDRESS`, `UUID`, `SECRET` | no national form to gate on |
+This is the engine's central invariant, enforced by
+`tests/test_invariant_generation.py`: no value of `countries=` may change which
+spans are detected. A wrong or missing country cannot cause a miss — silent
+recall loss is invisible in testing and surfaces in a breach report, whereas a
+false positive is recoverable.
+
+It was not always so. `countries=["BE"]` used to make a valid Dutch BSN vanish
+entirely, because the Dutch patterns were never run:
+
+```python
+euredact.redact("Werknemer met BSN 111222333", countries=["BE"])
+# before: 'Werknemer met BSN 111222333'   <- leaked
+# now:    'Werknemer met BSN [NATIONAL_ID]'
+```
+
+Entities found outside the countries you declared are **flagged, not dropped**:
+
+```python
+det = euredact.redact("BSN 111222333", countries=["BE"]).detections[0]
+det.out_of_scope   # True — detected, masked, and marked as outside your scope
+```
 
 So a Belgian IBAN in a document processed with `countries=["AT"]` is still
-detected — cross-border traffic (a foreign invoice in a local file, an
-employee paid to a foreign account) does not leak:
+detected — cross-border traffic (a foreign invoice in a local file, an employee
+paid to a foreign account) does not leak:
 
 ```python
 euredact.redact("Rekening: BE68 5390 0754 7034", countries=["AT"])
 # -> 'Rekening: [BANK_ACCOUNT]'
 ```
 
+### Which country a value belongs to
+
+Because every pattern runs, the same digits often match several countries'
+schemes. 36.6% of national-ID values in our corpus validate under more than one
+country's checksum, so the digits alone cannot decide it — the *document* does.
+
+The engine infers the document's countries from entities that carry their
+country in the string, then uses that to resolve the ambiguity:
+
+```python
+r = euredact.redact("Bereikbaar op telefoon 0612345678, mail jan@test.nl")
+r.inferred_countries          # (('NL', 0.98),)
+r.detections[0].entity_type   # PHONE
+
+r = euredact.redact("Kontakt: 0612345678, e-mail jens@test.dk")
+r.inferred_countries          # (('DK', 0.98),)
+r.detections[0].entity_type   # NATIONAL_ID
+```
+
+Identical digits, different answer — `0612345678` is both a valid Dutch mobile
+number and a valid Danish CPR. Only the surrounding document distinguishes them.
+
+Every inference is auditable: `result.evidence` lists each signal, its weight,
+and the span that produced it.
+
+| Signal | Weight (log-odds) | Measured reliability |
+|---|---:|---|
+| `e164_prefix` | 4.00 (capped) | 41,402 / 41,402 |
+| `bic_country` | 4.00 (capped) | 2,588 / 2,588 |
+| `email_tld` | 4.00 (capped) | 97,865 / 98,949 |
+| `vat_prefix` | 2.84 | 19,022 / 20,136 |
+| `iban_prefix` | 1.94 | 110,572 / 126,428 |
+
+Weights are derived from the corpus, not chosen by hand. The IBAN prefix being
+weakest is real and worth knowing: a Belgian IBAN in a Dutch invoice is
+ordinary, so an account's country is only weak evidence about the document's.
+
+Confidences are per-country and do **not** sum to 1 — document countries are
+not mutually exclusive. A Belgian supplier invoicing a German customer is
+genuinely both.
+
 International phone numbers are matched by a generic E.164 pattern (`+`
 followed by 8-15 digits, any grouping or separators, including `(0)` trunk
-prefixes) that runs alongside the per-country patterns. National-format numbers
-without a `+` prefix still require the relevant country to be requested, since
-`0664 8213907` is only recognisable as Austrian in context.
+prefixes) that runs alongside the per-country patterns.
 
 ## BIC detection
 
@@ -464,23 +534,78 @@ print(result.redacted_text)
 
 ## Country Hints
 
-When you know which countries appear in your data, pass them explicitly:
+Two arguments tell the engine about country, and neither restricts what is
+looked for:
+
+| Argument | Meaning |
+|---|---|
+| `countries=[...]` | **Scope.** Resolves ambiguity, and flags anything attributed elsewhere as `out_of_scope`. |
+| `country_hint=[...]` | **Prior only.** Resolves ambiguity without narrowing scope or flagging anything. |
 
 ```python
-result = euredact.redact(text, countries=["NL", "BE"])
+# You know this batch is Swedish, but do not want foreign PII marked out of scope:
+euredact.redact(text, country_hint=["SE"])
+
+# You want anything non-Swedish flagged for review:
+euredact.redact(text, countries=["SE"])
 ```
 
-This restricts pattern matching to Dutch and Belgian rules (plus shared patterns
-like IBAN, email, credit card, and secrets). Benefits:
+Declaring a country helps where a value is genuinely ambiguous and the document
+carries no other signal:
 
-- **Fewer false positives.** A 9-digit number that passes the Dutch BSN checksum
-  will not also be tested against unrelated country patterns.
-- **Faster.** Fewer patterns to compile and scan.
+```python
+euredact.redact("Telefon: 0708787668", country_hint=["SE"]).detections[0]
+# PHONE / SE  — without the hint this is a valid Danish CPR and nothing says otherwise
+```
 
-Custom patterns are always active regardless of the `countries` parameter.
+`result.detection_mode` reports which happened: `"declared"` if you passed
+`countries=`, `"inferred"` otherwise.
 
-When `countries=None` (the default), all 31 country rule sets are loaded. This is
-the safest option when processing mixed-origin data.
+Custom patterns are always active regardless of either parameter.
+
+Passing neither is safe, and is the right default for mixed-origin data: the
+engine infers what it can and reports it in `result.inferred_countries`. On our
+152,300-document corpus, blind detection scores 98.3% precision against 98.6%
+with country hints — a 0.3-point gap, down from 3.4 points before inference.
+
+## Chunked documents
+
+A long document is usually redacted in pieces. Each piece is scanned
+independently, so each infers its own country — and a chunk that happens to
+contain no IBAN, no `+CC` number and no ccTLD infers nothing at all, even when
+page 1 identified the document beyond doubt:
+
+```python
+euredact.redact("Telefoon 0612345678")
+# -> NATIONAL_ID (DK)   <- a valid Danish CPR, and nothing here says otherwise
+```
+
+Pass a `DocumentContext` to carry evidence forward across chunks:
+
+```python
+from euredact import DocumentContext
+
+ctx = DocumentContext()
+offset = 0
+for page in pages:
+    result = euredact.redact(page, context=ctx, chunk_offset=offset)
+    offset += len(page)
+
+# page 1: "Factuur — IBAN NL91ABNA0417164300, info@jansen.nl"
+# page 7: "Telefoon 0612345678"  -> PHONE (NL)
+```
+
+`chunk_offset` rebases spans recorded in the context so they point into the
+whole document. Returned detections stay relative to the chunk you passed in.
+
+A context is thread-safe — `aredact_batch` fans chunks across a thread pool.
+Caching is disabled automatically while one is in use, because the result then
+depends on evidence the text alone does not determine.
+
+Reuse a context only for chunks of the **same** document. Sharing one across
+unrelated documents mixes their countries together. That cannot hide anything
+— the invariant still holds — but it will attribute values to the wrong
+national scheme.
 
 ## Referential Integrity
 
@@ -513,13 +638,17 @@ Input text
     |                          via MultiPatternMatcher (Aho-Corasick optional)
     v
 [Pass 2a: Validation] -- Checksum validators (mod-97, Luhn, entropy, ...)
-    |                     Failed-validation spans become suppression zones
+    |                     Failed spans are recorded, per entity type
+    v
+[Evidence]     -- Which countries does this document belong to? From IBAN
+    |              prefixes, +CC codes, VAT prefixes, BIC, email ccTLDs
     v
 [Pass 2b: Suppression] -- Remove false positives (currency amounts, units,
-    |                      references, overlapping matches in suppression zones)
+    |                      references). Failed checksums demote same-type
+    |                      matches rather than deleting them
     v
-[Deduplication] -- Priority-aware: validated > custom > regex-only
-    |               Within same tier, longer span wins
+[Deduplication] -- Priority-aware, country-evidence-weighted
+    |               Longer span outranks declared country
     v
 [Replacement] -- Right-to-left substitution with [ENTITY_TYPE] labels
     |               or labels
@@ -548,12 +677,33 @@ correctly not reporting an invalid IBAN.
 When multiple patterns match overlapping spans, the engine resolves conflicts
 using a priority system:
 
-1. **Validated patterns** (has a checksum validator that passes) -- highest priority
-2. **Custom patterns** (registered via `add_custom_pattern()`)
-3. **Regex-only patterns** (built-in patterns without a validator) -- lowest priority
+| Tier | What |
+|---:|---|
+| 3 | **Validated** — a checksum validator passes *and* the document corroborates its country |
+| 2 | **Custom patterns** registered via `add_custom_pattern()` |
+| 1 | **Regex-only**, and validated patterns whose country the document does not corroborate |
+| 0 | **Postal codes** — a bare digit run, the weakest evidence in the engine |
+| -1 | **Demoted** — a validator-less match inside a failed checksum of *its own type* |
 
-Within the same priority tier, the longer span wins. This ensures that a valid
-IBAN always beats a coincidental phone number match on the same text.
+Within a tier, ranking is: longer span, then stronger country evidence, then
+whether the country was declared. **Span length outranks country** deliberately:
+preferring the declared country over the longest match truncates entities — with
+`countries=["BE"]` the Belgian phone pattern claimed 11 of the 14 characters of
+`06 12 34 56 78` and left three digits exposed. Country can change *which*
+country is attributed, never *what* is masked.
+
+Two tiers are less obvious than they look:
+
+- **A passing checksum does not automatically win.** A weak checksum fits by
+  luck — a mod-11 scheme accepts a random number about one time in eleven — so a
+  validated candidate from a country the document shows no trace of drops to
+  tier 1. Entities that carry their own country vouch for themselves (an IBAN
+  emits evidence for its own country), so a foreign IBAN in a domestic invoice
+  keeps tier 3.
+- **Nothing is deleted for failing a checksum.** A failed checksum demotes
+  rather than removes, and only candidates of *the same entity type*: it is
+  evidence against that type, not against the span. Deleting instead removed 454
+  detections across the corpus, of which 454 overlapped real labelled PII.
 
 ## Adding a New Country
 
@@ -598,15 +748,44 @@ Each `PatternDef` can specify:
 
 ## Performance
 
-| Metric | Value |
-|---|---|
-| Latency per page (~500 words) | < 1 ms |
-| Throughput | ~2,000 records/second |
-| Memory per country | ~50 KB compiled patterns |
+Measured on one core, all 31 countries loaded, `detect_dates=True`. Cost scales
+with document length, so the input size is stated rather than averaged away.
 
-The optional `pyahocorasick` dependency replaces the regex scan with an
-Aho-Corasick automaton for keyword-heavy workloads, improving throughput on
-large batches.
+| Input | Base | With `[fast]` |
+|---|---:|---:|
+| Short record (186 chars) | 723 µs — 1,383/s | **496 µs — 2,017/s** |
+| Real document (3,424 chars) | 10.4 ms — 96/s | **5.4 ms — 187/s** |
+| Memory per country | ~50 KB compiled patterns | |
+
+```bash
+pip install euredact[fast]
+```
+
+The `fast` extra installs two optional accelerators. Neither changes what is
+detected — both are covered by `tests/test_scan_path_parity.py`, which runs
+every available scan path against the plain-Python one and requires them to
+agree:
+
+- **`google-re2`** builds a prefilter over every pattern it can express (334 of
+  345). One DFA pass per 1 KB window reports which patterns match anywhere in
+  it — typically 42 of 314 for a real document — and only those are then run.
+  Patterns RE2 cannot express, such as the lookbehind-based `SECRET` rules,
+  always run.
+
+  Asking the question per window matters: over a long document nearly every
+  pattern matches *somewhere*, so a whole-document prefilter stops filtering
+  (2.48× on a short record, decaying to 1.11× at 12 KB).
+
+- **`pyahocorasick`** indexes patterns that begin with a literal and runs them
+  only near a prefix hit. Used when `google-re2` is unavailable.
+
+Detection cost is dominated by how much prose surrounds the PII, not by
+document size alone: the same engine runs 1.4× faster on dense records and
+~3× faster on prose-heavy documents where whole windows can be skipped.
+
+The TypeScript SDK needs no such extra — V8's regex engine has literal
+prefilters CPython lacks, and measured on the same documents it runs roughly 3×
+faster than the accelerated Python path.
 
 ## License
 

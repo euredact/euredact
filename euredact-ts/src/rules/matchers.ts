@@ -34,6 +34,16 @@ export class MultiPatternMatcher {
     this.compiled = true;
   }
 
+  /**
+   * Scan text against patterns.
+   *
+   * `countryCodes` restricts which patterns run. **The engine never passes
+   * it.** Generation is country-blind by contract — see
+   * `RuleEngine.generateCandidates` and `src/__tests__/inference.ts` — because
+   * gating generation on the caller's declared country caused silent misses.
+   * The parameter is kept for a future opt-in fast mode, which would be the
+   * only caller permitted to trade recall for speed.
+   */
   scan(text: string, countryCodes: Set<string> | null = null): RawMatch[] {
     if (!this.compiled) this.compile();
     const matches: RawMatch[] = [];

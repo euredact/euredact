@@ -92,13 +92,18 @@ def test_no_country_argument_changes_which_spans_are_found(sdk, text, recwarn):
     caller's declared countries — those are scoring outputs. Which characters
     get masked may not.
     """
-    def spans(countries):
-        result = sdk.redact(text, countries=countries, detect_dates=True, cache=False)
+    def spans(**kw):
+        result = sdk.redact(text, detect_dates=True, cache=False, **kw)
         return {(d.start, d.end) for d in result.detections}
 
-    baseline = spans(None)
+    baseline = spans()
     for arg in COUNTRY_ARGS:
-        assert spans(arg) == baseline, f"countries={arg!r} changed the spans found"
+        assert spans(countries=arg) == baseline, \
+            f"countries={arg!r} changed the spans found"
+        assert spans(country_hint=arg) == baseline, \
+            f"country_hint={arg!r} changed the spans found"
+        assert spans(countries=arg, country_hint=arg) == baseline, \
+            f"countries+country_hint={arg!r} changed the spans found"
 
 
 # ── C: the reported defect, as a named regression ───────────────────────
