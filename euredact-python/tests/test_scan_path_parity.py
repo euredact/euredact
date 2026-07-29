@@ -4,8 +4,8 @@
 silently changed detection: prefix-indexed patterns are only run over a bounded
 window after their prefix hit, so any pattern that can match further than that
 window was truncated. The PEM private-key pattern matches up to 16 KB, so
-`pip install euredact[fast]` stopped redacting private keys — the block was left
-in the output.
+`pip install euredact[fast]` stopped redacting private keys — the block was
+left in the output.
 
 These tests run BOTH paths in one process and compare, so the two can never
 diverge again regardless of which extras are installed.
@@ -14,7 +14,11 @@ diverge again regardless of which extras are installed.
 import pytest
 
 import euredact.rules.matchers as matchers
-from euredact.rules.matchers import _AC_WINDOW, _extract_literal_prefix, _max_match_width
+from euredact.rules.matchers import (
+    _AC_WINDOW,
+    _extract_literal_prefix,
+    _max_match_width,
+)
 from euredact.rules.registry import CountryRegistry
 from euredact.sdk import EuRedact
 from euredact.types import EntityType
@@ -38,18 +42,24 @@ def _detect(text, use_ac):
     original = matchers._HAS_AC
     matchers._HAS_AC = use_ac
     try:
-        result = EuRedact().redact(text, countries=["NL"], detect_dates=True, cache=False)
+        result = EuRedact().redact(
+            text, countries=["NL"], detect_dates=True, cache=False
+        )
         return sorted((d.start, d.end, d.entity_type.value) for d in result.detections)
     finally:
         matchers._HAS_AC = original
 
 
-@pytest.mark.parametrize("text", PARITY_DOCS, ids=[f"doc{i}" for i in range(len(PARITY_DOCS))])
+@pytest.mark.parametrize(
+    "text", PARITY_DOCS, ids=[f"doc{i}" for i in range(len(PARITY_DOCS))]
+)
 def test_scan_paths_agree(text):
     assert _detect(text, use_ac=True) == _detect(text, use_ac=False)
 
 
-@pytest.mark.parametrize("use_ac", [True, False], ids=["aho-corasick", "sequential"])
+@pytest.mark.parametrize(
+    "use_ac", [True, False], ids=["aho-corasick", "sequential"]
+)
 def test_pem_private_key_is_redacted_on_both_paths(use_ac):
     """The regression that motivated this file: the key must not survive."""
     original = matchers._HAS_AC
@@ -81,7 +91,8 @@ def test_no_prefix_indexed_pattern_can_outrun_the_window():
     for group in matcher._ac_patterns:
         for _compiled, pdef, code in group:
             assert _max_match_width(pdef.pattern) <= _AC_WINDOW, (
-                f"{code} pattern can match beyond the AC window: {pdef.description or pdef.pattern}"
+                f"{code} pattern can match beyond the AC window: "
+                f"{pdef.description or pdef.pattern}"
             )
 
 
@@ -97,9 +108,12 @@ def test_unbounded_patterns_are_routed_to_full_scan():
         pytest.skip("pyahocorasick not installed")
     routed = [
         pdef for _c, pdef, _code in matcher._no_prefix
-        if _extract_literal_prefix(pdef.pattern) and _max_match_width(pdef.pattern) > _AC_WINDOW
+        if _extract_literal_prefix(pdef.pattern)
+        and _max_match_width(pdef.pattern) > _AC_WINDOW
     ]
-    assert routed, "expected the unbounded SECRET patterns to be routed off the AC path"
+    assert routed, (
+        "expected the unbounded SECRET patterns to be routed off the AC path"
+    )
     # The pattern spells it "PRIVATE\\sKEY", so match on the unescaped stem.
     assert any("PRIVATE" in p.pattern for p in routed), (
         f"PEM pattern not routed off the AC path; routed: "

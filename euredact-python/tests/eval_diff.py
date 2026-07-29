@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import eval_full  # noqa: E402  - reuse its DATASETS glob and hint semantics
+
 from euredact.rules.registry import CountryRegistry  # noqa: E402
 from euredact.sdk import EuRedact  # noqa: E402
 
@@ -87,10 +88,8 @@ def record(out_path: Path, limit: int | None, seed: int) -> None:
     with out_path.open("w", encoding="utf-8") as fh:
         for i, item in enumerate(docs):
             text = item["source_text"]
-            countries = [
-                c for c in {p["PII_country"] for p in item["PII"] if p.get("PII_country")}
-                if c in KNOWN
-            ]
+            labelled = {p["PII_country"] for p in item["PII"] if p.get("PII_country")}
+            countries = [c for c in labelled if c in KNOWN]
             row: dict = {"i": i, "zones": _zone_digest(sdk._engine, text)}
             for label, arg in (("hinted", countries or None), ("blind", None)):
                 dets = sdk.redact(
@@ -142,7 +141,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--baseline", type=Path, help="record detections to this file")
     ap.add_argument("--compare", type=Path, nargs=2, metavar=("A", "B"))
-    ap.add_argument("--limit", type=int, default=8000, help="documents to sample (0 = all)")
+    ap.add_argument(
+        "--limit", type=int, default=8000, help="documents to sample (0 = all)"
+    )
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--show", type=int, default=5, help="differing records to print")
     args = ap.parse_args()
