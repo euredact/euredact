@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Iterator
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 from euredact.rules.bic_registry import set_bic_registry
 from euredact.rules.context import DocumentContext
