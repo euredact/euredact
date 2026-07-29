@@ -10,7 +10,7 @@ from euredact.rules.countries._base import PatternDef
 from euredact.rules.matchers import MultiPatternMatcher, RawMatch
 from euredact.rules.registry import CountryRegistry
 from euredact.rules.structural import detect_structural_dob
-from euredact.rules.suppressors import should_suppress
+from euredact.rules.suppressors import should_suppress_claim, should_suppress_span
 from euredact.types import Detection, DetectionSource, EntityType
 
 # Heuristic to detect nested quantifiers that cause catastrophic backtracking.
@@ -133,12 +133,23 @@ class RuleEngine:
             zone_starts.append(ms)
             zone_ends.append(me)
 
-        # Pass 2b: suppression filters + build candidates with priority
+        # Pass 2b: build candidates with priority.
         # Priority: validated (3) > custom (2) > regex-only (1)
-        candidates: list[tuple[Detection, int]] = []
+        #
+        # Suppression is deliberately NOT run here. Most candidates lose their
+        # span in deduplication, and suppressing a candidate that was going to
+        # lose is wasted work — suppression was measured at ~65% of detect().
+        # It runs inside _deduplicate instead, on the candidates that actually
+        # win. This is equivalent because suppression depends only on the
+        # document and the match, never on the other candidates: a suppressed
+        # candidate is skipped without claiming its span, exactly as if it had
+        # been filtered out here.
+        # A candidate is (priority, start, end, match, prebuilt). Detection
+        # objects are built only for candidates that survive deduplication and
+        # suppression — most candidates lose their span, and allocating a
+        # frozen dataclass for each one is pure waste.
+        candidates: list[tuple[int, int, int, RawMatch | None, Detection | None]] = []
         for match, has_valid_validator in validated:
-            if should_suppress(text, match):
-                continue
             # Matches without a validator that are fully contained in a
             # failed-validation zone are false positives (e.g. license plate
             # inside an invalid IBAN).  O(log n) binary search on merged zones.
@@ -160,25 +171,15 @@ class RuleEngine:
             else:
                 priority = 1
 
-            candidates.append((
-                Detection(
-                    entity_type=match.pattern_def.entity_type,
-                    start=match.start,
-                    end=match.end,
-                    text=match.text,
-                    source=DetectionSource.RULES,
-                    country=match.country_code if match.country_code not in ("SHARED", "CUSTOM") else None,
-                    confidence="high",
-                ),
-                priority,
-            ))
+            candidates.append((priority, match.start, match.end, match, None))
 
-        # Structural detectors (JSON field names, CSV headers)
+        # Structural detectors (JSON field names, CSV headers). These arrive as
+        # finished Detections, carry no RawMatch, and are not suppressed.
         for d in detect_structural_dob(text):
-            candidates.append((d, 1))
+            candidates.append((1, d.start, d.end, None, d))
 
         # Deduplicate: validated > custom > regex-only, then longer wins
-        detections = self._deduplicate(candidates)
+        detections = self._deduplicate(text, candidates)
 
         # Sort by position
         detections.sort(key=lambda d: (d.start, -d.end))
@@ -186,32 +187,69 @@ class RuleEngine:
 
     @staticmethod
     def _deduplicate(
-        candidates: list[tuple[Detection, int]],
+        text: str,
+        candidates: list[tuple[int, int, int, RawMatch | None, Detection | None]],
     ) -> list[Detection]:
-        """Remove overlapping detections with priority-aware resolution.
+        """Resolve overlapping candidates, suppressing only those that win.
 
-        Priority: validated patterns (3) > custom patterns (2) > regex-only (1).
-        Within the same tier, longer span wins.
+        Priority: validated patterns (3) > custom patterns (2) > regex-only (1)
+        > postal codes (0). Within a tier, longer span wins.
 
-        Uses a position set for O(n * span_length) overlap checks instead
-        of O(n * k) pairwise comparisons against all kept results.
+        Suppression runs here rather than before the sort, so a candidate that
+        was going to lose its span never pays for it. A suppressed candidate is
+        skipped *without* claiming its span, which is what makes this equivalent
+        to filtering beforehand.
+
+        The span-pure half of suppression is memoised on
+        ``(entity_type, start, end)``: many countries' patterns claim the same
+        span, and those suppressors cannot tell them apart. The claim-sensitive
+        half runs per candidate.
         """
         if not candidates:
             return []
 
-        # Sort by (priority, span_length) descending
+        # Sort by (priority, span_length) descending. Stable, so ties fall back
+        # to pattern registration order, as before.
         sorted_cands = sorted(
             candidates,
-            key=lambda c: (c[1], c[0].end - c[0].start),
+            key=lambda c: (c[0], c[2] - c[1]),
             reverse=True,
         )
         result: list[Detection] = []
         occupied: set[int] = set()
-        for det, _priority in sorted_cands:
-            if any(p in occupied for p in range(det.start, det.end)):
+        span_verdicts: dict[tuple[object, int, int], bool] = {}
+
+        for _priority, start, end, match, prebuilt in sorted_cands:
+            if any(p in occupied for p in range(start, end)):
                 continue
-            occupied.update(range(det.start, det.end))
-            result.append(det)
+
+            if match is not None:
+                key = (match.pattern_def.entity_type, start, end)
+                verdict = span_verdicts.get(key)
+                if verdict is None:
+                    verdict = should_suppress_span(text, match)
+                    span_verdicts[key] = verdict
+                if verdict or should_suppress_claim(text, match):
+                    continue
+                detection = Detection(
+                    entity_type=match.pattern_def.entity_type,
+                    start=start,
+                    end=end,
+                    text=match.text,
+                    source=DetectionSource.RULES,
+                    country=(
+                        match.country_code
+                        if match.country_code not in ("SHARED", "CUSTOM")
+                        else None
+                    ),
+                    confidence="high",
+                )
+            else:
+                assert prebuilt is not None
+                detection = prebuilt
+
+            occupied.update(range(start, end))
+            result.append(detection)
         return result
 
     @property

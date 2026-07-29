@@ -785,23 +785,59 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
 }
 
 
-def should_suppress(text: str, match: RawMatch) -> bool:
-    """Run applicable suppression filters. Returns True if match should be discarded."""
-    # Universal suppressors (all types)
+# ── Span-pure vs claim-sensitive ────────────────────────────────────────
+#
+# Most suppressors read only the document and the matched span: same span, same
+# entity type, same answer — regardless of which country's pattern produced the
+# match. Those results can be reused across the many patterns that claim the
+# same span (measured: 48.3 surviving matches collapse to 15.0 distinct
+# (span, type) pairs, and 6.2x for POSTAL_CODE alone).
+#
+# These three are the exceptions, because they read the *claim* rather than the
+# span. They must run per match and must never be memoised on span alone.
+_CLAIM_SENSITIVE: frozenset[Callable[..., bool]] = frozenset({
+    suppress_de_plate_unknown_district,  # reads match.country_code
+    suppress_se_natid_as_org,            # reads match.country_code
+    suppress_requires_context,           # reads requires_context / context_keywords
+})
+
+# Derived from _TYPE_SUPPRESSORS rather than restated, so a suppressor added to
+# the table above cannot be forgotten here.
+_SPAN_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
+    etype: [s for s in sups if s not in _CLAIM_SENSITIVE]
+    for etype, sups in _TYPE_SUPPRESSORS.items()
+}
+_CLAIM_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
+    etype: [s for s in sups if s in _CLAIM_SENSITIVE]
+    for etype, sups in _TYPE_SUPPRESSORS.items()
+}
+
+
+def should_suppress_span(text: str, match: RawMatch) -> bool:
+    """Suppressors whose answer depends only on the document and the span.
+
+    The result is a pure function of ``(entity_type, start, end)`` for a given
+    document, so callers may cache it across matches sharing a span.
+    """
     for s in _UNIVERSAL:
         if s(text, match):
             return True
+    for s in _SPAN_SUPPRESSORS.get(match.pattern_def.entity_type, ()):
+        if s(text, match):
+            return True
+    return False
 
-    # Type-specific suppressors
-    etype = match.pattern_def.entity_type
-    type_suppressors = _TYPE_SUPPRESSORS.get(etype)
-    if type_suppressors:
-        for s in type_suppressors:
-            if s(text, match):
-                return True
 
-    # Context-keyword check (applies to any type with requires_context)
+def should_suppress_claim(text: str, match: RawMatch) -> bool:
+    """Suppressors that read the claim — its country, or its context keywords."""
+    for s in _CLAIM_SUPPRESSORS.get(match.pattern_def.entity_type, ()):
+        if s(text, match):
+            return True
     if match.pattern_def.requires_context:
         return suppress_requires_context(text, match)
-
     return False
+
+
+def should_suppress(text: str, match: RawMatch) -> bool:
+    """Run applicable suppression filters. Returns True if match should be discarded."""
+    return should_suppress_span(text, match) or should_suppress_claim(text, match)
