@@ -84,6 +84,13 @@ class Detection:
     source: DetectionSource
     country: str | None
     confidence: str = "high"
+    out_of_scope: bool = False
+    """True when attributed to a country the caller did not declare.
+
+    ``countries=`` narrows *scoring*, never detection. An entity from outside
+    the declared set is emitted and flagged, not dropped: callers assert
+    context, they do not suppress evidence.
+    """
 
 
 @dataclass

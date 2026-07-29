@@ -19,11 +19,28 @@ class TestBelgianNationalID:
         )
         assert any(d.entity_type == EntityType.NATIONAL_ID for d in result.detections)
 
-    def test_invalid_nn_not_detected(self):
+    def test_invalid_nn_not_attributed_to_belgium(self):
+        """A number failing the Belgian checksum is not a Belgian national ID.
+
+        It may still be another country's: 85041212399 fails the Belgian
+        modulus but is a valid Polish PESEL. Since generation is country-blind,
+        it is detected and flagged out-of-scope rather than dropped — masking a
+        plausible foreign national ID is the safe direction for a redaction
+        tool, and the flag tells the caller it fell outside what they declared.
+        """
         result = euredact.redact(
             "Het nummer is 85041212399.", countries=["BE"]
         )
-        assert not any(d.entity_type == EntityType.NATIONAL_ID for d in result.detections)
+        belgian = [
+            d for d in result.detections
+            if d.entity_type == EntityType.NATIONAL_ID and d.country == "BE"
+        ]
+        assert not belgian, "must not be attributed to Belgium"
+        foreign = [
+            d for d in result.detections
+            if d.entity_type == EntityType.NATIONAL_ID and d.out_of_scope
+        ]
+        assert foreign, "expected an out-of-scope national ID"
 
 
 class TestBelgianIBAN:

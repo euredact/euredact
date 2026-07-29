@@ -70,6 +70,22 @@ class CountryRegistry:
         code = COUNTRY_CODE_ALIASES.get(code, code)
         return code if code in self._available else None
 
+    def warn_unknown(self, country_code: str) -> None:
+        """Warn that *country_code* is not recognised, without raising.
+
+        Detection continues with the shared, country-independent patterns.
+        Raising would invite callers to wrap the call in ``try/except`` and skip
+        redaction entirely — failing open, with unredacted PII.
+        """
+        warnings.warn(
+            f"Unknown country code: {country_code!r}. Continuing with "
+            f"shared country-independent patterns only (email, IBAN, "
+            f"international phone, credit card, ...). "
+            f"Available: {sorted(self.available_countries)}",
+            UnknownCountryWarning,
+            stacklevel=3,
+        )
+
     def load(self, country_code: str) -> CountryConfig | None:
         """Load a country config on demand. Idempotent.
 
@@ -81,14 +97,7 @@ class CountryRegistry:
         """
         code = self.resolve(country_code)
         if code is None:
-            warnings.warn(
-                f"Unknown country code: {country_code!r}. Continuing with "
-                f"shared country-independent patterns only (email, IBAN, "
-                f"international phone, credit card, ...). "
-                f"Available: {sorted(self.available_countries)}",
-                UnknownCountryWarning,
-                stacklevel=3,
-            )
+            self.warn_unknown(country_code)
             return None
         if code not in self._configs:
             self._configs[code] = self._available[code]()

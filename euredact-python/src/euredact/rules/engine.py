@@ -84,23 +84,47 @@ class RuleEngine:
             if new_countries:
                 self._matcher.compile()
 
+    def generate_candidates(self, text: str) -> list[RawMatch]:
+        """Produce every candidate span in *text*, for every country.
+
+        The **only** call site of :meth:`MultiPatternMatcher.scan`, and it takes
+        no country argument — deliberately. Candidate generation must not depend
+        on which country the caller declared, because a wrong or absent country
+        would then cause a silent miss, and a missed entity in a redaction tool
+        is invisible in testing and surfaces in a breach report.
+
+        Country influences *scoring* — which candidate wins a contested span,
+        and how a detection is flagged — never what is looked for. See
+        ``tests/test_invariant_generation.py``, which asserts that this
+        signature has no country parameter and that the candidate set is
+        identical under every possible ``countries=`` value.
+        """
+        self.load_countries(None)
+        return self._matcher.scan(text, None)
+
     def detect(self, text: str, country_codes: list[str] | None = None) -> list[Detection]:
         """Detect PII in text using the two-pass architecture.
 
-        Pass 1: Liberal pattern matching
-        Pass 2: Suppression filters + checksum validation
+        Pass 1: Liberal pattern matching, country-blind
+        Pass 2: Suppression filters + checksum validation, country-aware scoring
         """
-        self.load_countries(country_codes)
+        raw_matches = self.generate_candidates(text)
 
-        # Pass 1: scan patterns (scoped to requested countries for efficiency).
-        # Resolve through the alias table so `countries=["GB"]` actually scans
-        # the patterns registered under "UK".
+        # The declared countries are a scoring signal from here on: they rank
+        # candidates and flag out-of-scope detections. They do not gate.
+        declared: set[str] | None = None
         if country_codes is not None:
-            resolved = {self._registry.resolve(c) for c in country_codes}
-            scan_codes = {c for c in resolved if c} | {"SHARED", "CUSTOM"}
-        else:
-            scan_codes = None
-        raw_matches = self._matcher.scan(text, scan_codes)
+            resolved = set()
+            for code in country_codes:
+                match_code = self._registry.resolve(code)
+                if match_code is None:
+                    # Generation no longer consults the registry, so warn here
+                    # instead — a caller passing an unrecognised code should
+                    # still hear about it.
+                    self._registry.warn_unknown(code)
+                else:
+                    resolved.add(match_code)
+            declared = resolved | {"SHARED", "CUSTOM"}
 
         # Pass 2a: checksum validation + collect failed-validator spans.
         #
@@ -150,7 +174,11 @@ class RuleEngine:
         # objects are built only for candidates that survive deduplication and
         # suppression — most candidates lose their span, and allocating a
         # frozen dataclass for each one is pure waste.
-        candidates: list[tuple[int, int, int, RawMatch | None, Detection | None]] = []
+        # (priority, in_scope, start, end, match, prebuilt). in_scope ranks
+        # candidates within a priority tier; it never removes any.
+        candidates: list[
+            tuple[int, int, int, int, RawMatch | None, Detection | None]
+        ] = []
         for match, has_valid_validator in validated:
             # A validator-less match inside a failed-validation span used to be
             # deleted outright. Measured across the corpus, that mechanism
@@ -183,15 +211,18 @@ class RuleEngine:
             else:
                 priority = 1
 
-            candidates.append((priority, match.start, match.end, match, None))
+            in_scope = 1 if (declared is None or match.country_code in declared) else 0
+            candidates.append(
+                (priority, in_scope, match.start, match.end, match, None)
+            )
 
         # Structural detectors (JSON field names, CSV headers). These arrive as
         # finished Detections, carry no RawMatch, and are not suppressed.
         for d in detect_structural_dob(text):
-            candidates.append((1, d.start, d.end, None, d))
+            candidates.append((1, 1, d.start, d.end, None, d))
 
         # Deduplicate: validated > custom > regex-only, then longer wins
-        detections = self._deduplicate(text, candidates)
+        detections = self._deduplicate(text, candidates, declared)
 
         # Sort by position
         detections.sort(key=lambda d: (d.start, -d.end))
@@ -200,7 +231,10 @@ class RuleEngine:
     @staticmethod
     def _deduplicate(
         text: str,
-        candidates: list[tuple[int, int, int, RawMatch | None, Detection | None]],
+        candidates: list[
+            tuple[int, int, int, int, RawMatch | None, Detection | None]
+        ],
+        declared: set[str] | None = None,
     ) -> list[Detection]:
         """Resolve overlapping candidates, suppressing only those that win.
 
@@ -224,14 +258,20 @@ class RuleEngine:
         # to pattern registration order, as before.
         sorted_cands = sorted(
             candidates,
-            key=lambda c: (c[0], c[2] - c[1]),
+            # Span length outranks scope: preferring the declared country over
+            # the longest match can truncate an entity. Measured: with
+            # countries=["BE"], the Belgian phone pattern claims 11 of the 14
+            # characters of "06 12 34 56 78" and leaves three digits exposed.
+            # Scope only breaks ties between candidates of equal length, so it
+            # can change WHICH country is attributed, never WHAT is masked.
+            key=lambda c: (c[0], c[3] - c[2], c[1]),
             reverse=True,
         )
         result: list[Detection] = []
         occupied: set[int] = set()
         span_verdicts: dict[tuple[object, int, int], bool] = {}
 
-        for _priority, start, end, match, prebuilt in sorted_cands:
+        for _priority, in_scope, start, end, match, prebuilt in sorted_cands:
             if any(p in occupied for p in range(start, end)):
                 continue
 
@@ -255,6 +295,7 @@ class RuleEngine:
                         else None
                     ),
                     confidence="high",
+                    out_of_scope=not in_scope,
                 )
             else:
                 assert prebuilt is not None
