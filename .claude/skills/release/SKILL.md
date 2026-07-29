@@ -89,9 +89,27 @@ curl -s https://registry.npmjs.org/euredact | python3 -c "import json,sys;print(
 curl -s https://pypi.org/pypi/euredact/json | python3 -c "import json,sys;print(json.load(sys.stdin)['info']['version'])"
 ```
 
-npmjs.com's **web page** lags the registry by minutes — the registry API and
-`npm view` are authoritative. A stale version on the website is not a failed
-publish.
+Both registries have a lagging surface, and both have caused a false alarm:
+
+- npmjs.com's **web page** lags the registry by minutes. The registry API and
+  `npm view` are authoritative.
+- PyPI's **JSON API** (`/pypi/euredact/json`) is cached and has reported the
+  *previous* version for minutes after a successful upload. The **simple
+  index** is fresher:
+
+  ```bash
+  curl -s https://pypi.org/simple/euredact/ | grep -o 'euredact-X\.Y\.Z[^"#]*'
+  ```
+
+A stale version on either surface is not a failed publish. Confirm against the
+publish run's job list before reacting: if `publish-python` succeeded, the
+upload happened. `skip-existing: true` means a *genuinely* stale build also
+reports success, so the version at the tag (step 4) is what rules that out.
+
+Metadata of any kind is still not the final word — install and exercise the new
+release's actual features, not just its version string. A correct
+`__version__` on code that predates the feature would pass a version check and
+fail a user.
 
 ## Recovering a failed publish
 
