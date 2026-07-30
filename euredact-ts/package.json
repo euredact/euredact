@@ -2,6 +2,7 @@
   "name": "euredact",
   "version": "0.3.5",
   "description": "European PII redaction SDK -- fast, zero-dependency, rule-based detection and redaction of personal data across 31 European countries",
+  "homepage": "https://euredact.dev",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -66,5 +67,8 @@
   "devDependencies": {
     "typescript": "^5.4.0",
     "tsx": "^4.7.0"
+  },
+  "bugs": {
+    "url": "https://github.com/euredact/euredact/issues"
   }
 }

@@ -34,9 +34,14 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Documentation = "https://github.com/euredact/euredact#readme"
+# Homepage is what PyPI renders first and what crawlers follow, so it points at
+# the site rather than back at the repository the visitor just came from.
+Homepage = "https://euredact.dev"
+Documentation = "https://euredact.dev/docs"
 Repository = "https://github.com/euredact/euredact"
-Changelog = "https://github.com/euredact/euredact/blob/main/CHANGELOG.md"
+# Per package. The repository root has no CHANGELOG.md, so the previous value
+# 404ed on every PyPI page since the URLs were added.
+Changelog = "https://github.com/euredact/euredact/blob/main/euredact-python/CHANGELOG.md"
 Issues = "https://github.com/euredact/euredact/issues"
 
 [project.optional-dependencies]
