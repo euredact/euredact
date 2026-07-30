@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.3.6 (2026-07-30)
+
+### Fixed
+
+False positives only. Every change here corrects a case that was wrong on its
+own terms — a broken regex, a missing entry in a list that was meant to be
+complete, a suppressor wired to every numeric type but one — rather than tuning
+a threshold against a corpus. Measured on the same 152,300 documents and
+667,129 labels as 0.3.5: **false positives fell from 3,294 to 1,232** with
+hints, and from 4,782 to 2,720 blind. Recall did not fall; it rose slightly.
+
+| | precision | recall | F1 |
+|---|---:|---:|---:|
+| 0.3.5, with country hints | 99.51% | 99.71% | 99.61% |
+| **0.3.6** | **99.82%** | **99.72%** | **99.77%** |
+| 0.3.5, blind | 99.28% | 99.49% | 99.39% |
+| **0.3.6** | **99.59%** | **99.50%** | **99.55%** |
+
+No dataset regressed on either metric, and the eight that moved are
+independently generated country groups.
+
+- **A currency amount ending a clause was a postal code.** The currency test
+  ended every alternative with `\b`, but `€`, `£` and `$` are not word
+  characters, so `€\b` required a *letter* after the symbol and could never
+  match the ordinary `20744 €.` or `1163 €,`. Symbols are now matched
+  separately from the alphabetic codes, and the amount-label list gained the
+  Spanish, Italian, Polish, Czech and Hungarian words for "amount". The
+  TypeScript SDK used a Unicode lookahead here and never had this defect.
+
+- **Ticket and incident numbers were postal codes.** `suppress_reference` was
+  wired to every numeric entity type except `POSTAL_CODE`, so `Ticket #94730`
+  and `Incident report IR-43433` were masked as addresses. A five-digit ticket
+  number is exactly the shape of a German or French postcode. Support-desk
+  vocabulary was added in nine languages, and `#` and `IR-`-style tags are now
+  recognised adjacently — deliberately *not* through the 150-character keyword
+  window, which is what made the postal rule claim years in dates.
+
+- **`desember` was missing from the month list.** Ten other spellings of
+  December were present, so `1. desember 2025` was a Norwegian postcode. The
+  Icelandic month names were absent for the same reason and were added with it.
+
+- **Crypto tickers were licence plates.** `4499 BTC` matched Spain's
+  four-digits-then-three-consonants plate shape. The fiat ISO 4217 codes were
+  already excluded; a ticker is a unit in the same way.
+
+- **API endpoints, hostnames and LDAP names were secrets.** The high-entropy
+  rules anchor on `:` and `=`, so a published endpoint such as
+  `https://api.sendgrid.com/v3/mail/send` scored as a credential, as did
+  `api.example.eu`, `cn=github-actions,dc=corp,dc=eu` and service names like
+  `analytics-engine`. A URL that *carries* a credential — a
+  `mongodb://user:password@host` connection string, or a URL with an
+  `?api_key=` parameter — is still a secret, and is now covered by a
+  conformance vector so the distinction cannot be lost.
+
+- **`SECRET` no longer claims an email address**, on the same reasoning that
+  already stopped it claiming UUIDs and BICs: the `EMAIL` rule owns that span.
+
+Thirteen conformance vectors were added (93 → 106), run by both SDKs, covering
+each fix above and the guard cases that must keep firing.
+
 ## 0.3.5 (2026-07-30)
 
 ### Fixed

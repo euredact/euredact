@@ -191,8 +191,8 @@ false positive — see `euredact-python/tests/metrics.py`, which reproduces this
 
 | | precision | recall | F1 |
 |---|---:|---:|---:|
-| With country hints | 99.5% | 99.7% | **99.6%** |
-| Blind (no `countries` passed) | 99.3% | 99.5% | **99.4%** |
+| With country hints | 99.8% | 99.7% | **99.8%** |
+| Blind (no `countries` passed) | 99.6% | 99.5% | **99.6%** |
 
 Blind detection is within 0.2 points of hinted on every measure, so the engine
 does not need to be told the country.

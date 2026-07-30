@@ -20,24 +20,37 @@ _CONTEXT_CHARS = 150
 
 # ── Currency ────────────────────────────────────────────────────────────
 
+#: Currency *symbols*. Kept apart from the alphabetic codes below because "\b"
+#: does the wrong thing next to them: "€" is not a word character, so "€\b"
+#: demands a word character after the symbol and fails on the overwhelmingly
+#: common "1163 €," / "20744 €." — the trailing punctuation kills the match.
+#: That bug made every euro amount at the end of a clause a postal code.
+_CURRENCY_SYMBOL = r"€|\$|£|¥|₺|zł|Kč|лв|kn|Ft|₽"
+#: Alphabetic codes and words, where "\b" is correct and necessary.
+_CURRENCY_WORD = (
+    r"EUR|USD|GBP|CHF|ISK|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|HRK|"
+    r"euro|euros|dollar|dollars|pond|kronor|kroner|kronur|kr|"
+    r"złoty|korun|forint|lei|leva"
+)
 _CURRENCY_AFTER = re.compile(
-    r"^\s*(?:EUR|€|\$|USD|GBP|£|CHF|ISK|SEK|NOK|DKK|"
-    r"euro|euros|dollar|dollars|pond|kronor|kroner|kr)\b",
+    rf"^\s*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
     re.IGNORECASE,
 )
 # "12385,84 €" or "12385.84 €" — number is integer part of decimal amount
 _CURRENCY_COMMA_AFTER = re.compile(
-    r"^[.,]\d{1,2}\s*(?:EUR|€|\$|USD|GBP|£|CHF|ISK|SEK|NOK|DKK|"
-    r"euro|euros|kr(?:onor|oner)?|pond)\b",
+    rf"^[.,]\d{{1,2}}\s*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
     re.IGNORECASE,
 )
 _CURRENCY_BEFORE = re.compile(
-    r"(?:EUR|€|\$|USD|GBP|£|CHF|ISK|SEK|NOK|DKK)\s*$",
+    rf"(?:(?:{_CURRENCY_SYMBOL})|\b(?:{_CURRENCY_WORD}))\s*$",
+    re.IGNORECASE,
 )
 # Also catch "Montant TTC :" or "Beløb:" before a number
 _AMOUNT_LABEL_BEFORE = re.compile(
-    r"(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|"
-    r"Upphæð)\s*:?\s*$",
+    r"\b(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|"
+    r"Upphæð|Importe|Importo|Valore|Wartość|Kwota|Částka|Összeg|"
+    r"Sum|Beloop|Prix|Preis|Price|Loyer|Miete|Huur|Rent|Betrag)"
+    r"\s*(?:\w+\s*)?:?\s*$",
     re.IGNORECASE,
 )
 
@@ -66,11 +79,26 @@ _REFERENCE_BEFORE = re.compile(
     r"Rechnung\s*(?:Nr|n[°o])?|faktura\s*(?:nr|n[°o])?|"
     r"bestilling\s*(?:nr|n[°o])?|bestelling\s*n[°or]\.?|"
     r"Reikningur\s*nr|"
+    # Support-desk vocabulary. "Ticket #94730" and "Kundenservice Ticket #121929"
+    # were read as postal codes 104 times.
+    r"ticket|incident\s*(?:report|nr|no)?|case\s*(?:nr|no|id)?|"
+    r"zaaknummer|meldingsnummer|Vorgangsnummer|Vorgang|Störungsmeldung|"
+    r"saksnummer|ärendenummer|sagsnummer|asianumero|"
     # The Dutch two-word form. "factuurnummer" was here, "Factuur nr." was not,
     # and the latter is what documents actually write.
-    r"Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.]?\s*$",
+    r"Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.#]?\s*$",
     re.IGNORECASE,
 )
+
+#: A "#" immediately before the number. Across every language in scope this
+#: marks a reference — a ticket, an order, a line item — and never a postcode or
+#: a national identifier.
+_HASH_BEFORE = re.compile(r"#\s*$")
+
+#: A short uppercase tag joined to the number by a hyphen: "IR-43433",
+#: "INC-2024", "REF-88120". The tag is what makes it a document reference; a
+#: postal code is never introduced this way.
+_REF_PREFIX_BEFORE = re.compile(r"(?:^|[\s(\[])[A-Z]{2,5}-$")
 
 # ── Legal / structural reference ────────────────────────────────────────
 
@@ -285,8 +313,11 @@ _MONTH_NAMES = (
     "|enero|febrero|abril|mayo|junio|julio|septiembre|octubre|noviembre"
     "|diciembre|janeiro|fevereiro|março|marco|maio|junho|julho|setembro"
     "|outubro|novembro|dezembro"
-    # da / no / sv
-    "|marts|maj|augusti|oktober"
+    # da / no / sv / is — "desember" (nb/nn/is) was the one December spelling
+    # missing from a list that already carried ten others, which is why
+    # "1. desember 2025" was a Norwegian postcode.
+    "|marts|maj|augusti|oktober|desember"
+    "|janúar|febrúar|apríl|maí|júní|júlí|ágúst|október|nóvember"
     # fi
     "|tammikuu|helmikuu|maaliskuu|huhtikuu|toukokuu|kesäkuu|heinäkuu|elokuu"
     "|syyskuu|lokakuu|marraskuu|joulukuu"
@@ -335,9 +366,13 @@ _DATE_AFTER = re.compile(r"^[./\-]\d{1,2}[./\-]\d{1,2}\b")
 
 #: ISO 4217 codes made only of the consonants a Spanish plate accepts, so a
 #: money amount reads as a registration. This is why "2297 DKK" was a plate.
+#: Crypto tickers are the same shape and the same mistake — every one of the 130
+#: surviving plate false positives was "4499 BTC" or a sibling. A ticker is a
+#: unit, exactly as an ISO 4217 code is.
 _CURRENCY_CODE = (
     r"(?:DKK|SEK|NOK|ISK|CZK|PLN|HUF|RON|BGN|HRK|CHF|GBP|TRY|RSD|MKD"
-    r"|BYN|KZT|CNY|JPY|KRW|ZAR|BRL|MXN|CLP|COP|PLZ|SKK|TRL)"
+    r"|BYN|KZT|CNY|JPY|KRW|ZAR|BRL|MXN|CLP|COP|PLZ|SKK|TRL"
+    r"|BTC|ETH|LTC|XRP|BCH|XLM|XMR|DOT|SOL|ADA|TRX|DOGE|USDT|USDC)"
 )
 #: The code usually falls *inside* the plate span, because the plate shape ends
 #: in exactly the three letters the code occupies: "2297 DKK" matched whole.
@@ -382,6 +417,47 @@ _EXACT_UUID = re.compile(
 _BIC_SHAPE = re.compile(r"^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$")
 _BIC_CUE_BEFORE = re.compile(r"(?:BIC|SWIFT|BIC/SWIFT)\s*[:=]?\s*\(?\s*$", re.IGNORECASE)
 
+#: An email address, exactly. Same argument as the UUID and the BIC: the EMAIL
+#: rule owns this span, and a generic high-entropy rule must not contest it.
+_EXACT_EMAIL = re.compile(r"^[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+$")
+
+#: A URL, or the tail of one after the scheme has been split off. The secret
+#: rules are anchored on ":" and "=", so "https://api.sendgrid.com/v3/mail/send"
+#: hands them "//api.sendgrid.com/v3/mail/send" and a slash-separated path scores
+#: as high-entropy. An endpoint is published documentation, not a credential.
+_URL_LIKE = re.compile(
+    r"^(?:[a-z][a-z0-9+.-]*:)?//[^\s/]+(?:/\S*)?$"
+    r"|^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?::\d{1,5})?(?:/\S*)?$",
+    re.IGNORECASE,
+)
+
+#: A URL that *carries* a credential is the opposite case, and it is the common
+#: one: "mongodb://admin:DFKDKi1eb51OOhuHPYz@rds-main.eu-west-1.rds.amazonaws.com"
+#: is a connection string with a live password in it. Suppressing those as
+#: "just a URL" lost 347 real secrets, so the endpoint test below must not fire
+#: when userinfo or a credential-bearing query parameter is present.
+_URL_WITH_CREDENTIALS = re.compile(
+    r"^(?:[a-z][a-z0-9+.-]*:)?//[^/@\s]*:[^/@\s]*@"
+    r"|[?&](?:api_?key|access_?token|auth|token|secret|password|pwd|sig|"
+    r"signature|credential)=",
+    re.IGNORECASE,
+)
+
+#: An LDAP distinguished name: "cn=github-actions,dc=corp,dc=eu". Every
+#: component is a key=value pair, which is precisely what the "="-anchored
+#: secret rule is looking for.
+_LDAP_DN = re.compile(
+    r"^(?:cn|ou|dc|uid|o|l|st|c)=[^,=]+(?:,\s*(?:cn|ou|dc|uid|o|l|st|c)=[^,=]+)+$",
+    re.IGNORECASE,
+)
+
+#: Lower-case words joined by hyphens, optionally with a short id suffix:
+#: "service-account", "analytics-engine", "data-lake-33e061". The existing
+#: single-word test already rejects "sozialversicherungsnummer" on the reasoning
+#: that a real secret would be mixed case; a hyphenated compound is the same
+#: token with a separator in it.
+_HYPHENATED_WORDS = re.compile(r"^[a-z]{2,}(?:-[a-z]{2,})+(?:-[0-9a-f]{4,8})?$")
+
 
 def suppress_secret_over_structured(text: str, match: RawMatch) -> bool:
     """A generic secret must not claim a span that is a specific known type.
@@ -399,7 +475,7 @@ def suppress_secret_over_structured(text: str, match: RawMatch) -> bool:
     if match.pattern_def.entity_type != EntityType.SECRET:
         return False
     token = _core_token(match.text)
-    if _EXACT_UUID.match(token):
+    if _EXACT_UUID.match(token) or _EXACT_EMAIL.match(token):
         return True
     if _BIC_SHAPE.match(token):
         before = text[max(0, match.start - 24):match.start]
@@ -429,6 +505,12 @@ def suppress_secret_not_a_secret(text: str, match: RawMatch) -> bool:
     if _TIMESTAMP_FRAGMENT.match(bare):
         return True
     if _NOT_A_SECRET.match(bare):
+        return True
+    if _URL_LIKE.match(bare) and not _URL_WITH_CREDENTIALS.search(bare):
+        return True
+    if _LDAP_DN.match(bare):
+        return True
+    if _HYPHENATED_WORDS.match(bare):
         return True
     if bare.isalpha() and (bare.islower() or (bare[:1].isupper() and bare[1:].islower())):
         return True
@@ -521,14 +603,29 @@ def suppress_units(text: str, match: RawMatch) -> bool:
 
 
 def suppress_reference(text: str, match: RawMatch) -> bool:
-    """Suppress numbers preceded by reference/invoice/dossier keywords."""
+    """Suppress numbers preceded by reference/invoice/dossier keywords.
+
+    POSTAL_CODE belongs here for the same reason every other numeric type does,
+    and its absence was an oversight: a five-digit ticket number sits in exactly
+    the shape a German or French postcode occupies, so "Ticket #94730" and
+    "Incident report IR-43433" were masked as addresses 169 times.
+
+    The "#" and "XX-" markers are checked adjacently rather than through the
+    150-character keyword window. That window is what made the postal rule claim
+    years in dates; widening its reach again to fix a different symptom would be
+    repeating the mistake.
+    """
     if match.pattern_def.entity_type not in (
         EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN,
         EntityType.TAX_ID, EntityType.IBAN, EntityType.CHAMBER_OF_COMMERCE,
+        EntityType.POSTAL_CODE,
     ):
         return False
     before, _ = _get_context(text, match.start, match.end)
-    return bool(_REFERENCE_BEFORE.search(before))
+    if _REFERENCE_BEFORE.search(before):
+        return True
+    adjacent = text[max(0, match.start - 8):match.start]
+    return bool(_HASH_BEFORE.search(adjacent) or _REF_PREFIX_BEFORE.search(adjacent))
 
 
 def suppress_legal(text: str, match: RawMatch) -> bool:
@@ -1069,6 +1166,7 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
         suppress_currency, suppress_units, suppress_math, suppress_legal,
         suppress_year_as_postal, suppress_postal_inside_iban,
         suppress_postal_as_house_number, suppress_postal_in_longer_identifier,
+        suppress_reference,
     ],
     EntityType.BIC: [suppress_bic_without_evidence],
     EntityType.IBAN: [suppress_reference],

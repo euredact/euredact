@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.3.6 (2026-07-30)
+
+### Fixed
+
+False positives only, ported from the Python SDK so the two engines stay in
+step. Every change corrects a case that was wrong on its own terms — a broken
+regex, a missing entry in a list meant to be complete, a suppressor wired to
+every numeric type but one — rather than tuning a threshold against a corpus.
+Measured on 152,300 documents and 667,129 labels: **false positives fell from
+3,294 to 1,232** with country hints, and from 4,782 to 2,720 blind. Recall did
+not fall.
+
+| | precision | recall | F1 |
+|---|---:|---:|---:|
+| 0.3.5, with country hints | 99.51% | 99.71% | 99.61% |
+| **0.3.6** | **99.82%** | **99.72%** | **99.77%** |
+| 0.3.5, blind | 99.28% | 99.49% | 99.39% |
+| **0.3.6** | **99.59%** | **99.50%** | **99.55%** |
+
+- **Ticket and incident numbers were postal codes.** `suppressReference` was
+  wired to every numeric entity type except `POSTAL_CODE`, so `Ticket #94730`
+  and `Incident report IR-43433` were masked as addresses. Support-desk
+  vocabulary was added in nine languages, and `#` and `IR-`-style tags are now
+  recognised adjacently rather than through the 150-character keyword window.
+
+- **`desember` was missing from the month list**, so `1. desember 2025` was a
+  Norwegian postcode. The Icelandic month names were absent for the same reason.
+
+- **Crypto tickers were licence plates.** `4499 BTC` matched Spain's
+  four-digits-then-three-consonants shape; the fiat ISO 4217 codes were already
+  excluded and a ticker is a unit in the same way.
+
+- **API endpoints, hostnames and LDAP names were secrets** —
+  `https://api.sendgrid.com/v3/mail/send`, `api.example.eu`,
+  `cn=github-actions,dc=corp,dc=eu`, `analytics-engine`. A URL that *carries* a
+  credential (`mongodb://user:password@host`, or a URL with `?api_key=`) is
+  still a secret and is covered by a conformance vector.
+
+- **`SECRET` no longer claims an email address**, on the same reasoning that
+  already stopped it claiming UUIDs and BICs.
+
+- The currency lists were widened to match the Python SDK (more ISO codes,
+  symbols held separately from alphabetic codes, and the Spanish, Italian,
+  Polish, Czech and Hungarian words for "amount"). The `\b`-after-`€` defect
+  fixed in the Python engine never affected this one, which used a Unicode
+  lookahead.
+
+Thirteen conformance vectors were added (93 → 106), run by both SDKs.
+
 ## 0.3.5 (2026-07-30)
 
 ### Fixed

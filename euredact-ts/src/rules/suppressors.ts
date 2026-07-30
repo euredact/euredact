@@ -20,17 +20,35 @@ function getContext(text: string, start: number, end: number): [string, string] 
 
 // Unicode-safe word boundary: negative lookahead for any letter (including accented)
 const _UWB = "(?![a-zA-Z\\u00C0-\\u024F\\u0400-\\u04FF])";
-const CURRENCY_AFTER = new RegExp(`^\\s*(?:EUR|€|\\$|USD|GBP|£|CHF|ISK|SEK|NOK|DKK|euro|euros|dollar|dollars|pond|kronor|kroner|kr)${_UWB}`, "i");
-const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}\\s*(?:EUR|€|\\$|USD|GBP|£|CHF|ISK|SEK|NOK|DKK|euro|euros|kr(?:onor|oner)?|pond)${_UWB}`, "i");
-const CURRENCY_BEFORE = /(?:EUR|€|\$|USD|GBP|£|CHF|ISK|SEK|NOK|DKK)\s*$/;
-const AMOUNT_LABEL_BEFORE = /(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|Upphæð)\s*:?\s*$/i;
+// Symbols are held apart from the alphabetic codes because a word boundary
+// after "€" is meaningless — the symbol is not a word character. Python used a
+// bare "\b" here and so could never match "1163 €," at all; this port used the
+// lookahead below and did not have that defect. Kept split so the difference
+// cannot come back.
+const CURRENCY_SYMBOL = "€|\\$|£|¥|₺|zł|Kč|лв|kn|Ft|₽";
+const CURRENCY_WORD =
+  "EUR|USD|GBP|CHF|ISK|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|HRK|" +
+  "euro|euros|dollar|dollars|pond|kronor|kroner|kronur|kr|" +
+  "złoty|korun|forint|lei|leva";
+const CURRENCY_AFTER = new RegExp(`^\\s*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "i");
+const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}\\s*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "i");
+const CURRENCY_BEFORE = new RegExp(`(?:(?:${CURRENCY_SYMBOL})|\\b(?:${CURRENCY_WORD}))\\s*$`, "i");
+const AMOUNT_LABEL_BEFORE =
+  /\b(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|Upphæð|Importe|Importo|Valore|Wartość|Kwota|Částka|Összeg|Sum|Beloop|Prix|Preis|Price|Loyer|Miete|Huur|Rent|Betrag)\s*(?:\w+\s*)?:?\s*$/i;
 
 // Use Unicode-aware word boundary via \p{L} negative lookahead instead of \b
 // because JS \b is ASCII-only and fails on Unicode letters (e.g. "München" → \bm\b matches M before ü)
 const UNIT_AFTER = /^\s*(?:kg|km|cm|mm|m[²³]|ml|mg|GB|MB|KB|TB|%|jaar|maanden|weken|dagen|uur|minuten|seconden|stuks|pcs|pieces|ans|mois|semaines|jours|heures|Jahre|Monate|Wochen|Tage|Stunden)(?![a-zA-Z\u00C0-\u024F\u0400-\u04FF])/i;
 
 // Same missing-boundary flaw: "ref" matched the tail of "kortref".
-const REFERENCE_BEFORE = /\b(?:dossier|ref\.?|referentie|reference|référence|factuurnummer|invoice\s*(?:nr|number|no)?|bestelnummer|order\s*(?:nr|number|no)?|kenmerk|ordernummer|Aktenzeichen|numéro\s*de\s*(?:dossier|facture|commande)|bestellnummer|Rechnungsnummer|artikelnr|article\s*no|contract\s*(?:nr|number|no)?|pagina|page|Seite|blz\.?|Facture\s*n[°o]?|Faktura\s*n[°or]\.?|Lasku\s*n[°or]o?\.?|Rechnung\s*(?:Nr|n[°o])?|faktura\s*(?:nr|n[°o])?|bestilling\s*(?:nr|n[°o])?|bestelling\s*n[°or]\.?|Reikningur\s*nr|Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.]?\s*$/i;
+const REFERENCE_BEFORE = /\b(?:dossier|ref\.?|referentie|reference|référence|factuurnummer|invoice\s*(?:nr|number|no)?|bestelnummer|order\s*(?:nr|number|no)?|kenmerk|ordernummer|Aktenzeichen|numéro\s*de\s*(?:dossier|facture|commande)|bestellnummer|Rechnungsnummer|artikelnr|article\s*no|contract\s*(?:nr|number|no)?|pagina|page|Seite|blz\.?|Facture\s*n[°o]?|Faktura\s*n[°or]\.?|Lasku\s*n[°or]o?\.?|Rechnung\s*(?:Nr|n[°o])?|faktura\s*(?:nr|n[°o])?|bestilling\s*(?:nr|n[°o])?|bestelling\s*n[°or]\.?|Reikningur\s*nr|ticket|incident\s*(?:report|nr|no)?|case\s*(?:nr|no|id)?|zaaknummer|meldingsnummer|Vorgangsnummer|Vorgang|Störungsmeldung|saksnummer|ärendenummer|sagsnummer|asianumero|Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.#]?\s*$/i;
+
+// "#" before a number marks a reference in every language in scope — a ticket,
+// an order, a line item — and never a postcode or a national identifier.
+const HASH_BEFORE = /#\s*$/;
+
+// A short uppercase tag hyphenated to the number: "IR-43433", "INC-2024".
+const REF_PREFIX_BEFORE = /(?:^|[\s([])[A-Z]{2,5}-$/;
 
 const LEGAL_BEFORE = /(?:Art(?:ikel|icle|\.)|§|Artikel|Section|Sectie|Afdeling|paragraaf|Absatz|alinéa|punt|point|Punkt|lid)\s*$/i;
 
@@ -73,7 +91,11 @@ const MONTH_NAMES =
   "|gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|dicembre" +
   "|enero|febrero|abril|mayo|junio|julio|septiembre|octubre|noviembre|diciembre" +
   "|janeiro|fevereiro|março|marco|maio|junho|julho|setembro|outubro|novembro|dezembro" +
-  "|marts|augusti" +
+  // "desember" (nb/nn/is) was the one December spelling missing from a list
+  // that already carried ten others — "1. desember 2025" was a Norwegian
+  // postcode because of it.
+  "|marts|augusti|desember" +
+  "|janúar|febrúar|apríl|maí|júní|júlí|ágúst|nóvember" +
   "|tammikuu|helmikuu|maaliskuu|huhtikuu|toukokuu|kesäkuu|heinäkuu|elokuu|syyskuu|lokakuu|marraskuu|joulukuu" +
   "|jaanuar|veebruar|aprill|juuni|juuli|oktoober|detsember" +
   "|janvāris|februāris|aprīlis|maijs|jūnijs|jūlijs|augusts|septembris|oktobris|novembris|decembris" +
@@ -106,8 +128,12 @@ const DATE_AFTER = /^[./-]\d{1,2}[./-]\d{1,2}\b/;
  * ISO 4217 codes made only of the consonants a Spanish plate accepts, so a money
  * amount reads as a registration. This is why "2297 DKK" was a plate.
  */
+// Crypto tickers are the same shape and the same mistake — every surviving
+// plate false positive was "4499 BTC" or a sibling. A ticker is a unit, exactly
+// as an ISO 4217 code is.
 const CURRENCY_CODE =
-  "(?:DKK|SEK|NOK|ISK|CZK|PLN|HUF|RON|BGN|HRK|CHF|GBP|TRY|RSD|MKD|BYN|KZT|CNY|JPY|KRW|ZAR|BRL|MXN|CLP|COP|PLZ|SKK|TRL)";
+  "(?:DKK|SEK|NOK|ISK|CZK|PLN|HUF|RON|BGN|HRK|CHF|GBP|TRY|RSD|MKD|BYN|KZT|CNY|JPY|KRW|ZAR|BRL|MXN|CLP|COP|PLZ|SKK|TRL" +
+  "|BTC|ETH|LTC|XRP|BCH|XLM|XMR|DOT|SOL|ADA|TRX|DOGE|USDT|USDC)";
 const CURRENCY_CODE_TAIL = new RegExp(`\\s${CURRENCY_CODE}$`);
 const CURRENCY_CODE_AFTER = new RegExp(`^\\s*${CURRENCY_CODE}\\b`);
 
@@ -127,6 +153,39 @@ const NOT_A_SECRET = new RegExp(
 const EXACT_UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const BIC_SHAPE = /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/;
 const BIC_CUE_BEFORE = /(?:BIC|SWIFT|BIC\/SWIFT)\s*[:=]?\s*\(?\s*$/i;
+
+/** An email address, exactly. Same argument as the UUID and the BIC. */
+const EXACT_EMAIL = /^[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+$/;
+
+/**
+ * A URL, or the tail of one after the scheme has been split off. The secret
+ * rules anchor on ":" and "=", so "https://api.sendgrid.com/v3/mail/send" hands
+ * them "//api.sendgrid.com/v3/mail/send" and a slash-separated path scores as
+ * high-entropy. An endpoint is published documentation, not a credential.
+ */
+const URL_LIKE =
+  /^(?:[a-z][a-z0-9+.-]*:)?\/\/[^\s/]+(?:\/\S*)?$|^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?::\d{1,5})?(?:\/\S*)?$/i;
+
+/**
+ * A URL that *carries* a credential is the opposite case, and it is the common
+ * one: "mongodb://admin:DFKDKi1eb51OOhuHPYz@rds-main.eu-west-1.rds.amazonaws.com"
+ * is a connection string with a live password in it. Suppressing those as "just
+ * a URL" lost 347 real secrets, so the endpoint test must not fire when userinfo
+ * or a credential-bearing query parameter is present.
+ */
+const URL_WITH_CREDENTIALS =
+  /^(?:[a-z][a-z0-9+.-]*:)?\/\/[^/@\s]*:[^/@\s]*@|[?&](?:api_?key|access_?token|auth|token|secret|password|pwd|sig|signature|credential)=/i;
+
+/** An LDAP distinguished name: "cn=github-actions,dc=corp,dc=eu". */
+const LDAP_DN = /^(?:cn|ou|dc|uid|o|l|st|c)=[^,=]+(?:,\s*(?:cn|ou|dc|uid|o|l|st|c)=[^,=]+)+$/i;
+
+/**
+ * Lower-case words joined by hyphens, optionally with a short id suffix:
+ * "service-account", "data-lake-33e061". The single-word test below already
+ * rejects "sozialversicherungsnummer" on the reasoning that a real secret would
+ * be mixed case; a hyphenated compound is the same token with a separator.
+ */
+const HYPHENATED_WORDS = /^[a-z]{2,}(?:-[a-z]{2,})+(?:-[0-9a-f]{4,8})?$/;
 
 /** A dotted quad with every octet in range. */
 const DOTTED_QUAD =
@@ -162,7 +221,7 @@ function coreToken(raw: string): string {
 function suppressSecretOverStructured(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.SECRET) return false;
   const token = coreToken(match.text);
-  if (EXACT_UUID.test(token)) return true;
+  if (EXACT_UUID.test(token) || EXACT_EMAIL.test(token)) return true;
   if (BIC_SHAPE.test(token)) {
     return BIC_CUE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start));
   }
@@ -184,6 +243,9 @@ function suppressSecretNotASecret(_text: string, match: RawMatch): boolean {
   const bare = coreToken(match.text);
   if (TIMESTAMP_FRAGMENT.test(bare)) return true;
   if (NOT_A_SECRET.test(bare)) return true;
+  if (URL_LIKE.test(bare) && !URL_WITH_CREDENTIALS.test(bare)) return true;
+  if (LDAP_DN.test(bare)) return true;
+  if (HYPHENATED_WORDS.test(bare)) return true;
   const alpha = /^[A-Za-zÀ-ÿ]+$/.test(bare);
   const oneWord =
     bare === bare.toLowerCase() ||
@@ -241,11 +303,25 @@ function suppressUnits(text: string, match: RawMatch): boolean {
   return UNIT_AFTER.test(after);
 }
 
+/**
+ * Suppress numbers preceded by reference/invoice/dossier keywords.
+ *
+ * POSTAL_CODE belongs here for the same reason every other numeric type does,
+ * and its absence was an oversight: a five-digit ticket number sits in exactly
+ * the shape a German or French postcode occupies, so "Ticket #94730" and
+ * "Incident report IR-43433" were masked as addresses.
+ *
+ * "#" and "XX-" are checked adjacently rather than through the 150-character
+ * keyword window. That window is what made the postal rule claim years in
+ * dates; widening its reach to fix a different symptom would repeat the error.
+ */
 function suppressReference(text: string, match: RawMatch): boolean {
-  const applicable = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.IBAN, EntityType.CHAMBER_OF_COMMERCE]);
+  const applicable = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.IBAN, EntityType.CHAMBER_OF_COMMERCE, EntityType.POSTAL_CODE]);
   if (!applicable.has(match.patternDef.entityType)) return false;
   const [before] = getContext(text, match.start, match.end);
-  return REFERENCE_BEFORE.test(before);
+  if (REFERENCE_BEFORE.test(before)) return true;
+  const adjacent = text.slice(Math.max(0, match.start - 8), match.start);
+  return HASH_BEFORE.test(adjacent) || REF_PREFIX_BEFORE.test(adjacent);
 }
 
 function suppressLegal(text: string, match: RawMatch): boolean {
@@ -701,7 +777,7 @@ const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressNatidAsPassport, suppressSeNatidAsOrg],
   [EntityType.SSN]: [suppressCurrency, suppressUnits, suppressReference, suppressMath],
   [EntityType.TAX_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressTaxidAsIpAddress],
-  [EntityType.POSTAL_CODE]: [suppressCurrency, suppressUnits, suppressMath, suppressLegal, suppressYearAsPostal, suppressPostalInsideIban, suppressPostalAsHouseNumber, suppressPostalInLongerIdentifier],
+  [EntityType.POSTAL_CODE]: [suppressCurrency, suppressUnits, suppressMath, suppressLegal, suppressYearAsPostal, suppressPostalInsideIban, suppressPostalAsHouseNumber, suppressPostalInLongerIdentifier, suppressReference],
   [EntityType.BIC]: [suppressBicWithoutEvidence],
   [EntityType.BANK_ACCOUNT]: [suppressReference],
   [EntityType.LICENSE_PLATE]: [suppressPlateInCompound, suppressDePlateUnknownDistrict, suppressPlateAsCurrencyAmount],

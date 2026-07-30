@@ -1,6 +1,6 @@
 {
   "name": "euredact",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "European PII redaction SDK -- fast, zero-dependency, rule-based detection and redaction of personal data across 31 European countries",
   "homepage": "https://euredact.dev",
   "license": "Apache-2.0",

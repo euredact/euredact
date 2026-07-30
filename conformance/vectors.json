@@ -1033,6 +1033,132 @@
       "mustNotDetect": [
         "PHONE"
       ]
+    },
+    {
+      "id": "postal-not-ticket-hash",
+      "countries": [
+        "DK"
+      ],
+      "text": "Kundenservice Ticket #94730. Kunde: Erik Jensen.",
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-not-incident-reference",
+      "countries": [
+        "NL"
+      ],
+      "text": "Incident report IR-43433: a data breach was contained.",
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-not-amount-with-euro-sign",
+      "countries": [
+        "ES"
+      ],
+      "text": "Cliente S.L. Importe: 20744 €. Pago pendiente.",
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-not-rent-amount",
+      "countries": [
+        "FR"
+      ],
+      "text": "Bail signe. Loyer mensuel : 1163 €, payable le 5.",
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-not-norwegian-december",
+      "countries": [
+        "NO"
+      ],
+      "text": "Adresse ukjent. Tiltredelsesdato: 1. desember 2025.",
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-real-one-still-detected-after-reference-gate",
+      "countries": [
+        "DE"
+      ],
+      "text": "Ticket #4471. Wohnort: Musterstr. 12, 53111 Bonn.",
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "53111"
+        ]
+      }
+    },
+    {
+      "id": "plate-not-crypto-amount",
+      "countries": [
+        "ES"
+      ],
+      "text": "Transferencia recibida: 4499 BTC a la cartera fria.",
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-real-one-still-detected",
+      "countries": [
+        "ES"
+      ],
+      "text": "Matricula del vehiculo: 4499 BCD, revision pendiente.",
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "4499 BCD"
+        ]
+      }
+    },
+    {
+      "id": "secret-not-api-endpoint",
+      "countries": null,
+      "text": "Webhook endpoint: https://api.sendgrid.com/v3/mail/send",
+      "mustNotDetect": [
+        "SECRET"
+      ]
+    },
+    {
+      "id": "secret-not-hostname",
+      "countries": null,
+      "text": "Upstream host: api.example.eu is unreachable.",
+      "mustNotDetect": [
+        "SECRET"
+      ]
+    },
+    {
+      "id": "secret-not-ldap-dn",
+      "countries": null,
+      "text": "bind_dn=cn=github-actions,dc=corp,dc=eu",
+      "mustNotDetect": [
+        "SECRET"
+      ]
+    },
+    {
+      "id": "secret-not-service-name",
+      "countries": null,
+      "text": "Failing service: analytics-engine (restart scheduled)",
+      "mustNotDetect": [
+        "SECRET"
+      ]
+    },
+    {
+      "id": "secret-connection-string-with-password-is-a-secret",
+      "countries": null,
+      "text": "db: mongodb://admin:DFKDKi1eb51OOhuHPYz@rds-main.eu-west-1.rds.amazonaws.com",
+      "mustDetect": {
+        "SECRET": [
+          "mongodb://admin:DFKDKi1eb51OOhuHPYz@rds-main.eu-west-1.rds.amazonaws.com"
+        ]
+      }
     }
   ]
 }
