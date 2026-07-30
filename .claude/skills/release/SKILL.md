@@ -91,6 +91,27 @@ that reads as a workflow problem but is a tag-ordering problem.
 `publish.yml` triggers on `release: [published]` — **a tag push alone publishes
 nothing.** Create the Release from the tag and mark it latest.
 
+**Always hand over the release body as text in the reply, inside a fenced block
+they can copy.** Not as an attachment, and not as "the changelog drops in" —
+neither works:
+
+- Attachments have silently failed to render more than once. The reply is the
+  only delivery that is guaranteed to arrive.
+- The changelogs are per package. There are two of them, they diverge, and
+  neither is written as release notes for a repo that ships both SDKs. Pasting
+  either one omits the other SDK's entries or credits a single-SDK change to
+  both.
+
+So: merge both changelogs into one body, mark any entry that applies to only one
+SDK, drop the sections that belong in a changelog but not in release notes, and
+paste it in the reply. Write it to `~/Desktop/` as well, as a convenience — but
+the reply is the deliverable.
+
+**Verify every claim in the body against the tagged commit before writing it.**
+Run the assertions; do not transcribe prose forward from a previous release. A
+known issue that no longer reproduces, or a figure measured on a different
+sample, is exactly the kind of thing that survives a copy-paste.
+
 ## 6. Verify both registries actually served it
 
 Metadata is not proof; install and exercise it.
