@@ -36,6 +36,13 @@ CATEGORY_MAP: dict[str, set[str]] = {
     "VIN": {EntityType.VIN.value},
     "PASSPORT": {EntityType.PASSPORT.value},
     "HEALTH_INSURANCE": {EntityType.HEALTH_INSURANCE.value, EntityType.NATIONAL_ID.value},
+    # The corpus also labels these two, and neither had an entry. SECRET worked
+    # by accident — the {SECRET} fallback happens to be a real engine type —
+    # but HEALTH_ID could never match anything, so all 252 of them scored as
+    # misses *and* charged the engine's correct HEALTH_INSURANCE detections as
+    # false positives. A harness gap, not an engine one.
+    "HEALTH_ID": {EntityType.HEALTH_INSURANCE.value, EntityType.NATIONAL_ID.value},
+    "SECRET": {EntityType.SECRET.value},
     "CHAMBER_OF_COMMERCE": {EntityType.CHAMBER_OF_COMMERCE.value, EntityType.VAT.value},
     "IP_ADDRESS": {EntityType.IP_ADDRESS.value},
     "IPV6_ADDRESS": {EntityType.IPV6_ADDRESS.value},

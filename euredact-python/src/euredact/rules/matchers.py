@@ -98,33 +98,66 @@ def _silence_stderr() -> Iterator[None]:
 # Which rule is "right" is arguable: Python's is self-consistent, JS's is
 # script-dependent. But for a redaction tool the argument is settled by the
 # failure direction. Python's principled rule leaves a national ID glued to a
-# non-ASCII letter unredacted; JS's limitation catches it. Over-detection is
-# recoverable, a silent miss is not.
+# non-ASCII letter unredacted; JS's limitation catches it.
 #
 # So \b is rewritten at compile time rather than in 303 pattern sources.
-# re.ASCII is not usable here: it would also narrow \w, breaking Unicode e-mail
-# local parts, which are deliberately supported.
+# re.ASCII is not usable: it would also narrow \w, breaking Unicode e-mail local
+# parts, which are deliberately supported.
 #
-# The rewrite is a *union* of both readings, not a swap to the ASCII one.
-# Neither alone is sufficient, and swapping regresses the other direction:
+# The rewrite is chosen per boundary, by what sits next to it.
 #
-#   "ЕГН7523169263"           needs the ASCII reading   (Н and 7 are both
-#                             word characters to Python, so no boundary)
-#   "Mail: αλέξης@example.gr" needs the Unicode reading (α is not an ASCII
-#                             word character, so no boundary)
+# **Next to a digit** — the ASCII reading alone is *exactly* the union of both
+# readings, because a Unicode letter is never an ASCII word character, so the
+# ASCII branch already succeeds everywhere the Unicode branch does. One
+# lookaround replaces a three-way alternation.
 #
-# Taking either one alone trades one silent miss for another — swapping to
-# ASCII-only was measured to drop the Greek address entirely. The union fires
-# wherever *either* reading sees a boundary, which is the over-detecting
-# direction on both counts and matches what Node already does on all seven
-# cases.
-_ASCII_WORD_BOUNDARY = (
-    r"(?:\b|(?<![0-9A-Za-z_])(?=[0-9A-Za-z_])|(?<=[0-9A-Za-z_])(?![0-9A-Za-z_]))"
-)
+# **Anything else** — plain \b, which is what "Mail: αλέξης@example.gr" needs:
+# α is not an ASCII word character, so an ASCII-only boundary would refuse to
+# start the match and the address would go unredacted.
+#
+# An earlier version applied the three-branch union everywhere. It was correct
+# but cost 1.8x on short records and 2.8x on real documents, and its ASCII branch
+# manufactured boundaries *inside* words at non-ASCII letters — truncating
+# "@Ciarán" to "@Ciar" and typing the fragment "FICIAIRES" of "BÉNÉFICIAIRES" as
+# a national ID. Choosing per boundary is both faster and cleaner.
+_ASCII_WORD = "0-9A-Za-z_"
+
+
+def _digit_only_element(source: str, i: int) -> bool:
+    """Does the pattern element starting at *source[i]* match only digits?"""
+    if source.startswith(r"\d", i):
+        return True
+    if i >= len(source) or source[i] != "[":
+        return False
+    close = source.find("]", i + 1)
+    if close < 0:
+        return False
+    body = source[i + 1:close]
+    return bool(body) and not body.startswith("^") and all(
+        c.isdigit() or c == "-" for c in body
+    )
+
+
+def _preceding_element_is_digits(source: str, i: int) -> bool:
+    """Looking left from *source[i]*, skip a quantifier and test the element."""
+    j = i - 1
+    if j >= 0 and source[j] == "}":
+        brace = source.rfind("{", 0, j)
+        if brace < 0:
+            return False
+        j = brace - 1
+    elif j >= 0 and source[j] in "+*?":
+        j -= 1
+    if j < 0:
+        return False
+    if source[j] == "]":
+        open_ = source.rfind("[", 0, j)
+        return open_ >= 0 and _digit_only_element(source, open_)
+    return j >= 1 and source[j - 1] == "\\" and source[j] == "d"
 
 
 def _ascii_word_boundaries(pattern: str) -> str:
-    """Rewrite every ``\b`` in *pattern* to the union boundary above.
+    """Rewrite each ``\b`` in *pattern* per the reasoning above.
 
     Skips escaped backslashes and character classes, where ``\b`` means a
     backspace rather than a boundary. Neither occurs in the shipped patterns
@@ -136,9 +169,13 @@ def _ascii_word_boundaries(pattern: str) -> str:
     while i < len(pattern):
         ch = pattern[i]
         if ch == "\\" and i + 1 < len(pattern):
-            nxt = pattern[i + 1]
-            if nxt == "b" and not in_class:
-                out.append(_ASCII_WORD_BOUNDARY)
+            if pattern[i + 1] == "b" and not in_class:
+                if _digit_only_element(pattern, i + 2):
+                    out.append(f"(?<![{_ASCII_WORD}])")
+                elif _preceding_element_is_digits(pattern, i):
+                    out.append(f"(?![{_ASCII_WORD}])")
+                else:
+                    out.append(r"\b")
             else:
                 out.append(pattern[i:i + 2])
             i += 2

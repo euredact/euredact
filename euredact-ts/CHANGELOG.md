@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.3.4 (2026-07-30)
+
+### Fixed
+
+- **Recovered the latency 0.3.3 gave away, without giving back its recall.**
+  0.3.3 made `\b` catch identifiers glued to a non-ASCII letter by rewriting it
+  to a three-branch lookaround union on all 303 patterns. Correct, but it cost
+  **1.8× on short records and 2.8× on real documents**, and its ASCII branch
+  manufactured boundaries *inside* words at non-ASCII letters — truncating
+  `@Ciarán` to `@Ciar` and typing `FICIAIRES`, a fragment of `BÉNÉFICIAIRES`,
+  as a national ID.
+
+  The boundary is now chosen per occurrence. Next to a digit, the ASCII reading
+  alone is *exactly* the union — a Unicode letter is never an ASCII word
+  character, so the ASCII branch already succeeds everywhere the Unicode branch
+  does — and one lookaround replaces the alternation. Everywhere else plain `\b`
+  stays, which is what a Greek e-mail local part needs.
+
+  | | 186 chars | 3,424 chars |
+  |---|---:|---:|
+  | pure Python | 3.0 ms → **907 µs** | 58 ms → **13.6 ms** |
+  | with `pyahocorasick` | 2.3 ms → **775 µs** | 42 ms → **10.9 ms** |
+  | with `[fast]` | 878 µs → **516 µs** | 14.4 ms → **5.3 ms** |
+
+  Within 4% of the pre-0.3.3 baseline, with all five glued-identifier cases and
+  both Unicode e-mail cases still detected. Per-type precision, recall and F1
+  are **byte-identical** across all 152,300 corpus documents.
+
+- **Social handles containing a non-ASCII letter were masked only up to it.**
+  `@Ciarán` came back as `@Ciar`, leaving `án` in the clear, because the pattern's
+  character class was ASCII-only and the old boundary let the match stop mid-word.
+  The class is now Unicode-aware, so the whole handle is masked. The TypeScript
+  SDK already had this right; the two now agree.
+
+- **German social-security numbers were unredacted whenever the document used
+  the abbreviation `SVNR`.** The pattern and its context gate were both correct;
+  the cue list simply had `SV-Nummer` and `Sozialversicherung` and not the short
+  form people actually type.
+
+  Measured across all 152,300 corpus documents, this was **every** German
+  social-security number the rule missed — 204 of them, in the clear:
+
+  | | recall before | after |
+  |---|---:|---:|
+  | `SOCIAL_SECURITY`, country hints | 84.16% | **100.00%** |
+  | `SOCIAL_SECURITY`, blind | 83.77% | **99.61%** |
+
+  No false-positive cost: 0 before, 0 after, and no other entity type moved.
+  `SV-Nr` and `RVNR` are added alongside it — the same gap for the other two
+  spellings, and the health-insurance rule already carries `KVNR` next to
+  `KV-Nummer` for exactly this reason.
+
+  Found by per-type measurement rather than a report. `SOCIAL_SECURITY` was the
+  only type below 90% recall that was not a known cloud-tier case, which is
+  what made it worth chasing.
+
 ## 0.3.3 (2026-07-29)
 
 ### Fixed

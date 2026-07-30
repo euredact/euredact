@@ -165,9 +165,13 @@ length, so the input size is stated rather than averaged away.
 
 | Input | Python | Python `[fast]` | Node.js |
 |---|---:|---:|---:|
-| Short record (186 chars) | 723 µs | **496 µs** | **155 µs** |
-| Real document (3,424 chars) | 10.4 ms | **5.4 ms** | **1.56 ms** |
+| Short record (186 chars) | 775 µs | **516 µs** | **155 µs** |
+| Real document (3,424 chars) | 10.9 ms | **5.3 ms** | **1.56 ms** |
 | Memory per country | ~50 KB | ~50 KB | ~50 KB |
+
+Making `\b` catch identifiers glued to a non-ASCII letter costs something, but
+only where it must — next to a digit, one lookaround is exactly equivalent to
+the three-way alternation 0.3.3 applied everywhere.
 
 `pip install euredact[fast]` adds two optional accelerators (`google-re2`,
 `pyahocorasick`). Neither changes what is detected — `tests/test_scan_path_parity.py`

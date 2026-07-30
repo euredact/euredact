@@ -751,11 +751,17 @@ Each `PatternDef` can specify:
 Measured on one core, all 31 countries loaded, `detect_dates=True`. Cost scales
 with document length, so the input size is stated rather than averaged away.
 
-| Input | Base | With `[fast]` |
-|---|---:|---:|
-| Short record (186 chars) | 723 µs — 1,383/s | **496 µs — 2,017/s** |
-| Real document (3,424 chars) | 10.4 ms — 96/s | **5.4 ms — 187/s** |
-| Memory per country | ~50 KB compiled patterns | |
+| Input | Pure Python | Aho-Corasick | With `[fast]` |
+|---|---:|---:|---:|
+| Short record (186 chars) | 907 µs — 1,103/s | 775 µs — 1,290/s | **516 µs — 1,938/s** |
+| Real document (3,424 chars) | 13.6 ms — 73/s | 10.9 ms — 92/s | **5.3 ms — 190/s** |
+| Memory per country | ~50 KB | ~50 KB | ~50 KB |
+
+Making `\b` catch identifiers glued to a non-ASCII letter costs something, but
+only where it must: next to a digit the ASCII reading alone is exactly
+equivalent, so one lookaround replaces a three-way alternation, and plain `\b`
+stays everywhere else. 0.3.3 applied the union to all 303 patterns and was
+1.8×/2.8× slower for it.
 
 ```bash
 pip install euredact[fast]

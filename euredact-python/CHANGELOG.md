@@ -1,5 +1,82 @@
 # Changelog
 
+## 0.3.4 (2026-07-30)
+
+### Fixed
+
+- **Recovered the latency 0.3.3 gave away, without giving back its recall.**
+  0.3.3 made `\b` catch identifiers glued to a non-ASCII letter by rewriting it
+  to a three-branch lookaround union on all 303 patterns. Correct, but it cost
+  **1.8× on short records and 2.8× on real documents**, and its ASCII branch
+  manufactured boundaries *inside* words at non-ASCII letters — truncating
+  `@Ciarán` to `@Ciar` and typing `FICIAIRES`, a fragment of `BÉNÉFICIAIRES`,
+  as a national ID.
+
+  The boundary is now chosen per occurrence. Next to a digit, the ASCII reading
+  alone is *exactly* the union — a Unicode letter is never an ASCII word
+  character, so the ASCII branch already succeeds everywhere the Unicode branch
+  does — and one lookaround replaces the alternation. Everywhere else plain `\b`
+  stays, which is what a Greek e-mail local part needs.
+
+  | | 186 chars | 3,424 chars |
+  |---|---:|---:|
+  | pure Python | 3.0 ms → **907 µs** | 58 ms → **13.6 ms** |
+  | with `pyahocorasick` | 2.3 ms → **775 µs** | 42 ms → **10.9 ms** |
+  | with `[fast]` | 878 µs → **516 µs** | 14.4 ms → **5.3 ms** |
+
+  Within 4% of the pre-0.3.3 baseline, with all five glued-identifier cases and
+  both Unicode e-mail cases still detected. Per-type precision, recall and F1
+  are **byte-identical** across all 152,300 corpus documents.
+
+- **Social handles containing a non-ASCII letter were masked only up to it.**
+  `@Ciarán` came back as `@Ciar`, leaving `án` in the clear, because the pattern's
+  character class was ASCII-only and the old boundary let the match stop mid-word.
+  The class is now Unicode-aware, so the whole handle is masked. The TypeScript
+  SDK already had this right; the two now agree.
+
+- **German social-security numbers were unredacted whenever the document used
+  the abbreviation `SVNR`.** The pattern and its context gate were both correct;
+  the cue list simply had `SV-Nummer` and `Sozialversicherung` and not the short
+  form people actually type.
+
+  Measured across all 152,300 corpus documents, this was **every** German
+  social-security number the rule missed — 204 of them, in the clear:
+
+  | | recall before | after |
+  |---|---:|---:|
+  | `SOCIAL_SECURITY`, country hints | 84.16% | **100.00%** |
+  | `SOCIAL_SECURITY`, blind | 83.77% | **99.61%** |
+
+  No false-positive cost: 0 before, 0 after, and no other entity type moved.
+  `SV-Nr` and `RVNR` are added alongside it — the same gap for the other two
+  spellings, and the health-insurance rule already carries `KVNR` next to
+  `KV-Nummer` for exactly this reason.
+
+  Found by per-type measurement rather than a report. `SOCIAL_SECURITY` was the
+  only type below 90% recall that was not a known cloud-tier case, which is
+  what made it worth chasing.
+
+### Added
+
+- **`tests/metrics.py`** — per-entity-type precision, recall, F1 and
+  false-positive counts over the corpus, both detection modes, with `--csv`.
+  `eval_full.py` renders an HTML report; this is the plain-text counterpart with
+  its matching rules stated in the module docstring, so a figure quoted from it
+  can be reproduced and argued with.
+
+  Writing it surfaced two flaws in the shared evaluation config, both of which
+  had been quietly distorting published numbers:
+
+  - `HEALTH_ID` had no entry in `CATEGORY_MAP`, so its 252 labels could never be
+    matched — counted as 252 misses *and* charging the engine's correct
+    `HEALTH_INSURANCE` detections as 252 false positives. `SECRET` was also
+    unmapped and worked only by accident, its fallback happening to be a real
+    entity type. Both are mapped now, which slightly raises measured recall.
+  - False positives were attributed to a category that may carry no labels at
+    all: every `BIC` detection was charged to a zero-support `BIC` row while the
+    corpus labels them `SWIFT_BIC`, splitting one type's precision across two
+    rows and reporting it as 0.00%.
+
 ## 0.3.3 (2026-07-29)
 
 ### Fixed
@@ -68,8 +145,21 @@
   deliberately supported. `re.ASCII` is unusable for the same reason, since it
   would also narrow `\w`.
 
-  Costs about 20% latency on short documents from the added lookarounds.
-  Accuracy on the corpus is unchanged.
+  **This is expensive.** The rewritten boundary is a lookaround union rather
+  than a single opcode, and every pattern carries it: **1.8× on short records
+  and 2.8× on real documents** (497 µs → 878 µs, and 5.2 ms → 14.4 ms, with
+  `[fast]` installed). An earlier revision of this entry said "about 20%" —
+  that was measured on 186-character synthetic records only and extrapolated,
+  wrongly, to real documents.
+
+  `[fast]` is close to required as a result: the RE2 prefilter absorbs most of
+  the cost by not running patterns that cannot match. Accuracy on the corpus is
+  unchanged.
+
+  Recovering the speed without giving back the five silent misses is open — the
+  likely route is to ASCII-ise only those boundaries that abut a digit or an
+  ASCII-only class, and leave plain `\b` where the neighbouring element is
+  Unicode-capable, rather than applying the union to all 303 patterns.
 
 ### Added
 
@@ -171,9 +261,14 @@
   Identical digits: `0612345678` is both a valid Dutch mobile number and a
   valid Danish CPR. Only the document distinguishes them.
 
-  On 152,300 documents, blind detection (no `countries=`) improved from
-  **95.6% to 98.3% precision** and from **94.90% to 98.38% type-correct**,
-  closing the gap to hinted detection from 3.4 points to 0.3.
+  On all 152,300 documents, blind detection (no `countries=`) improved from
+  **95.6% to 98.3% precision** and from **96.10% to 98.84% type-correct**,
+  closing the precision gap to hinted detection from 3.4 points to 0.3.
+
+  (An earlier revision of this entry quoted 94.90% → 98.38% for type-correct.
+  Those came from a 30,000-document prefix of the corpus, which is drawn from
+  one dataset and is not representative; they were labelled as full-corpus in
+  error. The figures above are measured over all 152,300.)
 
   Weights are derived from the corpus, not hand-tuned. Inference influences
   scoring only; it can never cause a miss.

@@ -684,6 +684,80 @@
           "BE68 5390 0754 7034"
         ]
       }
+    },
+    {
+      "id": "de-svnr-abbreviated-cue",
+      "text": "Steuer-ID: 51961742101. SVNR: 17090361L940. Personalausweis folgt.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "SSN": [
+          "17090361L940"
+        ]
+      }
+    },
+    {
+      "id": "de-svnr-spelled-out-cue",
+      "text": "Sozialversicherungsnummer: 17090361L940",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "SSN": [
+          "17090361L940"
+        ]
+      }
+    },
+    {
+      "id": "de-ssn-shape-without-a-cue-is-not-emitted",
+      "text": "Referenz 17090361L940 im Anhang.",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "SSN"
+      ]
+    },
+    {
+      "id": "social-handle-non-ascii-letters",
+      "text": "[09:12] Siobhan McCarthy\n@Ciarán can you look at this",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@Ciarán"
+        ]
+      }
+    },
+    {
+      "id": "social-handle-diaeresis-mid-word",
+      "text": "ping @Projectcoördinator vandaag",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@Projectcoördinator"
+        ]
+      }
+    },
+    {
+      "id": "email-is-not-truncated-at-a-non-ascii-letter",
+      "text": "Contact: petras_ž@simnet.is",
+      "countries": null,
+      "mustDetect": {
+        "EMAIL": [
+          "petras_ž@simnet.is"
+        ]
+      }
+    },
+    {
+      "id": "accented-word-is-not-a-national-id",
+      "text": "RUBRIQUE C — BÉNÉFICIAIRES EFFECTIFS",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ]
     }
   ]
 }

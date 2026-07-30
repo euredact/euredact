@@ -218,7 +218,11 @@ class SharedConfig(CountryConfig):
             # Must be preceded by whitespace or start-of-string, 1-30 alphanumeric/underscore/dot chars
             PatternDef(
                 entity_type=EntityType.SOCIAL_HANDLE,
-                pattern=r"(?<!\w)@[a-zA-Z][a-zA-Z0-9_.]{1,29}\b",
+                # Unicode-aware: an ASCII-only class cannot match "@Ciarán"
+                # at all, and the boundary rewrite used to paper over that by
+                # stopping at "@Ciar" and masking a fragment while leaving "án"
+                # in the clear. [^\W\d_] is "a letter in any script".
+                pattern=r"(?<!\w)@[^\W\d_][\w.]{1,29}\b",
                 validator=None,
                 description="Social media handle (@username)",
             ),

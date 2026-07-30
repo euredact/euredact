@@ -244,7 +244,7 @@ const DE: CountryConfig = {
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-ZÄÖÜ]{1,3}[\s\-][A-Z]{1,2}[\s\-]?\d{1,4}[EH]?\b`),
     p(EntityType.POSTAL_CODE, String.raw`\b\d{5}\b`, null, "", ["PLZ", "Postleitzahl", "postal code", "postcode", "Anschrift", "Adresse", "Wohnort", "Ort", "Stadt", "wohnt", "wohnhaft", "Straße", "Str.", "Weg", "Platz", "Allee", "Ring"], true),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\bHR[AB]\s?\d{4,6}\b`),
-    p(EntityType.SSN, String.raw`\b\d{2}[\s]?\d{6}[\s]?[A-Z][\s]?\d{3}\b`, null, "", ["Rentenversicherung", "RV-Nummer", "Sozialversicherung", "SV-Nummer", "Versicherungsnummer", "Rentenversicherungsnummer", "Sozialversicherungsnummer"], true),
+    p(EntityType.SSN, String.raw`\b\d{2}[\s]?\d{6}[\s]?[A-Z][\s]?\d{3}\b`, null, "", ["Rentenversicherung", "RV-Nummer", "Sozialversicherung", "SV-Nummer", "Versicherungsnummer", "Rentenversicherungsnummer", "Sozialversicherungsnummer", "SVNR", "SV-Nr", "RVNR"], true),
     p(EntityType.TAX_ID, String.raw`\b\d{2,3}/\d{3,4}/\d{4,5}\b`, null, "", ["Steuernummer", "St.-Nr", "StNr", "Finanzamt", "Steuer"], true),
     p(EntityType.TAX_ID, String.raw`\b\d{13}\b`, null, "", ["Steuernummer", "St.-Nr", "StNr", "Finanzamt", "Steuer"], true),
     p(EntityType.HEALTH_INSURANCE, String.raw`\b[A-Z]\d{9}\b`, null, "", ["Versichertennummer", "Krankenversicherung", "KV-Nummer", "Krankenkasse", "GKV", "Versichertenkarte", "Versicherter", "Versicherte", "KVNR", "Krankenversichertennummer"], true),

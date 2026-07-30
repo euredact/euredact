@@ -132,6 +132,14 @@ class DEConfig(CountryConfig):
                     "Rentenversicherung", "RV-Nummer", "Sozialversicherung",
                     "SV-Nummer", "Versicherungsnummer", "Rentenversicherungsnummer",
                     "Sozialversicherungsnummer",
+                    # The punctuation-free abbreviations. "SVNR" alone accounted
+                    # for every German social-security number this rule missed
+                    # across the corpus — 204 of them, unredacted, because the
+                    # list had "SV-Nummer" and "Sozialversicherung" but not the
+                    # form people actually type. "SV-Nr" and "RVNR" are the same
+                    # gap for the other two spellings; cf. KVNR alongside
+                    # KV-Nummer on the health-insurance rule.
+                    "SVNR", "SV-Nr", "RVNR",
                 ],
                 requires_context=True,
             ),
