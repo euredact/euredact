@@ -40,7 +40,9 @@ import argparse
 import csv
 import json
 import os
+import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -122,7 +124,58 @@ def load(limit: int | None):
     return records[:limit] if limit else records
 
 
-def evaluate(records, hinted: bool):
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _countries_for(item, known):
+    labelled = {p["PII_country"] for p in (item.get("PII") or [])}
+    return [c for c in labelled if c in known]
+
+
+def detect_python(records, hinted: bool, known):
+    """Detections from the Python SDK, one list per record."""
+    euredact._instance = None
+    out = []
+    for item in records:
+        cc = _countries_for(item, known)
+        out.append([
+            (d.start, d.end, d.entity_type.value, d.country)
+            for d in euredact.redact(
+                item["source_text"], countries=(cc or None) if hinted else None,
+                detect_dates=True, cache=False,
+            ).detections
+        ])
+    return out
+
+
+def detect_typescript(records, hinted: bool, known):
+    """Detections from the TypeScript SDK, via `npm run dump`.
+
+    The TypeScript SDK is measured by dumping its detections and scoring them
+    with the scorer below, rather than porting the metrics to TypeScript. If the
+    two reports used different scorers, a difference between them would say
+    nothing about the engines.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        src, dst = Path(tmp) / "in.json", Path(tmp) / "out.json"
+        src.write_text(json.dumps([
+            {"text": item["source_text"],
+             "countries": (_countries_for(item, known) or None) if hinted else None}
+            for item in records
+        ]))
+        proc = subprocess.run(
+            ["npm", "run", "--silent", "dump", "--", str(src), str(dst)],
+            cwd=ROOT / "euredact-ts", capture_output=True, text=True, check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"TypeScript dump failed:\n{proc.stderr[-1500:]}")
+        return [[tuple(d) for d in doc] for doc in json.loads(dst.read_text())]
+
+
+ENGINES = {"python": detect_python, "typescript": detect_typescript}
+
+
+def evaluate(records, hinted: bool, engine: str = "python"):
     known = set(CountryRegistry().available_countries)
     support: Counter[str] = Counter()
     for item in records:
@@ -136,16 +189,13 @@ def evaluate(records, hinted: bool):
     euredact._instance = None
     t0 = time.time()
 
-    for item in records:
+    all_detections = ENGINES[engine](records, hinted, known)
+
+    for item, detections in zip(records, all_detections):
         text = item["source_text"]
         expected = item.get("PII") or []
         if not expected:
             continue
-        countries = [c for c in {p["PII_country"] for p in expected} if c in known]
-        detections = euredact.redact(
-            text, countries=(countries or None) if hinted else None,
-            detect_dates=True, cache=False,
-        ).detections
 
         labels = []
         for pii in expected:
@@ -161,9 +211,8 @@ def evaluate(records, hinted: bool):
         for start, end, category in labels:
             acceptable = CATEGORY_MAP.get(category, {category})
             hit = None
-            for i, d in enumerate(detections):
-                if (d.start < end and d.end > start
-                        and d.entity_type.value in acceptable):
+            for i, (d_start, d_end, d_type, _c) in enumerate(detections):
+                if d_start < end and d_end > start and d_type in acceptable:
                     hit = i
                     break
             if hit is None:
@@ -172,7 +221,7 @@ def evaluate(records, hinted: bool):
                 tp[category] += 1
                 matched_detections.add(hit)
 
-        for i, d in enumerate(detections):
+        for i, (_ds, _de, d_type, _dc) in enumerate(detections):
             if i in matched_detections:
                 continue
             # Strict: a detection that did not satisfy a label is a false
@@ -181,7 +230,7 @@ def evaluate(records, hinted: bool):
             # value is masked but filed wrongly, which is exactly what
             # type-aware downstream handling gets hurt by. Exempting it would
             # let mistypes disappear from both columns and flatter precision.
-            fp[charge_to.get(d.entity_type.value, d.entity_type.value)] += 1
+            fp[charge_to.get(d_type, d_type)] += 1
 
     return tp, fn, fp, time.time() - t0, charge_to
 
@@ -231,6 +280,10 @@ def report(tp, fn, fp, elapsed, rows_csv=None, label=""):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--mode", choices=["hinted", "blind", "both"], default="both")
+    ap.add_argument("--engine", choices=["python", "typescript", "both"],
+                    default="python")
+    ap.add_argument("--per-file", action="store_true",
+                    help="one totals row per dataset instead of the type table")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--csv", type=Path, default=None)
     args = ap.parse_args()
@@ -246,10 +299,65 @@ def main() -> int:
 
     rows: list[dict] = [] if args.csv else None
     modes = ["hinted", "blind"] if args.mode == "both" else [args.mode]
+    engines = ["python", "typescript"] if args.engine == "both" else [args.engine]
     charge_to = None
-    for mode in modes:
-        tp, fn, fp, elapsed, charge_to = evaluate(records, hinted=(mode == "hinted"))
-        report(tp, fn, fp, elapsed, rows, label=f"{mode} detection")
+
+    if args.per_file:
+        # One totals row per dataset, per engine, per mode. Answers "which
+        # dataset is dragging a figure down" without reading 28 type rows.
+        for engine in engines:
+            for mode in modes:
+                print(f"\n{engine} · {mode} detection")
+                print(f"{'dataset':38s} {'labels':>9s} {'TP':>8s} {'FP':>7s} "
+                      f"{'FN':>7s} {'prec':>7s} {'recall':>7s} {'F1':>7s}")
+                print("-" * 96)
+                agg = [Counter(), Counter(), Counter()]
+                for name in DATASETS:
+                    path = DATA_DIR / name
+                    if not path.exists():
+                        continue
+                    subset = json.loads(path.read_text())
+                    if args.limit:
+                        subset = subset[:args.limit]
+                    tp, fn, fp, elapsed, charge_to = evaluate(
+                        subset, hinted=(mode == "hinted"), engine=engine)
+                    for target, src in zip(agg, (tp, fn, fp)):
+                        target.update(src)
+                    core = [k for k in set(tp) | set(fn) | set(fp)
+                            if k not in DOB_CATEGORIES]
+                    T = sum(tp[k] for k in core)
+                    FN_ = sum(fn[k] for k in core)
+                    FP_ = sum(fp[k] for k in core)
+                    P = T / (T + FP_) if T + FP_ else 0.0
+                    R = T / (T + FN_) if T + FN_ else 0.0
+                    F = 2 * P * R / (P + R) if P + R else 0.0
+                    print(f"{name:38s} {T + FN_:9,} {T:8,} {FP_:7,} {FN_:7,} "
+                          f"{P * 100:6.2f}% {R * 100:6.2f}% {F * 100:6.2f}%")
+                    if rows is not None:
+                        rows.append({"engine": engine, "mode": mode, "dataset": name,
+                                     "labels": T + FN_, "tp": T, "fp": FP_, "fn": FN_,
+                                     "precision": round(P * 100, 4),
+                                     "recall": round(R * 100, 4),
+                                     "f1": round(F * 100, 4)})
+                tp, fn, fp = agg
+                core = [k for k in set(tp) | set(fn) | set(fp)
+                        if k not in DOB_CATEGORIES]
+                T = sum(tp[k] for k in core)
+                FN_ = sum(fn[k] for k in core)
+                FP_ = sum(fp[k] for k in core)
+                P = T / (T + FP_) if T + FP_ else 0.0
+                R = T / (T + FN_) if T + FN_ else 0.0
+                F = 2 * P * R / (P + R) if P + R else 0.0
+                print("-" * 96)
+                print(f"{'ALL TEN DATASETS':38s} {T + FN_:9,} {T:8,} {FP_:7,} "
+                      f"{FN_:7,} {P * 100:6.2f}% {R * 100:6.2f}% {F * 100:6.2f}%")
+    else:
+        for engine in engines:
+            for mode in modes:
+                tp, fn, fp, elapsed, charge_to = evaluate(
+                    records, hinted=(mode == "hinted"), engine=engine)
+                report(tp, fn, fp, elapsed, rows,
+                       label=f"{engine} · {mode} detection")
 
     print("\nfalse positives are charged to the category their type would satisfy:")
     shown = sorted({f"{t}->{c}" for t, c in charge_to.items() if t != c})

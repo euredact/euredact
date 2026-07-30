@@ -185,12 +185,20 @@ bundler, edge-runtime and Deno compatibility for nothing.
 
 ### Accuracy
 
-Full corpus, 152,300 documents:
+Full corpus, 152,300 documents and 667,129 labelled entities. Span match plus
+type match, so a value masked under the wrong label counts as both a miss and a
+false positive — see `euredact-python/tests/metrics.py`, which reproduces this.
 
-| | recall | precision |
-|---|---:|---:|
-| With country hints | 99.6% | 98.6% |
-| Blind (no `countries` passed) | 99.6% | 98.3% |
+| | precision | recall | F1 |
+|---|---:|---:|---:|
+| With country hints | 99.5% | 99.7% | **99.6%** |
+| Blind (no `countries` passed) | 99.3% | 99.5% | **99.4%** |
+
+Blind detection is within 0.2 points of hinted on every measure, so the engine
+does not need to be told the country.
+
+Dates of birth are excluded: the rules engine emits one only with a keyword or
+structural cue, because bare dates are the cloud tier's job.
 
 Blind detection is within 0.3 points of hinted, so the engine does not need to
 be told the country.

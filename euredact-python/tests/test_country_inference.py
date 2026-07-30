@@ -88,6 +88,50 @@ class TestEvidenceIsAuditable:
         assert [d.country_confidence for d in r.detections] == [0.0]
 
 
+
+class TestLocalCueDecidesTheLabel:
+    """A label touching the value outranks a checksum, within its span.
+
+    36.6% of national-ID values also satisfy some other country's scheme, and
+    country evidence resolves which *scheme* owns a value — but it never looked
+    at the word immediately in front of it. "Phone: 0705237535" was reported as
+    a Swedish national ID: the digits pass that checksum, the document is
+    Swedish, and nothing consulted the word "Phone".
+    """
+
+    def test_a_phone_cue_beats_a_passing_checksum(self, sdk):
+        r = sdk.redact("Phone: 0705237535", countries=["SE"], cache=False)
+        assert [(d.entity_type, d.country) for d in r.detections] == \
+               [(EntityType.PHONE, "SE")]
+
+    def test_without_the_cue_the_checksum_still_wins(self, sdk):
+        """The cue adds evidence; it does not remove the default."""
+        r = sdk.redact("0705237535", countries=["SE"], cache=False)
+        assert r.detections[0].entity_type == EntityType.NATIONAL_ID
+
+    def test_a_company_register_cue_beats_a_national_id(self, sdk):
+        r = sdk.redact("Antoine Morel SAS (SIREN 895145571)", countries=["FR"],
+                       cache=False)
+        assert any(d.entity_type == EntityType.CHAMBER_OF_COMMERCE
+                   for d in r.detections)
+
+    def test_the_cue_cannot_change_which_characters_are_masked(self, sdk):
+        """It ranks candidates *within* a span, so it decides the label only —
+        the property that keeps the generation invariant intact."""
+        text = "Phone: 0705237535"
+        spans = lambda t: {(d.start, d.end)  # noqa: E731
+                           for d in sdk.redact(t, cache=False).detections}
+        cued = spans(text)
+        bare = spans(text.replace("Phone: ", "Nummer "))
+        assert cued == {(7, 17)} and bare == {(7, 17)}
+
+    def test_a_distant_cue_does_not_reach(self, sdk):
+        """Short window on purpose: a cue 150 characters away licensing every
+        number in between is exactly how the postal-code year defect worked."""
+        far = "Phone numbers are collected for support purposes only. " + "x" * 40
+        r = sdk.redact(f"{far} 0705237535", countries=["SE"], cache=False)
+        assert r.detections[-1].entity_type == EntityType.NATIONAL_ID
+
 class TestScopeVersusPrior:
     def test_hint_resolves_without_narrowing_scope(self, sdk):
         r = sdk.redact("Telefon: 0708787668", country_hint=["SE"], cache=False)

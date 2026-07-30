@@ -29,7 +29,8 @@ const AMOUNT_LABEL_BEFORE = /(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|T
 // because JS \b is ASCII-only and fails on Unicode letters (e.g. "München" → \bm\b matches M before ü)
 const UNIT_AFTER = /^\s*(?:kg|km|cm|mm|m[²³]|ml|mg|GB|MB|KB|TB|%|jaar|maanden|weken|dagen|uur|minuten|seconden|stuks|pcs|pieces|ans|mois|semaines|jours|heures|Jahre|Monate|Wochen|Tage|Stunden)(?![a-zA-Z\u00C0-\u024F\u0400-\u04FF])/i;
 
-const REFERENCE_BEFORE = /(?:dossier|ref\.?|referentie|reference|référence|factuurnummer|invoice\s*(?:nr|number|no)?|bestelnummer|order\s*(?:nr|number|no)?|kenmerk|ordernummer|Aktenzeichen|numéro\s*de\s*(?:dossier|facture|commande)|bestellnummer|Rechnungsnummer|artikelnr|article\s*no|contract\s*(?:nr|number|no)?|pagina|page|Seite|blz\.?|Facture\s*n[°o]?|Faktura\s*n[°or]\.?|Lasku\s*n[°or]o?\.?|Rechnung\s*(?:Nr|n[°o])?|faktura\s*(?:nr|n[°o])?|bestilling\s*(?:nr|n[°o])?|bestelling\s*n[°or]\.?|Reikningur\s*nr)\s*[:.]?\s*$/i;
+// Same missing-boundary flaw: "ref" matched the tail of "kortref".
+const REFERENCE_BEFORE = /\b(?:dossier|ref\.?|referentie|reference|référence|factuurnummer|invoice\s*(?:nr|number|no)?|bestelnummer|order\s*(?:nr|number|no)?|kenmerk|ordernummer|Aktenzeichen|numéro\s*de\s*(?:dossier|facture|commande)|bestellnummer|Rechnungsnummer|artikelnr|article\s*no|contract\s*(?:nr|number|no)?|pagina|page|Seite|blz\.?|Facture\s*n[°o]?|Faktura\s*n[°or]\.?|Lasku\s*n[°or]o?\.?|Rechnung\s*(?:Nr|n[°o])?|faktura\s*(?:nr|n[°o])?|bestilling\s*(?:nr|n[°o])?|bestelling\s*n[°or]\.?|Reikningur\s*nr|Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.]?\s*$/i;
 
 const LEGAL_BEFORE = /(?:Art(?:ikel|icle|\.)|§|Artikel|Section|Sectie|Afdeling|paragraaf|Absatz|alinéa|punt|point|Punkt|lid)\s*$/i;
 
@@ -44,7 +45,11 @@ const SEQUENTIAL_PATTERNS = /^(?:0{6,}|1234567890?|0123456789|9876543210?|111111
 
 // YEAR_PATTERN kept for reference but replaced by RECENT_YEAR in suppressYearAsPostal
 
-const ID_LABEL_BEFORE = /(?:BSN|RR|NN|NIR|INSZ|NISS|NIS|Steuer-?ID|TIN|NIF|NIE|SSN|rijksregisternummer|numéro\s*national|national\s*number|matricule|Ausweisnummer|Personalausweis|Versichertennummer|KVNR|KV-Nr|Steuernummer|St\.\-Nr|StNr|Finanzamt\s+ist|Ondernemingen\s+onder\s+nummer|ondernemingsnummer|numéro\s*d'entreprise|enterprise\s*number|Kruispuntbank)\s*[:.]?\s*$/i;
+// The leading \b is load-bearing. Without it the short alternatives match the
+// *tail* of an ordinary word: "NIS" matched "tālru**nis** ", the Latvian for
+// "telephone", so every Latvian phone number was suppressed as though it sat
+// behind a Belgian national-ID label. 653 misses from a missing word boundary.
+const ID_LABEL_BEFORE = /\b(?:BSN|RR|NN|NIR|INSZ|NISS|NIS|Steuer-?ID|TIN|NIF|NIE|SSN|rijksregisternummer|numéro\s*national|national\s*number|matricule|Ausweisnummer|Personalausweis|Versichertennummer|KVNR|KV-Nr|Steuernummer|St\.\-Nr|StNr|Finanzamt\s+ist|Ondernemingen\s+onder\s+nummer|ondernemingsnummer|numéro\s*d'entreprise|enterprise\s*number|Kruispuntbank)\s*[:.]?\s*$/i;
 
 const SERVICE_NUMBER = /^0800[\-\s]/;
 const DATE_PATTERN_FULL = /^\d{2}[-/.]\d{2}[-/.]\d{4}$|^\d{4}[-/.]\d{2}[-/.]\d{2}$/;
@@ -53,6 +58,173 @@ const PASSPORT_CONTEXT_BEFORE = /(?:Reisepass|passport|passeport|paspoort|Bisher
 const SE_ORG_CONTEXT_BEFORE = /(?:org\.?\s*nr\.?|organisationsnummer|organisationsnr|Bolagsverket|företag)\s*[:.]?\s*$/i;
 
 const NUMERIC_TYPES = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.POSTAL_CODE]);
+
+// ── Date adjacency, for the postal-code year gate ───────────────────────
+//
+// Month names in the languages this engine covers. Long, but it is data: the
+// alternative is a proximity heuristic, and proximity is what caused the defect
+// this guards against. Kept in sync with the Python SDK's suppressors.py.
+const MONTH_NAMES =
+  "january|february|march|april|may|june|july|august|september|october|november|december" +
+  "|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec" +
+  "|januar|jänner|februar|märz|mai|juni|juli|oktober|dezember|dez|okt|mrz" +
+  "|janvier|février|mars|avril|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre" +
+  "|januari|februari|maart|mei|augustus|mrt" +
+  "|gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|dicembre" +
+  "|enero|febrero|abril|mayo|junio|julio|septiembre|octubre|noviembre|diciembre" +
+  "|janeiro|fevereiro|março|marco|maio|junho|julho|setembro|outubro|novembro|dezembro" +
+  "|marts|augusti" +
+  "|tammikuu|helmikuu|maaliskuu|huhtikuu|toukokuu|kesäkuu|heinäkuu|elokuu|syyskuu|lokakuu|marraskuu|joulukuu" +
+  "|jaanuar|veebruar|aprill|juuni|juuli|oktoober|detsember" +
+  "|janvāris|februāris|aprīlis|maijs|jūnijs|jūlijs|augusts|septembris|oktobris|novembris|decembris" +
+  "|stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia" +
+  "|ledna|února|března|dubna|května|června|července|srpna|září|října|listopadu|prosince" +
+  "|marec|junij|julij|avgust|siječnja|veljače|ožujka|travnja|svibnja|lipnja|srpnja|kolovoza|rujna|studenoga|prosinca" +
+  "|március|április|május|június|július|augusztus|szeptember|október" +
+  "|ianuarie|februarie|martie|aprilie|iunie|iulie|septembrie|octombrie|noiembrie|decembrie" +
+  "|ιανουαρίου|φεβρουαρίου|μαρτίου|απριλίου|μαΐου|ιουνίου|ιουλίου|αυγούστου|σεπτεμβρίου|οκτωβρίου|νοεμβρίου|δεκεμβρίου" +
+  "|януари|февруари|март|април|май|юни|юли|август|септември|октомври|ноември|декември";
+
+/** "since" cues, which introduce a bare year in every one of these languages. */
+const SINCE_CUES =
+  "seit|since|depuis|sinds|sedert|vanaf|desde|dal|od|sedan|siden|alates|alkaen|από|от|din|iz|ab";
+
+/**
+ * A month name, a "since" cue, or a numeric date tail immediately before the
+ * candidate. Adjacent-only on purpose — a cue 150 characters away is what made
+ * this a bug in the first place.
+ */
+const DATE_BEFORE = new RegExp(
+  `(?:\\b(?:${MONTH_NAMES})\\b\\.?|\\b(?:${SINCE_CUES})\\b|\\d{1,2}[./-]\\d{1,2}[./-])\\s*$`,
+  "iu",
+);
+
+/** A date separator immediately after, making the candidate a leading year. */
+const DATE_AFTER = /^[./-]\d{1,2}[./-]\d{1,2}\b/;
+
+/**
+ * ISO 4217 codes made only of the consonants a Spanish plate accepts, so a money
+ * amount reads as a registration. This is why "2297 DKK" was a plate.
+ */
+const CURRENCY_CODE =
+  "(?:DKK|SEK|NOK|ISK|CZK|PLN|HUF|RON|BGN|HRK|CHF|GBP|TRY|RSD|MKD|BYN|KZT|CNY|JPY|KRW|ZAR|BRL|MXN|CLP|COP|PLZ|SKK|TRL)";
+const CURRENCY_CODE_TAIL = new RegExp(`\\s${CURRENCY_CODE}$`);
+const CURRENCY_CODE_AFTER = new RegExp(`^\\s*${CURRENCY_CODE}\\b`);
+
+/** Log-timestamp tails, which the ":"-anchored secret rule picks up. */
+const TIMESTAMP_FRAGMENT = /^\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,6})?Z?$/;
+
+/** Cloud region names and similar well-known configuration values. */
+const NOT_A_SECRET = new RegExp(
+  "^(?:af|ap|ca|cn|eu|il|me|sa|us|gov)-(?:north|south|east|west|central" +
+  "|northeast|northwest|southeast|southwest)-\\d[a-z]?$" +
+  "|^(?:application|text|image|audio|video|multipart)/[\\w.+-]+$" +
+  "|^(?:utf|iso|windows)-[\\d-]+$" +
+  "|^(?:no-cache|no-store|max-age|gzip|deflate|identity|chunked)\\b",
+  "i",
+);
+
+const EXACT_UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const BIC_SHAPE = /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/;
+const BIC_CUE_BEFORE = /(?:BIC|SWIFT|BIC\/SWIFT)\s*[:=]?\s*\(?\s*$/i;
+
+/** A dotted quad with every octet in range. */
+const DOTTED_QUAD =
+  /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/** Two plausible years joined by a hyphen — a school year, a contract term. */
+const YEAR_RANGE = /^(19|20)\d{2}\s?[-–/]\s?(19|20)\d{2}$/;
+
+/** A digit and a decimal point immediately before, so the match is a fraction. */
+const DECIMAL_TAIL_BEFORE = /\d[.,]$/;
+
+/**
+ * Punctuation the greedy "[^\s]{8,}" secret rule sweeps up with the token: it
+ * matched "TRIONL2U)." out of "(BIC: TRIONL2U).". Stripped only for the shape
+ * tests — the emitted span is never altered here.
+ */
+const PUNCT_EDGES = /^[\s([{<"'`]+|[\s)\]}>"'`.,;:!?]+$/g;
+
+function coreToken(raw: string): string {
+  return raw.replace(PUNCT_EDGES, "").replace(PUNCT_EDGES, "");
+}
+
+/**
+ * A generic secret must not claim a span that is a specific known type.
+ *
+ * The high-entropy rules are deliberately broad and they carry a validator, so
+ * they reach the top priority tier while the structured detector for the same
+ * characters sits at the bottom with nothing to offer. Measured on 152,300
+ * documents: 687 UUIDs and 140 BICs were reported as SECRET, each counted twice
+ * over — a false positive for SECRET and a miss for the type that should have
+ * had it.
+ */
+function suppressSecretOverStructured(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.SECRET) return false;
+  const token = coreToken(match.text);
+  if (EXACT_UUID.test(token)) return true;
+  if (BIC_SHAPE.test(token)) {
+    return BIC_CUE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start));
+  }
+  return false;
+}
+
+/**
+ * Reject the three things the ":"-anchored secret rule reliably mistakes:
+ * timestamps ("57:22.283Z]"), ordinary words ("Sozialversicherungsnummer") and
+ * region names ("us-east-1"). All three sit after a colon or equals sign, which
+ * is all that rule asks for, and all three clear the entropy threshold.
+ *
+ * The word test is narrow on purpose: purely alphabetic *and* shaped like one
+ * natural word. A random all-letter token would be mixed case and is left alone
+ * — losing a real secret is the expensive direction.
+ */
+function suppressSecretNotASecret(_text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.SECRET) return false;
+  const bare = coreToken(match.text);
+  if (TIMESTAMP_FRAGMENT.test(bare)) return true;
+  if (NOT_A_SECRET.test(bare)) return true;
+  const alpha = /^[A-Za-zÀ-ÿ]+$/.test(bare);
+  const oneWord =
+    bare === bare.toLowerCase() ||
+    (bare.slice(0, 1) === bare.slice(0, 1).toUpperCase() &&
+      bare.slice(1) === bare.slice(1).toLowerCase());
+  return alpha && oneWord;
+}
+
+/**
+ * A money amount followed by its ISO 4217 code is not a registration. Spain's
+ * plate shape is four digits then three consonants, and the Nordic and Central
+ * European currency codes are all consonants: "2297 DKK" read as a Spanish plate
+ * 487 times across the corpus.
+ */
+function suppressPlateAsCurrencyAmount(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.LICENSE_PLATE) return false;
+  if (CURRENCY_CODE_TAIL.test(match.text)) return true;
+  return CURRENCY_CODE_AFTER.test(text.slice(match.end, match.end + 12));
+}
+
+/**
+ * A dotted quad is an address, not a tax number. Germany's tax-number shape
+ * allows dots between its digit groups, which makes it a superset of IPv4. The
+ * address is still redacted — the IP_ADDRESS rule claims the same span — so this
+ * only corrects the label.
+ */
+function suppressTaxidAsIpAddress(_text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.TAX_ID) return false;
+  return DOTTED_QUAD.test(match.text.trim());
+}
+
+/**
+ * Reject two phone shapes that are arithmetic rather than contact details: a
+ * year range ("Schooljaar 2025-2026") and the fractional part of a decimal
+ * amount ("0.034865 BTC"). Both clear every phone pattern's shape test.
+ */
+function suppressPhoneAsNumberRange(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.PHONE) return false;
+  if (YEAR_RANGE.test(match.text.trim())) return true;
+  return DECIMAL_TAIL_BEFORE.test(text.slice(Math.max(0, match.start - 2), match.start));
+}
 
 function suppressCurrency(text: string, match: RawMatch): boolean {
   if (!NUMERIC_TYPES.has(match.patternDef.entityType)) return false;
@@ -107,6 +279,15 @@ function suppressYearAsPostal(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
   const clean = match.text.trim();
   if (!RECENT_YEAR.test(clean)) return false;
+  // A date construction *touching* the candidate settles it, whatever the rest
+  // of the document says. Without this, the postal-context test below rescued
+  // every year in every document with an address in it — and "Adresse", "rue"
+  // and "Str." appear in the header of essentially every business letter.
+  // Measured: 1,691 of 3,322 postal false positives were plausible years,
+  // 1,636 of them literally "2025".
+  if (DATE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start))) return true;
+  if (DATE_AFTER.test(text.slice(match.end, match.end + 8))) return true;
+
   const [before, after] = getContext(text, match.start, match.end);
   const context = before + after;
   // Keep as postal code if postal/address context nearby
@@ -470,8 +651,44 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   return false;
 }
 
+/**
+ * A delimited data row: at least three fields separated by one delimiter.
+ * Export formats carry their meaning in the column, not in a nearby word, so a
+ * value filling an entire field has structural context even when the line
+ * contains no cue.
+ */
+const DELIMITED_ROW = /^[^\n]*?([,;|\t])[^\n]*?\1[^\n]*?\1/;
+
+/**
+ * Types for which filling a delimited field counts as context. Narrow shapes
+ * only: applied to every type it was measured a net loss — SECRET gained 1,678
+ * false positives, CHAMBER_OF_COMMERCE 456 and POSTAL_CODE 295. A broad shape
+ * plus a required cue is a deliberate pairing, and removing the cue leaves only
+ * the broad shape.
+ */
+const DELIMITED_FIELD_TYPES = new Set<EntityType | string>([
+  EntityType.PHONE, EntityType.DOB, EntityType.DATE_OF_DEATH,
+]);
+
+/** True when the span is exactly one field of a delimited row. */
+function fillsADelimitedField(text: string, start: number, end: number): boolean {
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+  let lineEnd = text.indexOf("\n", end);
+  if (lineEnd < 0) lineEnd = text.length;
+  if (!DELIMITED_ROW.test(text.slice(lineStart, lineEnd))) return false;
+  const before = text.slice(lineStart, start);
+  const after = text.slice(end, lineEnd);
+  const opens = before === "" || ",;|\t".includes(before[before.length - 1]);
+  const closes = after === "" || ",;|\t".includes(after[0]);
+  return opens && closes;
+}
+
 function suppressRequiresContext(text: string, match: RawMatch): boolean {
   if (!match.patternDef.requiresContext || match.patternDef.contextKeywords.length === 0) return false;
+  // A value filling an entire field of a delimited row is introduced by its
+  // column, not by a word, so that is context — but only for narrow shapes.
+  if (DELIMITED_FIELD_TYPES.has(match.patternDef.entityType) &&
+      fillsADelimitedField(text, match.start, match.end)) return false;
   const [before, after] = getContext(text, match.start, match.end);
   const context = (before + " " + after).toLowerCase();
   return !match.patternDef.contextKeywords.some(kw => context.includes(kw.toLowerCase()));
@@ -480,14 +697,15 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
 type Suppressor = (text: string, match: RawMatch) => boolean;
 
 const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
-  [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneAfterIdLabel, suppressPhoneServiceNumber, suppressPhoneDateOverlap],
+  [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneAfterIdLabel, suppressPhoneServiceNumber, suppressPhoneDateOverlap, suppressPhoneAsNumberRange],
   [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressNatidAsPassport, suppressSeNatidAsOrg],
   [EntityType.SSN]: [suppressCurrency, suppressUnits, suppressReference, suppressMath],
-  [EntityType.TAX_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressMath],
+  [EntityType.TAX_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressTaxidAsIpAddress],
   [EntityType.POSTAL_CODE]: [suppressCurrency, suppressUnits, suppressMath, suppressLegal, suppressYearAsPostal, suppressPostalInsideIban, suppressPostalAsHouseNumber, suppressPostalInLongerIdentifier],
   [EntityType.BIC]: [suppressBicWithoutEvidence],
   [EntityType.BANK_ACCOUNT]: [suppressReference],
-  [EntityType.LICENSE_PLATE]: [suppressPlateInCompound, suppressDePlateUnknownDistrict],
+  [EntityType.LICENSE_PLATE]: [suppressPlateInCompound, suppressDePlateUnknownDistrict, suppressPlateAsCurrencyAmount],
+  [EntityType.SECRET]: [suppressSecretOverStructured, suppressSecretNotASecret],
   [EntityType.CHAMBER_OF_COMMERCE]: [suppressReference],
 };
 

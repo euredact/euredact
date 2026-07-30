@@ -1,5 +1,91 @@
 # Changelog
 
+## 0.3.5 (2026-07-30)
+
+### Fixed
+
+Eleven detection defects, found by measuring precision, recall and F1 per entity
+type rather than by report. Across all 152,300 corpus documents and 667,129
+labelled entities, false positives fell from 8,905 to 3,294 and misses from
+5,162 to 1,915.
+
+| | precision | recall | F1 |
+|---|---:|---:|---:|
+| 0.3.4, with country hints | 98.67% | 99.23% | 98.95% |
+| **0.3.5** | **99.51%** | **99.71%** | **99.61%** |
+| 0.3.4, blind | 98.36% | 98.91% | 98.63% |
+| **0.3.5** | **99.28%** | **99.49%** | **99.39%** |
+
+- **Every Latvian phone number was suppressed.** `NIS`, the Belgian
+  national-number label, was listed without a word boundary and matched
+  case-insensitively — so it matched the *tail* of `tālrunis`, the Latvian for
+  "telephone". The word for "phone" was being read as "this is not a phone".
+  653 misses. The same flaw in the reference-label list (`ref` matching the tail
+  of `kortref`) is fixed with it.
+
+- **Spanish numbers grouped 3-2-2-2 matched no pattern at all.** `705 97 55 11`
+  is as common as the 3-3-3 and 2-3-2-2 groupings that were present. 674 misses,
+  the single largest phone gap.
+
+- **A generic secret claimed spans belonging to specific types.** The
+  high-entropy rules are broad *and* carry a validator, so they reached the top
+  priority tier while the structured detector for the same characters sat at the
+  bottom with nothing to offer. 687 UUIDs and 140 BICs were reported as
+  `SECRET` — each counted twice over, as a false positive for `SECRET` and a
+  miss for the type that should have had it. `UUID` and `SWIFT_BIC` recall both
+  reach 100%.
+
+- **A four-digit year inside a date was masked as a postal code.** The existing
+  year guard deferred to any address cue within 150 characters, and `Adresse`,
+  `rue` and `Str.` head essentially every business letter. Adjacent date
+  evidence now settles it. 1,691 of 3,322 postal false positives were plausible
+  years, 1,636 of them literally `2025`. *(Reported separately; the guard cases
+  from that report ship as conformance vectors.)*
+
+- **Money amounts read as Spanish licence plates.** The plate shape is four
+  digits then three consonants, and the Nordic and Central European currency
+  codes are all consonants: `2297 DKK`. The separator also matched a line break,
+  so a year ending one line and a label starting the next (`2002\nCPR`) read as
+  one registration. 667 false positives.
+
+- **Timestamps, ordinary words and cloud regions were reported as secrets.**
+  `57:22.283Z]`, `Sozialversicherungsnummer` and `us-east-1` all sit after a
+  colon and clear the entropy threshold. 437 false positives.
+
+- **A dotted quad was reported as a German tax number.** That shape allows dots
+  between digit groups, making it a superset of IPv4.
+
+- **Year ranges and decimal tails were reported as phone numbers.**
+  `Schooljaar 2025-2026`, and `034865` out of `0.034865 BTC`. The Dutch
+  two-word invoice form `Factuur nr.` was also missing where `factuurnummer`
+  was present.
+
+- **Belgian enterprise numbers were missed when introduced by the registry's own
+  name** — `Kruispuntbank van Ondernemingen onder nummer`. Same shape of gap as
+  0.3.4's German `SVNR`.
+
+- **A label touching a value now outranks a checksum.** Country evidence
+  resolved which *national scheme* owned an ambiguous value but never looked at
+  the word in front of it, so `Phone: 0705237535` was reported as a Swedish
+  national ID. The cue ranks candidates only *within* a span, so it decides the
+  label and can never change which characters are masked — the property that
+  keeps the generation invariant intact. `CHAMBER_OF_COMMERCE` misses fell from
+  205 to 1.
+
+- **A value filling an entire field of a delimited row now counts as context.**
+  Export formats carry meaning in the column, not in a nearby word. Restricted
+  to narrow shapes: applied to every type it was a net loss, because a broad
+  pattern paired with a required cue is a deliberate pairing.
+
+### Added
+
+- 25 shared conformance vectors covering all of the above (68 → 93), run by both
+  runtimes.
+- `tests/metrics.py` gains `--engine python|typescript|both` and `--per-file`.
+  The TypeScript SDK is measured by dumping its detections and scoring them with
+  the *same* scorer, so a difference between the two reports says something
+  about the engines rather than about the measurement.
+
 ## 0.3.4 (2026-07-30)
 
 ### Fixed

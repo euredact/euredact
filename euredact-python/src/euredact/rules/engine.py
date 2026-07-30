@@ -39,6 +39,55 @@ def _validate_custom_pattern(pattern: str) -> None:
         )
 
 
+# ── Local cues: what the document calls the value next to it ────────────
+#
+# Country evidence resolves which *national scheme* owns an ambiguous value, but
+# it never looks at the label sitting immediately in front of it. So
+# "Phone: 0705237535" was reported as a Swedish national ID: the digits pass that
+# checksum, the document is Swedish, and nothing consulted the word "Phone".
+#
+# A cue touching the span is the strongest statement the document makes about
+# what the value *is*. It therefore outranks the checksum — but only among
+# candidates covering the **same span**, so it decides the label and can never
+# change which characters are masked. That is what keeps invariant I1 intact.
+#
+# Measured: 263 phone numbers were reported as national IDs and 18 French SIREN
+# as national IDs, each with an explicit cue in front of it.
+_LOCAL_CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
+    (EntityType.PHONE, re.compile(
+        r"(?:phone|tel|telephone|téléphone|telefoon|telefon|telefono|teléfono"
+        r"|tlf|mobil|mobile|gsm|handy|sími|puh|móvil|cell)\w*\s*[:.\-]?\s*$",
+        re.IGNORECASE)),
+    (EntityType.CHAMBER_OF_COMMERCE, re.compile(
+        r"(?:siren|siret|kbo|bce|kvk|ondernemingsnummer|handelsregister"
+        r"|company\s*(?:no|number|reg)|organisationsnummer|orgnr)\w*"
+        r"\s*[:.\-]?\s*$", re.IGNORECASE)),
+    (EntityType.VAT, re.compile(
+        r"(?:vat|btw|tva|ust|iva|moms|alv|mwst)[\w.\-]*\s*[:.\-]?\s*$",
+        re.IGNORECASE)),
+    (EntityType.BIC, re.compile(
+        r"(?:bic|swift)[\w/]*\s*[:.\-]?\s*\(?\s*$", re.IGNORECASE)),
+    (EntityType.NATIONAL_ID, re.compile(
+        r"(?:bsn|personnummer|rijksregisternummer|national\s*id"
+        r"|identiteitsnummer|henkilötunnus|kennitala|cpr|nif|dni)\w*"
+        r"\s*[:.\-]?\s*$", re.IGNORECASE)),
+)
+
+#: How far back a cue may sit. Short on purpose: a cue is only evidence about
+#: the value it introduces, which is the lesson of the postal-code year defect,
+#: where a cue 150 characters away licensed every number in the window.
+_CUE_WINDOW = 22
+
+
+def _local_cue_bonus(text: str, start: int, entity_type: object) -> int:
+    """1 when a cue naming *entity_type* sits immediately before the span."""
+    before = text[max(0, start - _CUE_WINDOW):start]
+    for cued_type, pattern in _LOCAL_CUES:
+        if cued_type == entity_type and pattern.search(before):
+            return 1
+    return 0
+
+
 def check_country_arg(value: object, param: str) -> None:
     """Reject a bare string where a list of country codes is expected.
 
@@ -336,7 +385,8 @@ class RuleEngine:
         # (priority, in_scope, start, end, match, prebuilt). in_scope ranks
         # candidates within a priority tier; it never removes any.
         candidates: list[
-            tuple[int, int, float, int, int, int, RawMatch | None, Detection | None]
+            tuple[int, int, int, float, int, int, int, RawMatch | None,
+                  Detection | None]
         ] = []
         for match, has_valid_validator in validated:
             # A validator-less match inside a failed-validation span used to be
@@ -422,15 +472,16 @@ class RuleEngine:
 
             in_scope = 1 if (declared is None or match.country_code in declared) else 0
             country_score = country_scores.get(match.country_code, 0.0)
+            cue = _local_cue_bonus(text, match.start, match.pattern_def.entity_type)
             candidates.append(
-                (blind_priority, priority, country_score, in_scope,
+                (blind_priority, cue, priority, country_score, in_scope,
                  match.start, match.end, match, None)
             )
 
         # Structural detectors (JSON field names, CSV headers). These arrive as
         # finished Detections, carry no RawMatch, and are not suppressed.
         for d in detect_structural_dob(text):
-            candidates.append((1, 1, 0.0, 1, d.start, d.end, None, d))
+            candidates.append((1, 0, 1, 0.0, 1, d.start, d.end, None, d))
 
         # Deduplicate: validated > custom > regex-only, then longer wins
         detections = self._deduplicate(text, candidates, declared)
@@ -454,7 +505,8 @@ class RuleEngine:
     def _deduplicate(
         text: str,
         candidates: list[
-            tuple[int, int, float, int, int, int, RawMatch | None, Detection | None]
+            tuple[int, int, int, float, int, int, int, RawMatch | None,
+                  Detection | None]
         ],
         declared: set[str] | None = None,
     ) -> list[Detection]:
@@ -501,26 +553,28 @@ class RuleEngine:
         # whichever foreign scheme happened to validate.
         span_tier: dict[tuple[int, int], int] = {}
         for c in candidates:
-            key = (c[4], c[5])
+            key = (c[5], c[6])
             if c[0] > span_tier.get(key, -2):
                 span_tier[key] = c[0]
 
         sorted_cands = sorted(
             candidates,
             key=lambda c: (
-                -(c[5] - c[4]),                # longest first    } country-blind
-                -span_tier[(c[4], c[5])],      # best tier here   } — decides
-                c[4],                          # leftmost         } WHICH span
-                -c[1],                         # country priority } country-aware
-                -c[2],                         # country evidence } — decides the
-                -c[3],                         # declared scope   } LABEL only
+                -(c[6] - c[5]),                # longest first    } country-blind
+                -span_tier[(c[5], c[6])],      # best tier here   } — decides
+                c[5],                          # leftmost         } WHICH span
+                -c[1],                         # local cue        } country-aware
+                -c[2],                         # country priority } — decides the
+                -c[3],                         # country evidence } LABEL only
+                -c[4],                         # declared scope   }
             ),
         )
         result: list[Detection] = []
         occupied: set[int] = set()
         span_verdicts: dict[tuple[object, int, int], bool] = {}
 
-        for _bp, _prio, _score, in_scope, start, end, match, prebuilt in sorted_cands:
+        for (_bp, _cue, _prio, _score, in_scope,
+             start, end, match, prebuilt) in sorted_cands:
             if any(p in occupied for p in range(start, end)):
                 continue
 

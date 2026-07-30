@@ -211,7 +211,7 @@ const BE: CountryConfig = {
     p(EntityType.NATIONAL_ID, String.raw`\b\d{2}\.?\d{2}\.?\d{2}[\-.]?\d{3}\.?\d{2}\b`, "belgian_nn"),
     p(EntityType.IBAN, String.raw`\bBE\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bBE\s?0\d{3}\.?\d{3}\.?\d{3}\b`, "belgian_vat"),
-    p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b0\d{3}\.?\d{3}\.?\d{3}\b`, null, "", ["KBO", "BCE", "ondernemingsnummer", "numéro d'entreprise", "enterprise number", "bedrijfsnummer"], true),
+    p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b0\d{3}\.?\d{3}\.?\d{3}\b`, null, "", ["KBO", "BCE", "ondernemingsnummer", "numéro d'entreprise", "enterprise number", "bedrijfsnummer", "Kruispuntbank", "Banque-Carrefour", "Banque Carrefour", "Ondernemingen", "Entreprises", "onder nummer"], true),
     p(EntityType.PHONE, String.raw`\b0[1-9]\d{0,2}[/\s.\-]?\d{2,3}[.\s\-]?\d{2,3}[.\s\-]?\d{2,3}\b`),
     p(EntityType.PHONE, String.raw`\+32\s?\d{1,3}[\s.\-]?\d{2,3}[\s.\-]?\d{2}[\s.\-]?\d{2}`),
     p(EntityType.PASSPORT, String.raw`\b[A-Z]{2}\d{6}\b`, null, "", ["paspoort", "passport", "passeport", "reisdocument", "travel document", "document de voyage"], true),
@@ -415,8 +415,15 @@ const ES: CountryConfig = {
     p(EntityType.PHONE, String.raw`\b[679]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b`),
     p(EntityType.PHONE, String.raw`\b[679]\d{8}\b`),
     p(EntityType.PHONE, String.raw`\b[679]\d[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}\b`),
+    // 3-2-2-2. Just as common as the groupings above and absent until now:
+    // "705 97 55 11" matched no phone pattern at all, which cost 674 Spanish
+    // numbers — the single largest PHONE gap.
+    p(EntityType.PHONE, String.raw`\b[679]\d{2}[\s\-]?\d{2}[\s\-]?\d{2}[\s\-]?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\+34\s?[679]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}`),
-    p(EntityType.LICENSE_PLATE, String.raw`\b\d{4}\s?[BCDFGHJKLMNPRSTVWXYZ]{3}\b`),
+    // A single space, not \s: \s matched a line break, so a year ending one
+    // line and a label starting the next ("2002\nCPR") read as one
+    // registration — 310 times across the corpus.
+    p(EntityType.LICENSE_PLATE, String.raw`\b\d{4}[ ]?[BCDFGHJKLMNPRSTVWXYZ]{3}\b`),
     p(EntityType.POSTAL_CODE, String.raw`\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b`, null, "", ["código postal", "C.P.", "CP", "dirección", "domicilio", "calle", "avenida", "plaza", "paseo", "camino", "Postal:"], true),
   ],
 };

@@ -57,7 +57,7 @@ _UNIT_AFTER = re.compile(
 # ── Reference / invoice numbers ─────────────────────────────────────────
 
 _REFERENCE_BEFORE = re.compile(
-    r"(?:dossier|ref\.?|referentie|reference|référence|factuurnummer|"
+    r"\b(?:dossier|ref\.?|referentie|reference|référence|factuurnummer|"
     r"invoice\s*(?:nr|number|no)?|bestelnummer|order\s*(?:nr|number|no)?|"
     r"kenmerk|ordernummer|Aktenzeichen|numéro\s*de\s*(?:dossier|facture|commande)|"
     r"bestellnummer|Rechnungsnummer|artikelnr|article\s*no|"
@@ -65,7 +65,10 @@ _REFERENCE_BEFORE = re.compile(
     r"Facture\s*n[°o]?|Faktura\s*n[°or]\.?|Lasku\s*n[°or]o?\.?|"
     r"Rechnung\s*(?:Nr|n[°o])?|faktura\s*(?:nr|n[°o])?|"
     r"bestilling\s*(?:nr|n[°o])?|bestelling\s*n[°or]\.?|"
-    r"Reikningur\s*nr)\s*[:.]?\s*$",
+    r"Reikningur\s*nr|"
+    # The Dutch two-word form. "factuurnummer" was here, "Factuur nr." was not,
+    # and the latter is what documents actually write.
+    r"Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.]?\s*$",
     re.IGNORECASE,
 )
 
@@ -146,8 +149,12 @@ _COUNTRY_PREFIXED = re.compile(r"(?:^|[^A-Za-z0-9])[A-Z]{1,2}$")
 
 # ── Phone: preceded by ID/tax label ────────────────────────────────────
 
+# The leading \b is load-bearing. Without it the short alternatives match the
+# *tail* of an ordinary word: "NIS" matched "tālru**nis** ", the Latvian for
+# "telephone", so every Latvian phone number was suppressed as though it sat
+# behind a Belgian national-ID label. 653 misses from a missing word boundary.
 _ID_LABEL_BEFORE = re.compile(
-    r"(?:BSN|RR|NN|NIR|INSZ|NISS|NIS|Steuer-?ID|TIN|NIF|NIE|SSN|"
+    r"\b(?:BSN|RR|NN|NIR|INSZ|NISS|NIS|Steuer-?ID|TIN|NIF|NIE|SSN|"
     r"rijksregisternummer|numéro\s*national|national\s*number|"
     r"matricule|Ausweisnummer|Personalausweis|"
     r"Versichertennummer|KVNR|KV-Nr|"
@@ -255,6 +262,193 @@ def _get_context(text: str, start: int, end: int) -> tuple[str, str]:
     return (text[ctx_start:start], text[end:ctx_end])
 
 
+# ── Date adjacency, for the postal-code year gate ───────────────────────
+#
+# Month names in the languages this engine covers. Long, but it is data: the
+# alternative is a proximity heuristic, and proximity is what caused the defect
+# these guard against. Kept in sync with the TypeScript port.
+_MONTH_NAMES = (
+    # en
+    "january|february|march|april|may|june|july|august|september|october"
+    "|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec"
+    # de (incl. Austrian Jänner)
+    "|januar|jänner|februar|märz|mai|juni|juli|oktober|dezember|dez|okt|mrz"
+    # fr
+    "|janvier|février|février|mars|avril|juin|juillet|août|aout|septembre"
+    "|octobre|novembre|décembre|decembre"
+    # nl
+    "|januari|februari|maart|mei|juni|juli|augustus|oktober|mrt"
+    # it
+    "|gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre"
+    "|ottobre|novembre|dicembre"
+    # es / pt
+    "|enero|febrero|abril|mayo|junio|julio|septiembre|octubre|noviembre"
+    "|diciembre|janeiro|fevereiro|março|marco|maio|junho|julho|setembro"
+    "|outubro|novembro|dezembro"
+    # da / no / sv
+    "|marts|maj|augusti|oktober"
+    # fi
+    "|tammikuu|helmikuu|maaliskuu|huhtikuu|toukokuu|kesäkuu|heinäkuu|elokuu"
+    "|syyskuu|lokakuu|marraskuu|joulukuu"
+    # et / lv / lt
+    "|jaanuar|veebruar|aprill|juuni|juuli|oktoober|detsember"
+    "|janvāris|februāris|marts|aprīlis|maijs|jūnijs|jūlijs|augusts"
+    "|septembris|oktobris|novembris|decembris"
+    # pl (genitive, as used in dates)
+    "|stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września"
+    "|października|listopada|grudnia"
+    # cs / sk
+    "|ledna|února|března|dubna|května|června|července|srpna|září|října"
+    "|listopadu|prosince"
+    # sl / hr
+    "|januar|februar|marec|maj|junij|julij|avgust|siječnja|veljače|ožujka"
+    "|travnja|svibnja|lipnja|srpnja|kolovoza|rujna|studenoga|prosinca"
+    # hu / ro
+    "|március|április|május|június|július|augusztus|szeptember|október"
+    "|ianuarie|februarie|martie|aprilie|iunie|iulie|septembrie|octombrie"
+    "|noiembrie|decembrie"
+    # el / bg
+    "|ιανουαρίου|φεβρουαρίου|μαρτίου|απριλίου|μαΐου|ιουνίου|ιουλίου"
+    "|αυγούστου|σεπτεμβρίου|οκτωβρίου|νοεμβρίου|δεκεμβρίου"
+    "|януари|февруари|март|април|май|юни|юли|август|септември|октомври"
+    "|ноември|декември"
+)
+
+#: "since" cues, which introduce a bare year in every one of these languages.
+_SINCE_CUES = (
+    "seit|since|depuis|sinds|sedert|vanaf|desde|dal|dall'|od|sedan|siden"
+    "|alates|alkaen|από|от|din|iz|ab"
+)
+
+#: A month name, a "since" cue, or a numeric date tail immediately before the
+#: candidate. Deliberately adjacent-only — a cue 150 characters away is what
+#: made this a bug in the first place.
+_DATE_BEFORE = re.compile(
+    rf"(?:\b(?:{_MONTH_NAMES})\b\.?|\b(?:{_SINCE_CUES})\b|"
+    rf"\d{{1,2}}[./\-]\d{{1,2}}[./\-])\s*$",
+    re.IGNORECASE | re.UNICODE,
+)
+
+#: A date separator immediately after, making the candidate a leading year:
+#: "2026-03-14", "2026/03/14".
+_DATE_AFTER = re.compile(r"^[./\-]\d{1,2}[./\-]\d{1,2}\b")
+
+#: ISO 4217 codes made only of the consonants a Spanish plate accepts, so a
+#: money amount reads as a registration. This is why "2297 DKK" was a plate.
+_CURRENCY_CODE = (
+    r"(?:DKK|SEK|NOK|ISK|CZK|PLN|HUF|RON|BGN|HRK|CHF|GBP|TRY|RSD|MKD"
+    r"|BYN|KZT|CNY|JPY|KRW|ZAR|BRL|MXN|CLP|COP|PLZ|SKK|TRL)"
+)
+#: The code usually falls *inside* the plate span, because the plate shape ends
+#: in exactly the three letters the code occupies: "2297 DKK" matched whole.
+_CURRENCY_CODE_TAIL = re.compile(rf"\s{_CURRENCY_CODE}$")
+_CURRENCY_CODE_AFTER = re.compile(rf"^\s*{_CURRENCY_CODE}\b")
+
+#: Log-timestamp tails, which the ":"-anchored secret rule picks up:
+#: "57:22.283Z]", "11:11.231Z".
+_TIMESTAMP_FRAGMENT = re.compile(
+    r"^\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,6})?Z?$"
+)
+
+#: Cloud region names and similar well-known configuration values. Not secrets,
+#: and they sit after "region = " in every infrastructure dump.
+_NOT_A_SECRET = re.compile(
+    r"^(?:af|ap|ca|cn|eu|il|me|sa|us|gov)-(?:north|south|east|west|central"
+    r"|northeast|northwest|southeast|southwest)-\d[a-z]?$"
+    r"|^(?:application|text|image|audio|video|multipart)/[\w.+-]+$"
+    r"|^(?:utf|iso|windows)-[\d-]+$"
+    r"|^(?:no-cache|no-store|max-age|gzip|deflate|identity|chunked)\b",
+    re.IGNORECASE,
+)
+
+#: Trailing and leading punctuation the greedy "[^\\s]{8,}" secret rule sweeps
+#: up with the token: it matched "TRIONL2U)." out of "(BIC: TRIONL2U).". Stripped
+#: only for the shape tests below — the emitted span is never altered here.
+_PUNCT_EDGES = re.compile(r"^[\s(\[{<\"'`]+|[\s)\]}>\"'`.,;:!?]+$")
+
+
+def _core_token(raw: str) -> str:
+    return _PUNCT_EDGES.sub("", _PUNCT_EDGES.sub("", raw))
+
+
+#: A UUID, exactly. SECRET must not claim one — see
+#: suppress_secret_over_structured.
+_EXACT_UUID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+    r"-[0-9a-fA-F]{12}$"
+)
+
+#: A BIC, and the cue that licenses one.
+_BIC_SHAPE = re.compile(r"^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$")
+_BIC_CUE_BEFORE = re.compile(r"(?:BIC|SWIFT|BIC/SWIFT)\s*[:=]?\s*\(?\s*$", re.IGNORECASE)
+
+
+def suppress_secret_over_structured(text: str, match: RawMatch) -> bool:
+    """A generic secret must not claim a span that is a specific known type.
+
+    The high-entropy rules are deliberately broad, and they carry a validator,
+    so they reach the top priority tier while the structured detector for the
+    same characters sits at the bottom with no validator to offer. The generic
+    rule therefore wins spans it should never have contested.
+
+    Measured on 152,300 documents: 687 UUIDs and 140 BICs were reported as
+    SECRET. Each was counted twice over — a false positive for SECRET and a miss
+    for the type that should have had it — so this single check moves 1,654
+    outcomes.
+    """
+    if match.pattern_def.entity_type != EntityType.SECRET:
+        return False
+    token = _core_token(match.text)
+    if _EXACT_UUID.match(token):
+        return True
+    if _BIC_SHAPE.match(token):
+        before = text[max(0, match.start - 24):match.start]
+        if _BIC_CUE_BEFORE.search(before):
+            return True
+    return False
+
+
+def suppress_secret_not_a_secret(text: str, match: RawMatch) -> bool:
+    """Reject the three things the ":"-anchored secret rule reliably mistakes.
+
+    All three sit after a colon or an equals sign, which is all that rule asks
+    for, and all three clear the entropy threshold:
+
+      timestamps      "57:22.283Z]"   — 310 occurrences
+      ordinary words  "Sozialversicherungsnummer" — 73
+      region names    "us-east-1"     — 54
+
+    The word test is narrow on purpose: purely alphabetic *and* shaped like one
+    natural word (all lower case, or capitalised then lower case). A random
+    all-letter token would be mixed case, and is left alone — losing a real
+    secret is the expensive direction.
+    """
+    if match.pattern_def.entity_type != EntityType.SECRET:
+        return False
+    bare = _core_token(match.text)
+    if _TIMESTAMP_FRAGMENT.match(bare):
+        return True
+    if _NOT_A_SECRET.match(bare):
+        return True
+    if bare.isalpha() and (bare.islower() or (bare[:1].isupper() and bare[1:].islower())):
+        return True
+    return False
+
+
+def suppress_plate_as_currency_amount(text: str, match: RawMatch) -> bool:
+    """A money amount followed by its ISO 4217 code is not a registration.
+
+    Spain's plate shape is four digits then three consonants, and the codes for
+    the Nordic and Central European currencies are all consonants: "2297 DKK"
+    read as a Spanish plate 487 times across the corpus.
+    """
+    if match.pattern_def.entity_type != EntityType.LICENSE_PLATE:
+        return False
+    if _CURRENCY_CODE_TAIL.search(match.text):
+        return True
+    return bool(_CURRENCY_CODE_AFTER.match(text[match.end:match.end + 12]))
+
+
 def suppress_currency(text: str, match: RawMatch) -> bool:
     """Suppress numbers in currency context, including comma-decimal amounts."""
     if match.pattern_def.entity_type not in (
@@ -270,6 +464,49 @@ def suppress_currency(text: str, match: RawMatch) -> bool:
     if _AMOUNT_LABEL_BEFORE.search(before):
         return True
     return False
+
+
+#: A dotted quad with every octet in range. The German tax-number shape
+#: "[1-9]\d[\s.]?\d{3}[\s.]?\d{3}[\s.]?\d{3}" matches an IPv4 address exactly:
+#: "45.175.147.128" was reported as a TAX_ID 31 times.
+_DOTTED_QUAD = re.compile(
+    r"^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}"
+    r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$"
+)
+
+#: Two plausible years joined by a hyphen — a school year, a contract term, a
+#: reporting period. Read as a phone number 96 times.
+_YEAR_RANGE = re.compile(r"^(19|20)\d{2}\s?[-–/]\s?(19|20)\d{2}$")
+
+#: A digit and a decimal point immediately before the candidate, so the match is
+#: the fractional part of an amount: "0.034865 BTC" gave a PHONE of "034865".
+_DECIMAL_TAIL_BEFORE = re.compile(r"\d[.,]$")
+
+
+def suppress_taxid_as_ip_address(text: str, match: RawMatch) -> bool:
+    """A dotted quad is an address, not a tax number.
+
+    Germany's tax-number shape allows dots between its digit groups, which makes
+    it a superset of IPv4. The address is still redacted — the IP_ADDRESS rule
+    claims the same span — so this only corrects the label.
+    """
+    if match.pattern_def.entity_type != EntityType.TAX_ID:
+        return False
+    return bool(_DOTTED_QUAD.match(match.text.strip()))
+
+
+def suppress_phone_as_number_range(text: str, match: RawMatch) -> bool:
+    """Reject two phone shapes that are arithmetic rather than contact details.
+
+    A year range ("Schooljaar 2025-2026") and the fractional part of a decimal
+    amount ("0.034865 BTC"). Both clear every phone pattern's shape test, and
+    neither has ever been a telephone number.
+    """
+    if match.pattern_def.entity_type != EntityType.PHONE:
+        return False
+    if _YEAR_RANGE.match(match.text.strip()):
+        return True
+    return bool(_DECIMAL_TAIL_BEFORE.search(text[max(0, match.start - 2):match.start]))
 
 
 def suppress_units(text: str, match: RawMatch) -> bool:
@@ -339,6 +576,17 @@ def suppress_year_as_postal(text: str, match: RawMatch) -> bool:
     clean = match.text.strip()
     if not _RECENT_YEAR.match(clean):
         return False
+    # A date construction *touching* the candidate settles it, whatever the
+    # rest of the document says. Without this, the postal-context test below
+    # rescued every year in every document with an address in it — and
+    # "Adresse", "rue" and "Str." appear in the header of essentially every
+    # business letter. Measured: 1,691 of 3,322 postal false positives were
+    # plausible years, 1,636 of them literally "2025".
+    if _DATE_BEFORE.search(text[max(0, match.start - 24):match.start]):
+        return True
+    if _DATE_AFTER.match(text[match.end:match.end + 8]):
+        return True
+
     # Keep as postal code if postal/address context nearby
     before, after = _get_context(text, match.start, match.end)
     context = before + after
@@ -740,11 +988,54 @@ def suppress_postal_in_longer_identifier(text: str, match: RawMatch) -> bool:
     return False
 
 
+#: A delimited data row: at least three fields separated by one delimiter.
+#: Export formats carry their meaning in the column, not in a nearby word, so a
+#: value that fills an entire field has structural context even when the line
+#: contains no cue at all — which is why Icelandic phone numbers in
+#: "name,dob,email,8773252,IS55..." rows were suppressed for lack of one.
+_DELIMITED_ROW = re.compile(r"^[^\n]*?([,;|\t])[^\n]*?\1[^\n]*?\1", re.MULTILINE)
+
+
+#: Types for which filling a delimited field counts as context. Narrow shapes
+#: only — see suppress_requires_context.
+_DELIMITED_FIELD_TYPES = frozenset({
+    EntityType.PHONE, EntityType.DOB, EntityType.DATE_OF_DEATH,
+})
+
+
+def _fills_a_delimited_field(text: str, start: int, end: int) -> bool:
+    """True when the span is exactly one field of a delimited row."""
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    if line_end < 0:
+        line_end = len(text)
+    line = text[line_start:line_end]
+    if not _DELIMITED_ROW.match(line):
+        return False
+    before = text[line_start:start]
+    after = text[end:line_end]
+    opens = not before or before[-1] in ",;|\t"
+    closes = not after or after[0] in ",;|\t"
+    return opens and closes
+
+
 def suppress_requires_context(text: str, match: RawMatch) -> bool:
     """Suppress patterns that require context keywords."""
     if not match.pattern_def.requires_context:
         return False
     if not match.pattern_def.context_keywords:
+        return False
+    # A value filling an entire field of a delimited row is introduced by its
+    # column, not by a word, so that is context — but only for patterns narrow
+    # enough to carry their own evidence.
+    #
+    # Applied to every type it was measured a net loss: SECRET gained 1,678
+    # false positives, CHAMBER_OF_COMMERCE 456 and POSTAL_CODE 295, because a
+    # broad shape plus a required cue is a deliberate pairing and removing the
+    # cue leaves only the broad shape. The types below have shapes specific
+    # enough that a whole field matching one is already strong evidence.
+    if (match.pattern_def.entity_type in _DELIMITED_FIELD_TYPES
+            and _fills_a_delimited_field(text, match.start, match.end)):
         return False
     before, after = _get_context(text, match.start, match.end)
     context = (before + " " + after).lower()
@@ -761,7 +1052,7 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
     EntityType.PHONE: [
         suppress_currency, suppress_units, suppress_reference, suppress_math,
         suppress_phone_after_id_label, suppress_phone_service_number,
-        suppress_phone_date_overlap,
+        suppress_phone_date_overlap, suppress_phone_as_number_range,
     ],
     EntityType.NATIONAL_ID: [
         suppress_currency, suppress_units, suppress_reference, suppress_legal,
@@ -772,6 +1063,7 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
     ],
     EntityType.TAX_ID: [
         suppress_currency, suppress_units, suppress_reference, suppress_math,
+        suppress_taxid_as_ip_address,
     ],
     EntityType.POSTAL_CODE: [
         suppress_currency, suppress_units, suppress_math, suppress_legal,
@@ -780,7 +1072,13 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
     ],
     EntityType.BIC: [suppress_bic_without_evidence],
     EntityType.IBAN: [suppress_reference],
-    EntityType.LICENSE_PLATE: [suppress_plate_in_compound, suppress_de_plate_unknown_district],
+    EntityType.LICENSE_PLATE: [
+        suppress_plate_in_compound, suppress_de_plate_unknown_district,
+        suppress_plate_as_currency_amount,
+    ],
+    EntityType.SECRET: [
+        suppress_secret_over_structured, suppress_secret_not_a_secret,
+    ],
     EntityType.CHAMBER_OF_COMMERCE: [suppress_reference],
 }
 

@@ -758,6 +758,281 @@
       "mustNotDetect": [
         "NATIONAL_ID"
       ]
+    },
+    {
+      "id": "postal-year-with-address-cue-present",
+      "countries": [
+        "CH"
+      ],
+      "text": "Adresse: Av. de Montchoisi 17, 1006 Lausanne. Malade depuis 22 janvier 2026.",
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1006"
+        ]
+      }
+    },
+    {
+      "id": "postal-year-without-any-postal-code",
+      "countries": [
+        "CH"
+      ],
+      "text": "Adresse: inconnue. Malade depuis 22 janvier 2026.",
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-year-iso-date",
+      "countries": [
+        "BE"
+      ],
+      "text": "Adres: rue Neuve 4. Datum 2026-03-14 bevestigd.",
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-real-de",
+      "countries": [
+        "DE"
+      ],
+      "text": "Wohnort: Musterstr. 12, 53111 Bonn.",
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "53111"
+        ]
+      }
+    },
+    {
+      "id": "postal-real-be",
+      "countries": [
+        "BE"
+      ],
+      "text": "Adres: Herbesthalerstraat 67, 4700 Eupen.",
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "4700"
+        ]
+      }
+    },
+    {
+      "id": "postal-real-fr",
+      "countries": [
+        "FR"
+      ],
+      "text": "Adresse: 17 rue de la Paix, 75002 Paris.",
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "75002"
+        ]
+      }
+    },
+    {
+      "id": "secret-does-not-claim-a-uuid",
+      "countries": null,
+      "text": "session cdced449-06ce-4a5a-88e2-6da1f91db2dc blocked",
+      "mustDetect": {
+        "UUID": [
+          "cdced449-06ce-4a5a-88e2-6da1f91db2dc"
+        ]
+      }
+    },
+    {
+      "id": "secret-does-not-claim-a-cued-bic",
+      "countries": [
+        "NL"
+      ],
+      "text": "API key rotated. Exposed: IBAN NL1003172572598313 (BIC: TRIONL2U).",
+      "mustDetect": {
+        "BIC": [
+          "TRIONL2U"
+        ]
+      }
+    },
+    {
+      "id": "secret-not-a-timestamp",
+      "countries": null,
+      "text": "event ts: 57:22.283Z] processed",
+      "mustNotDetect": [
+        "SECRET"
+      ]
+    },
+    {
+      "id": "secret-not-an-ordinary-word",
+      "countries": [
+        "DE"
+      ],
+      "text": "Feld: Sozialversicherungsnummer wurde ergaenzt",
+      "mustNotDetect": [
+        "SECRET"
+      ]
+    },
+    {
+      "id": "secret-not-a-cloud-region",
+      "countries": null,
+      "text": "region = us-east-1",
+      "mustNotDetect": [
+        "SECRET"
+      ]
+    },
+    {
+      "id": "secret-real-api-key-survives",
+      "countries": null,
+      "text": "api_key = Zx4Qv7Rt2Mw9Kd5Np3Hb8Lf",
+      "mustDetect": {
+        "SECRET": [
+          "Zx4Qv7Rt2Mw9Kd5Np3Hb8Lf"
+        ]
+      }
+    },
+    {
+      "id": "plate-not-a-currency-amount",
+      "countries": [
+        "ES"
+      ],
+      "text": "Totaal 2297 DKK betaald",
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-real-es",
+      "countries": [
+        "ES"
+      ],
+      "text": "Matricula: 2297 BCD",
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "2297 BCD"
+        ]
+      }
+    },
+    {
+      "id": "phone-not-a-year-range",
+      "countries": [
+        "NL"
+      ],
+      "text": "Schooljaar 2025-2026. Groep 1.",
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "phone-not-a-decimal-tail",
+      "countries": null,
+      "text": "Exchange deposit: 0.034865 BTC received",
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "taxid-not-an-ip-address",
+      "countries": [
+        "DE"
+      ],
+      "text": "Server 45.175.147.128 geblokkeerd",
+      "mustDetect": {
+        "IP_ADDRESS": [
+          "45.175.147.128"
+        ]
+      },
+      "mustNotDetect": [
+        "TAX_ID"
+      ]
+    },
+    {
+      "id": "cue-phone-beats-a-passing-checksum",
+      "countries": [
+        "SE"
+      ],
+      "text": "Phone: 0705237535",
+      "mustDetect": {
+        "PHONE": [
+          "0705237535"
+        ]
+      }
+    },
+    {
+      "id": "cue-absent-checksum-still-wins",
+      "countries": [
+        "SE"
+      ],
+      "text": "Nummer 0705237535",
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "0705237535"
+        ]
+      }
+    },
+    {
+      "id": "cue-siren-beats-a-national-id",
+      "countries": [
+        "FR"
+      ],
+      "text": "Antoine Morel SAS (SIREN 895145571)",
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "895145571"
+        ]
+      }
+    },
+    {
+      "id": "be-enterprise-number-registry-cue",
+      "countries": [
+        "BE"
+      ],
+      "text": "Kruispuntbank van Ondernemingen onder nummer 0886.712.038",
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "0886.712.038"
+        ]
+      }
+    },
+    {
+      "id": "lv-phone-not-suppressed-by-the-word-for-phone",
+      "countries": [
+        "LV"
+      ],
+      "text": "Contact: tālrunis 24329456, e-pasts ed@x.lv",
+      "mustDetect": {
+        "PHONE": [
+          "24329456"
+        ]
+      }
+    },
+    {
+      "id": "lv-phone-spaced-grouping",
+      "countries": [
+        "LV"
+      ],
+      "text": "Contact: tālrunis 2474 3137, e-pasts da@x.lv",
+      "mustDetect": {
+        "PHONE": [
+          "2474 3137"
+        ]
+      }
+    },
+    {
+      "id": "es-phone-3-2-2-2-grouping",
+      "countries": [
+        "ES"
+      ],
+      "text": "Contacto: teléfono 705 97 55 11, correo electrónico",
+      "mustDetect": {
+        "PHONE": [
+          "705 97 55 11"
+        ]
+      }
+    },
+    {
+      "id": "id-label-still-suppresses-a-real-one",
+      "countries": [
+        "NL"
+      ],
+      "text": "BSN: 0612345678",
+      "mustNotDetect": [
+        "PHONE"
+      ]
     }
   ]
 }

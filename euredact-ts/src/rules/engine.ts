@@ -62,6 +62,48 @@ function warnUnknownCountry(code: string): void {
   );
 }
 
+// ── Local cues: what the document calls the value next to it ────────────
+//
+// Country evidence resolves which *national scheme* owns an ambiguous value, but
+// it never looks at the label sitting immediately in front of it. So
+// "Phone: 0705237535" was reported as a Swedish national ID: the digits pass
+// that checksum, the document is Swedish, and nothing consulted the word
+// "Phone".
+//
+// A cue touching the span is the strongest statement the document makes about
+// what the value *is*, so it outranks the checksum — but only among candidates
+// covering the **same span**, so it decides the label and can never change which
+// characters are masked. That is what keeps invariant I1 intact.
+//
+// Measured: 263 phone numbers and 18 French SIREN were reported as national IDs,
+// each with an explicit cue in front of it.
+const LOCAL_CUES: Array<[EntityType, RegExp]> = [
+  [EntityType.PHONE,
+   /(?:phone|tel|telephone|téléphone|telefoon|telefon|telefono|teléfono|tlf|mobil|mobile|gsm|handy|sími|puh|móvil|cell)\w*\s*[:.\-]?\s*$/i],
+  [EntityType.CHAMBER_OF_COMMERCE,
+   /(?:siren|siret|kbo|bce|kvk|ondernemingsnummer|handelsregister|company\s*(?:no|number|reg)|organisationsnummer|orgnr)\w*\s*[:.\-]?\s*$/i],
+  [EntityType.VAT,
+   /(?:vat|btw|tva|ust|iva|moms|alv|mwst)[\w.\-]*\s*[:.\-]?\s*$/i],
+  [EntityType.BIC,
+   /(?:bic|swift)[\w/]*\s*[:.\-]?\s*\(?\s*$/i],
+  [EntityType.NATIONAL_ID,
+   /(?:bsn|personnummer|rijksregisternummer|national\s*id|identiteitsnummer|henkilötunnus|kennitala|cpr|nif|dni)\w*\s*[:.\-]?\s*$/i],
+];
+
+// How far back a cue may sit. Short on purpose: a cue is only evidence about the
+// value it introduces, which is the lesson of the postal-code year defect, where
+// a cue 150 characters away licensed every number in the window.
+const CUE_WINDOW = 22;
+
+/** 1 when a cue naming `entityType` sits immediately before the span. */
+function localCueBonus(text: string, start: number, entityType: EntityType | string): number {
+  const before = text.slice(Math.max(0, start - CUE_WINDOW), start);
+  for (const [cuedType, pattern] of LOCAL_CUES) {
+    if (cuedType === entityType && pattern.test(before)) return 1;
+  }
+  return 0;
+}
+
 export class RuleEngine {
   private matcher = new MultiPatternMatcher();
   private loadedCountries = new Set<string>();
@@ -267,6 +309,7 @@ export class RuleEngine {
 
     interface Candidate {
       blindPriority: number;
+      cue: number;
       priority: number;
       length: number;
       countryScore: number;
@@ -350,6 +393,7 @@ export class RuleEngine {
         ? match.countryCode : null;
       candidates.push({
         blindPriority,
+        cue: localCueBonus(text, match.start, match.patternDef.entityType),
         priority,
         length: match.end - match.start,
         countryScore: countryScores.get(match.countryCode) ?? 0,
@@ -368,7 +412,7 @@ export class RuleEngine {
     }
 
     for (const d of detectStructuralDob(text)) {
-      candidates.push({ blindPriority: 1, priority: 1, length: d.end - d.start,
+      candidates.push({ blindPriority: 1, cue: 0, priority: 1, length: d.end - d.start,
                         countryScore: 0, inScope: 1, det: d });
     }
 
@@ -392,8 +436,9 @@ export class RuleEngine {
    * demoted (-1). Within a tier, longer span wins, then country evidence.
    */
   private deduplicate(
-    candidates: Array<{ blindPriority: number; priority: number; length: number;
-                        countryScore: number; inScope: number; det: Detection }>,
+    candidates: Array<{ blindPriority: number; cue: number; priority: number;
+                        length: number; countryScore: number; inScope: number;
+                        det: Detection }>,
   ): Detection[] {
     if (candidates.length === 0) return [];
 
@@ -438,9 +483,10 @@ export class RuleEngine {
       b.length - a.length ||               // longest first     } country-blind
       tierOf(b) - tierOf(a) ||             // best tier here    } — decides
       a.det.start - b.det.start ||         // leftmost          } WHICH span
-      b.priority - a.priority ||           // country priority  } country-aware
-      b.countryScore - a.countryScore ||   // country evidence  } — decides the
-      b.inScope - a.inScope);              // declared scope    } LABEL only
+      b.cue - a.cue ||                     // local cue         } country-aware
+      b.priority - a.priority ||           // country priority  } — decides the
+      b.countryScore - a.countryScore ||   // country evidence  } LABEL only
+      b.inScope - a.inScope);              // declared scope    }
     const result: Detection[] = [];
     const occupied = new Set<number>();
     for (const { det } of sorted) {

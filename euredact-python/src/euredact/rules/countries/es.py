@@ -58,8 +58,17 @@ class ESConfig(CountryConfig):
             PatternDef(
                 entity_type=EntityType.PHONE,
                 pattern=r"\b[679]\d[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}\b",
+                # 2-3-2-2. The 3-2-2-2 grouping below is just as common and was
+                # absent: "705 97 55 11" matched no phone pattern at all, which
+                # cost 674 Spanish numbers — the single largest PHONE gap.
                 validator=None,
                 description="Spanish phone — XX XXX XX XX",
+            ),
+            PatternDef(
+                entity_type=EntityType.PHONE,
+                pattern=r"\b[679]\d{2}[\s\-]?\d{2}[\s\-]?\d{2}[\s\-]?\d{2}\b",
+                validator=None,
+                description="Spanish mobile/landline — 3-2-2-2 grouping",
             ),
             # --- Phone (international) ---
             PatternDef(
@@ -71,7 +80,10 @@ class ESConfig(CountryConfig):
             # --- License Plate (XXXX AAA) ---
             PatternDef(
                 entity_type=EntityType.LICENSE_PLATE,
-                pattern=r"\b\d{4}\s?[BCDFGHJKLMNPRSTVWXYZ]{3}\b",
+                pattern=r"\b\d{4}[ ]?[BCDFGHJKLMNPRSTVWXYZ]{3}\b",
+                # A single space, not \s: \s matched a line break, so a year
+                # ending one line and a label starting the next ("2002\nCPR")
+                # read as one registration — 310 times across the corpus.,
                 validator=None,
                 description="Spanish license plate — 4 digits + 3 letters",
             ),

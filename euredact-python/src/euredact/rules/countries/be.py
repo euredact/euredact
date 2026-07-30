@@ -44,6 +44,13 @@ class BEConfig(CountryConfig):
                 context_keywords=[
                     "KBO", "BCE", "ondernemingsnummer", "numéro d'entreprise",
                     "enterprise number", "bedrijfsnummer",
+                    # The registry's own name, which is how these numbers are
+                    # actually introduced: "Kruispuntbank van Ondernemingen
+                    # onder nummer 0886.712.038". Its absence cost 43 of the
+                    # 205 CHAMBER_OF_COMMERCE misses — the same shape of gap as
+                    # the German SVNR cue.
+                    "Kruispuntbank", "Banque-Carrefour", "Banque Carrefour",
+                    "Ondernemingen", "Entreprises", "onder nummer",
                 ],
                 requires_context=True,
             ),

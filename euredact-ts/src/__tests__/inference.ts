@@ -185,7 +185,10 @@ test("a hint and a declaration agree on attribution", () => {
 // ── Chunked documents ──────────────────────────────────────────────────
 
 const PAGE_1 = "Factuur — IBAN NL91ABNA0417164300, info@jansen.nl";
-const PAGE_7 = "Telefoon 0612345678";
+// Deliberately cue-free. "Telefoon 0612345678" would be decided by the
+// local-cue tiebreak before the context was ever consulted, which is correct
+// behaviour but makes the test vacuous — it would pass with contexts removed.
+const PAGE_7 = "Nummer 0612345678";
 
 test("a chunk alone cannot resolve it", () => {
   assert.deepEqual(types(sdk.redact(PAGE_7, { cache: false })),
@@ -346,6 +349,40 @@ test("a shorter validated match never re-cuts a longer one", () => {
 test("priority still decides between equal spans", () => {
   const r = sdk.redact("Rekening: BE68 5390 0754 7034", { countries: ["BE"], cache: false });
   assert.ok(r.detections.some(d => d.entityType === EntityType.BANK_ACCOUNT));
+});
+
+// ── Local cues decide the label, never the span ────────────────────────
+
+test("a phone cue beats a passing checksum", () => {
+  // 0705237535 is a Swedish mobile that also satisfies a national-ID checksum.
+  // Country evidence resolves which *scheme* owns a value but never looked at
+  // the word in front of it.
+  const r = sdk.redact("Phone: 0705237535", { countries: ["SE"], cache: false });
+  assert.deepEqual(types(r), [[EntityType.PHONE, "SE"]]);
+});
+
+test("without the cue the checksum still wins", () => {
+  const r = sdk.redact("0705237535", { countries: ["SE"], cache: false });
+  assert.equal(String(r.detections[0].entityType), EntityType.NATIONAL_ID);
+});
+
+test("a company-register cue beats a national ID", () => {
+  const r = sdk.redact("Antoine Morel SAS (SIREN 895145571)", { countries: ["FR"], cache: false });
+  assert.ok(r.detections.some(d => d.entityType === EntityType.CHAMBER_OF_COMMERCE));
+});
+
+test("a cue cannot change which characters are masked", () => {
+  // It ranks candidates *within* a span, so it decides the label only — the
+  // property that keeps the generation invariant intact.
+  const spansOf = (t: string) => JSON.stringify(
+    sdk.redact(t, { cache: false }).detections.map(d => [d.start, d.end]));
+  assert.equal(spansOf("Phone: 0705237535"), spansOf("Nummer 0705237535"));
+});
+
+test("a distant cue does not reach", () => {
+  const far = "Phone numbers are collected for support purposes only. " + "x".repeat(40);
+  const r = sdk.redact(`${far} 0705237535`, { countries: ["SE"], cache: false });
+  assert.equal(String(r.detections[r.detections.length - 1].entityType), EntityType.NATIONAL_ID);
 });
 
 // ── Report ─────────────────────────────────────────────────────────────
