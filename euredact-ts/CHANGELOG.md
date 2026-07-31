@@ -9,15 +9,24 @@ step. Every change corrects a case that was wrong on its own terms — a broken
 regex, a missing entry in a list meant to be complete, a suppressor wired to
 every numeric type but one — rather than tuning a threshold against a corpus.
 Measured on 152,300 documents and 667,129 labels: **false positives fell from
-3,294 to 1,232** with country hints, and from 4,782 to 2,720 blind. Recall did
+2,684 to 1,327** with country hints, and from 4,618 to 3,261 blind. Recall did
 not fall.
 
 | | precision | recall | F1 |
 |---|---:|---:|---:|
-| 0.3.5, with country hints | 99.51% | 99.71% | 99.61% |
-| **0.3.6** | **99.82%** | **99.72%** | **99.77%** |
-| 0.3.5, blind | 99.28% | 99.49% | 99.39% |
-| **0.3.6** | **99.59%** | **99.50%** | **99.55%** |
+| 0.3.5, with country hints | 99.60% | 99.71% | 99.65% |
+| **0.3.6** | **99.80%** | **99.72%** | **99.76%** |
+| 0.3.5, blind | 99.31% | 99.42% | 99.36% |
+| **0.3.6** | **99.51%** | **99.43%** | **99.47%** |
+
+> **Correction.** The 0.3.6 package published to npm on 2026-07-31 carried the
+> Python SDK's figures in this table (99.77% hinted / 99.55% blind, false
+> positives 3,294 → 1,232). Those numbers are real but belong to the other
+> package; the ones above are this engine's, measured with
+> `tests/metrics.py --engine typescript`. The two SDKs differ here because the
+> `\b`-after-`€` defect fixed in 0.3.6 only ever affected the Python engine, so
+> this one started from a better baseline and gained less from the fix. No code
+> was affected, and every direction of change stated below is unaltered.
 
 - **Ticket and incident numbers were postal codes.** `suppressReference` was
   wired to every numeric entity type except `POSTAL_CODE`, so `Ticket #94730`
