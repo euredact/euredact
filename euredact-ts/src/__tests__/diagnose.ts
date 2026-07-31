@@ -1,3 +1,4 @@
+import { fileURLToPath } from "url";
 import { readFileSync } from "fs";
 import { redact } from "../index.js";
 import { COUNTRY_CONFIGS } from "../rules/countries/index.js";
@@ -14,8 +15,11 @@ interface DataEntry {
   PII: PiiAnnotation[];
 }
 
+// The corpus lives beside the code checkout, not inside it. `EUREDACT_CORPUS`
+// is the same override the Python tooling honours.
 const DATA_DIR =
-  "/Users/jorenjanssens/Library/Mobile Documents/com~apple~CloudDocs/Werken/JNJS/Apps/PII-EuroMask/Data-Generation";
+  process.env.EUREDACT_CORPUS ??
+  fileURLToPath(new URL("../../../../Data-Generation", import.meta.url));
 
 const FILES = [
   "euromask_training_core2.json",

@@ -7,6 +7,7 @@ import json
 import sys
 import time
 from collections import Counter, defaultdict
+import os
 from pathlib import Path
 from html import escape
 
@@ -14,9 +15,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import euredact
 from euredact.types import EntityType
 
-DATA_DIR = Path("/Users/jorenjanssens/Library/Mobile Documents/com~apple~CloudDocs/Werken/JNJS/Apps/PII-EuroMask/Data-Generation")
+DATA_DIR = Path(
+    os.environ.get(
+        "EUREDACT_CORPUS",
+        # The corpus lives beside the code checkout, not inside it.
+        str(Path(__file__).resolve().parents[3] / "Data-Generation"),
+    )
+)
 DATASETS = sorted(DATA_DIR.glob("*.json"))
 REPORT_PATH = Path(__file__).resolve().parents[1] / "evaluation_report.html"
+
+#: Characters of context kept either side of a false positive in the export.
+_FP_CONTEXT = 120
 
 CATEGORY_MAP: dict[str, set[str]] = {
     "NATIONAL_ID": {EntityType.NATIONAL_ID.value, EntityType.SSN.value, EntityType.TAX_ID.value},
@@ -182,7 +192,14 @@ def evaluate(data, use_country_hints: bool):
                     "pii_text": det.text,
                     "pii_country": det.country,
                     "countries_in_record": sorted(set(item_countries)),
-                    "source_text": text,
+                    # A window, not the whole document. Triaging a false
+                    # positive needs the surrounding sentence; writing every
+                    # source document out meant this file was a copy of the
+                    # corpus, PII and all, sitting at mode 0644 in the package
+                    # root. Harmless against a synthetic corpus, not against a
+                    # real one.
+                    "context": text[max(0, det.start - _FP_CONTEXT):det.end + _FP_CONTEXT],
+                    "context_offset": max(0, det.start - _FP_CONTEXT),
                 })
                 if len(fp_examples) < 60:
                     fp_examples.append({

@@ -175,7 +175,20 @@ const SHARED: CountryConfig = {
     // --- Secret / API Key (assignment-based: KEY=value or KEY: value) ---
     p(EntityType.SECRET, String.raw`(?<=[:=] )\S{8,}|(?<=[:=])\S{8,}`, "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
     // --- Secret / API Key (entropy-based fallback for longer tokens) ---
-    p(EntityType.SECRET, String.raw`\b[A-Za-z0-9_\-+/]{24,}[A-Za-z0-9_\-+/=]*\b`, "high_entropy", "High-entropy token", SECRET_CONTEXT, true),
+    // Only the *trailing* \b is replaced. It could not match when the token run
+    // ended on "-", "+" or "/", so the engine backtracked across two
+    // overlapping quantified classes: an ordinary dashed rule line ("x-----...")
+    // cost O(n^2), 8.3 s for 80 KB. The lookahead simply asserts the run is
+    // over, which is what \b was there to express, and it cannot fail after a
+    // maximal run — so there is nothing to backtrack into.
+    //
+    // The leading \b stays. A class lookbehind there widened the span leftwards
+    // over any "/" in front, so an authorized_keys entry started "//...",
+    // matched the protocol-relative URL shape in the endpoint suppressor, and
+    // was dropped — leaving SSH key material in the clear. Base64 padding is
+    // now inside the span instead of trailing outside it; that is the only
+    // intended difference.
+    p(EntityType.SECRET, String.raw`\b[A-Za-z0-9_\-+/]{24,}[A-Za-z0-9_\-+/=]*(?![A-Za-z0-9_\-+/=])`, "high_entropy", "High-entropy token", SECRET_CONTEXT, true),
     p(EntityType.DOB, String.raw`\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b`, null, "DD/MM/YYYY", DOB_CONTEXT, true),
     p(EntityType.DATE_OF_DEATH, String.raw`\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b`, null, "", DATE_OF_DEATH_CONTEXT, true),
     p(EntityType.DOB, String.raw`\b(?:19|20)\d{2}[/.\-](?:0[1-9]|1[0-2])[/.\-](?:0[1-9]|[12][0-9]|3[01])\b`, null, "ISO YYYY-MM-DD", DOB_ISO_CONTEXT, true),

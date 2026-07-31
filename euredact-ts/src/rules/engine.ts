@@ -1,6 +1,6 @@
 import { DetectionSource, EntityType, type CountryConfig, type CountryEvidence, type Detection, type PatternDef } from "../types.js";
 import { MultiPatternMatcher, type RawMatch } from "./matchers.js";
-import { shouldSuppress } from "./suppressors.js";
+import { shouldSuppress, SuppressionScratch } from "./suppressors.js";
 import { detectStructuralDob } from "./structural.js";
 import { COUNTRY_CONFIGS } from "./countries/index.js";
 import * as evidenceMod from "./evidence.js";
@@ -292,6 +292,14 @@ export class RuleEngine {
     const allFailed = failedSpans
       .map(f => [f.start, f.end] as [number, number])
       .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    // Running maximum of the end offsets, so the fragment test below can ask
+    // "does any span starting at or before me reach past my end?" in O(1)
+    // instead of walking the prefix per candidate.
+    const failedStarts = allFailed.map(f => f[0]);
+    const failedPrefixMax = new Array<number>(allFailed.length + 1).fill(0);
+    for (let i = 0; i < allFailed.length; i++) {
+      failedPrefixMax[i + 1] = Math.max(failedPrefixMax[i], allFailed[i][1]);
+    }
     const mergedZones = new Map<string, { starts: number[]; ends: number[] }>();
     for (const [etype, spans] of zonesByType) {
       spans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -315,11 +323,17 @@ export class RuleEngine {
       countryScore: number;
       inScope: number;
       det: Detection;
+      // Filled in below, once every candidate for the span is known.
+      tier: number;
     }
     const candidates: Candidate[] = [];
 
+    // Whole-document facts a suppressor may need, derived at most once per call
+    // and discarded with it.
+    const scratch = new SuppressionScratch(text);
+
     for (const { match, hasValidValidator } of validated) {
-      if (shouldSuppress(text, match)) continue;
+      if (shouldSuppress(text, match, scratch)) continue;
 
       // A validator-less match inside a failed-validation span of its own type
       // is demoted below every other candidate rather than deleted. Demotion
@@ -345,12 +359,27 @@ export class RuleEngine {
       // default — the generic phone pattern kept claiming the tail of the
       // rejected national number.
       if (match.patternDef.validator === null && !demoted) {
+        // Upper bound of the spans starting at or before match.start.
+        let lo = 0, hi = failedStarts.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >>> 1;
+          if (failedStarts[mid] <= match.start) lo = mid + 1; else hi = mid;
+        }
         let fragment = false;
-        for (const [zs, ze] of allFailed) {
-          if (zs > match.start) break;
-          if (match.end <= ze && (match.start > zs || match.end < ze)) {
-            fragment = true;
-            break;
+        const reach = failedPrefixMax[lo];
+        if (reach > match.end) {
+          // Something starting no later than us ends strictly later: we are a
+          // proper subset of it.
+          fragment = true;
+        } else if (reach === match.end) {
+          // Same end offset — a proper subset only if some span with that end
+          // starts strictly earlier. Scanning backwards finds the enclosing
+          // span first, and the equal case is rare.
+          for (let i = lo - 1; i >= 0; i--) {
+            if (allFailed[i][1] === match.end && allFailed[i][0] < match.start) {
+              fragment = true;
+              break;
+            }
           }
         }
         if (fragment) continue;
@@ -398,6 +427,7 @@ export class RuleEngine {
         length: match.end - match.start,
         countryScore: countryScores.get(match.countryCode) ?? 0,
         inScope: declared === null || declared.has(match.countryCode) ? 1 : 0,
+        tier: 0,
         det: {
           entityType: match.patternDef.entityType,
           start: match.start,
@@ -413,7 +443,7 @@ export class RuleEngine {
 
     for (const d of detectStructuralDob(text)) {
       candidates.push({ blindPriority: 1, cue: 0, priority: 1, length: d.end - d.start,
-                        countryScore: 0, inScope: 1, det: d });
+                        countryScore: 0, inScope: 1, tier: 0, det: d });
     }
 
     const detections = this.deduplicate(candidates);
@@ -438,7 +468,7 @@ export class RuleEngine {
   private deduplicate(
     candidates: Array<{ blindPriority: number; cue: number; priority: number;
                         length: number; countryScore: number; inScope: number;
-                        det: Detection }>,
+                        tier: number; det: Detection }>,
   ): Detection[] {
     if (candidates.length === 0) return [];
 
@@ -454,7 +484,9 @@ export class RuleEngine {
       const seen = spanTier.get(key);
       if (seen === undefined || c.blindPriority > seen) spanTier.set(key, c.blindPriority);
     }
-    const tierOf = (c: { det: Detection }) => spanTier.get(`${c.det.start}:${c.det.end}`)!;
+    // Resolved once per candidate rather than inside the comparator, which ran
+    // it O(n log n) times and rebuilt the key string on every comparison.
+    for (const c of candidates) c.tier = spanTier.get(`${c.det.start}:${c.det.end}`)!;
     // Span length outranks *everything*, including validation.
     //
     // A shorter candidate winning re-cuts a longer one and leaves the
@@ -481,7 +513,7 @@ export class RuleEngine {
     // identifies a span uniquely.
     const sorted = [...candidates].sort((a, b) =>
       b.length - a.length ||               // longest first     } country-blind
-      tierOf(b) - tierOf(a) ||             // best tier here    } — decides
+      b.tier - a.tier ||                   // best tier here    } — decides
       a.det.start - b.det.start ||         // leftmost          } WHICH span
       b.cue - a.cue ||                     // local cue         } country-aware
       b.priority - a.priority ||           // country priority  } — decides the

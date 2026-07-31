@@ -12,7 +12,7 @@ from euredact.types import CountryEvidence, EntityType
 
 # Page 1 identifies the document; page 7 carries a value that is ambiguous
 # without it — 0612345678 is both a Dutch mobile and a valid Danish CPR.
-PAGE_1 = "Factuur — IBAN NL91ABNA0417164300, info@jansen.nl"
+PAGE_1 = "Factuur — IBAN NL91ABNA0417164300, info@example.nl"
 # Deliberately cue-free. "Telefoon 0612345678" would be decided by the local-cue
 # tiebreak before the context was ever consulted, which is correct behaviour but
 # makes the test vacuous — it would pass with contexts removed entirely.

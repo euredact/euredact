@@ -15,27 +15,147 @@ from euredact.rules.structural import detect_structural_dob
 from euredact.rules.suppressors import should_suppress_claim, should_suppress_span
 from euredact.types import CountryEvidence, Detection, DetectionSource, EntityType
 
-# Heuristic to detect nested quantifiers that cause catastrophic backtracking.
-# After stripping escaped chars and character classes, look for an unbounded
-# quantifier (+/*) closing a group that is itself quantified (+/*).
-_NESTED_QUANTIFIER_RE = re.compile(r"[+*]\)[+*]")
+
+def _mask_atoms(pattern: str) -> str:
+    """Replace escapes and character classes with one placeholder char each.
+
+    Equal fragments get equal placeholders and unequal fragments get unequal
+    ones, so the structural comparisons below still distinguish ``[0-9]`` from
+    ``[a-z]``. Collapsing every class to the same letter — which the previous
+    version did — would have read ``([0-9]|[a-z])+`` as a repeated alternation
+    of two identical branches and rejected it.
+    """
+    tokens: dict[str, str] = {}
+    out: list[str] = []
+    i, n = 0, len(pattern)
+    while i < n:
+        ch = pattern[i]
+        if ch == "\\" and i + 1 < n:
+            frag, i = pattern[i : i + 2], i + 2
+        elif ch == "[":
+            j = i + 1
+            if j < n and pattern[j] == "^":
+                j += 1
+            if j < n and pattern[j] == "]":  # literal ] as first member
+                j += 1
+            while j < n and pattern[j] != "]":
+                j += 2 if pattern[j] == "\\" else 1
+            frag, i = pattern[i : j + 1], j + 1
+        else:
+            out.append(ch)
+            i += 1
+            continue
+        tok = tokens.get(frag)
+        if tok is None:
+            # Private-use range: cannot collide with anything in the source.
+            tok = chr(0xE000 + len(tokens))
+            tokens[frag] = tok
+        out.append(tok)
+    return "".join(out)
+
+
+def _repeats_more_than_once(masked: str, pos: int) -> bool:
+    """Is there a quantifier at *pos* that can repeat its atom 2+ times?"""
+    if pos >= len(masked):
+        return False
+    ch = masked[pos]
+    if ch in "*+":
+        return True
+    if ch != "{":
+        return False
+    close = masked.find("}", pos)
+    if close == -1:
+        return False
+    spec = masked[pos + 1 : close]
+    if "," not in spec:
+        return spec.isdigit() and int(spec) > 1
+    low, _, high = spec.partition(",")
+    if not high:  # {n,} is unbounded
+        return True
+    return high.isdigit() and int(high) > 1
+
+
+def _split_alternatives(body: str) -> list[str]:
+    """Top-level ``|`` branches of *body*, ignoring nested groups."""
+    branches, depth, start = [], 0, 0
+    for i, ch in enumerate(body):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif ch == "|" and depth == 0:
+            branches.append(body[start:i])
+            start = i + 1
+    branches.append(body[start:])
+    return branches
+
+
+_GROUP_PREFIX_RE = re.compile(r"^\?(?:P<[^>]*>|P=[^)]*|<[=!]|[:=!>#]|[aiLmsux]*[-aiLmsux]*:)")
+
+
+def _risky_repetition(pattern: str) -> str | None:
+    """Describe the first repetition-related ReDoS risk found, else None.
+
+    Deliberately conservative: it reports *shapes* known to backtrack badly
+    rather than proving a pattern unsafe, and it cannot certify one safe.
+    """
+    masked = _mask_atoms(pattern)
+    stack: list[int] = []
+    for i, ch in enumerate(masked):
+        if ch == "(":
+            stack.append(i)
+            continue
+        if ch != ")" or not stack:
+            continue
+        start = stack.pop()
+        if not _repeats_more_than_once(masked, i + 1):
+            continue
+        body = _GROUP_PREFIX_RE.sub("", masked[start + 1 : i])
+
+        # A quantifier inside a repeated group: (a+)+, (a{1,10})+, (\w+\s?)*
+        for j, inner in enumerate(body):
+            if inner in "*+" or (inner == "{" and _repeats_more_than_once(body, j)):
+                return (
+                    "a quantifier inside a repeated group (e.g. (a+)+), which "
+                    "makes the number of ways to split the input grow "
+                    "exponentially"
+                )
+
+        # An ambiguous alternation inside a repeated group: (a|a)+, (\d|\d\d)+.
+        # Distinct branches such as (A|B)+ are unambiguous and allowed.
+        branches = _split_alternatives(body)
+        if len(branches) > 1:
+            for a_idx, first in enumerate(branches):
+                for second in branches[a_idx + 1 :]:
+                    if first == second or first.startswith(second) or second.startswith(first):
+                        return (
+                            "a repeated group whose alternatives overlap "
+                            "(e.g. (a|a)+ or (a|ab)+), so the same text can be "
+                            "matched in exponentially many ways"
+                        )
+    return None
 
 
 def _validate_custom_pattern(pattern: str) -> None:
-    """Validate a custom regex pattern for syntax and basic ReDoS safety."""
+    """Validate a custom regex pattern for syntax and basic ReDoS safety.
+
+    The ReDoS screen is a conservative heuristic over known-bad shapes, not a
+    proof of safety — the previous version only recognised the literal spelling
+    ``+)+``, so ``(a|a)+``, ``(a{1,10})+`` and ``^(\\w+\\s?)*$`` all passed and
+    then ran exponentially. Treat a pattern that passes as *not obviously*
+    catastrophic; do not accept patterns from untrusted input on the strength
+    of this check alone.
+    """
     try:
         re.compile(pattern)
     except re.error as exc:
         raise ValueError(f"Invalid regex pattern: {exc}") from exc
-    # Strip escaped characters and character classes so their contents
-    # don't trigger false positives in the nested-quantifier check.
-    stripped = re.sub(r"\\.", "X", pattern)
-    stripped = re.sub(r"\[(?:[^\]\\]|\\.)*\]", "X", stripped)
-    if _NESTED_QUANTIFIER_RE.search(stripped):
+    risk = _risky_repetition(pattern)
+    if risk is not None:
         raise ValueError(
-            "Pattern contains nested quantifiers (e.g. (a+)+) which can cause "
-            "catastrophic backtracking (ReDoS). Restructure the pattern to "
-            "avoid quantifiers inside quantified groups."
+            f"Pattern contains {risk}. This can cause catastrophic "
+            f"backtracking (ReDoS). Restructure the pattern so that no "
+            f"repeated group can match the same text two different ways."
         )
 
 
@@ -344,6 +464,19 @@ class RuleEngine:
         all_failed = sorted((start, end) for start, end, _cc, _et in failed_spans)
         strict_starts = [f[0] for f in all_failed]
 
+        # Running maximum of the end offsets, so the fragment test below can
+        # answer "does any span starting at or before me reach past my end?"
+        # in O(1) instead of walking the whole prefix. `failed_prefix_max[i]`
+        # is the largest end among `all_failed[:i]`; index 0 is the empty
+        # prefix. Without this the fragment test was O(candidates x spans) —
+        # 125M iterations on a 1 MB document, ~43% of total runtime.
+        failed_prefix_max = [0] * (len(all_failed) + 1)
+        running_max = 0
+        for i, (_zs, ze) in enumerate(all_failed):
+            if ze > running_max:
+                running_max = ze
+            failed_prefix_max[i + 1] = running_max
+
         by_type: dict[object, list[tuple[int, int]]] = {}
         for start, end, etype in corroborated:
             by_type.setdefault(etype, []).append((start, end))
@@ -422,10 +555,23 @@ class RuleEngine:
             fragment = False
             if match.pattern_def.validator is None and not demoted:
                 hi = bisect.bisect_right(strict_starts, match.start)
-                for zs, ze in all_failed[:hi]:
-                    if match.end <= ze and (match.start > zs or match.end < ze):
-                        fragment = True
-                        break
+                # Every span in all_failed[:hi] starts at or before match.start,
+                # so containment reduces to how far the furthest one reaches.
+                reach = failed_prefix_max[hi]
+                if reach > match.end:
+                    # Something starting no later than us ends strictly later:
+                    # we are a proper subset of it.
+                    fragment = True
+                elif reach == match.end:
+                    # Same end offset — a proper subset only if some span with
+                    # that end starts strictly earlier. Scanning backwards finds
+                    # the enclosing span first; the equal case is rare enough
+                    # that the walk does not show up in the profile.
+                    for i in range(hi - 1, -1, -1):
+                        zs, ze = all_failed[i]
+                        if ze == match.end and zs < match.start:
+                            fragment = True
+                            break
             if fragment:
                 continue
 

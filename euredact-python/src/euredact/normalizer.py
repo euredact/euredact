@@ -15,20 +15,8 @@ def normalize(text: str) -> tuple[str, list[int] | None]:
     if len(normalized) == len(text):
         return normalized, None
 
-    # Build character offset mapping: normalized index -> original index
-    # We do this by normalizing character-by-character
-    mapping: list[int] = []
-    orig_idx = 0
-    for char in text:
-        nfc_char = unicodedata.normalize("NFC", char)
-        for _ in nfc_char:
-            mapping.append(orig_idx)
-        orig_idx += len(char.encode("utf-32-le")) // 4
-        # Actually, we need codepoint-level tracking
-    # Simpler approach: use NFC on full string and build mapping via
-    # decompose-then-compose tracking
-    # For most European text, NFC doesn't change length. When it does,
-    # the mapping lets us translate detection offsets back to original positions.
+    # For most European text NFC does not change length. When it does, the
+    # mapping lets us translate detection offsets back to original positions.
     return normalized, _build_offset_mapping(text, normalized)
 
 

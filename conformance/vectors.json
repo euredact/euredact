@@ -1159,6 +1159,17 @@
           "mongodb://admin:DFKDKi1eb51OOhuHPYz@rds-main.eu-west-1.rds.amazonaws.com"
         ]
       }
+    },
+    {
+      "id": "secret-ssh-key-preceded-by-slashes",
+      "text": "~/.ssh/authorized_keys entry: ssh-rsa //Qv7Rt2Mw9Kd5NpHb3Lf8Zx4C/uTn6Ys1+Wq0Ej7A/Rk3Vd9M deploy@host",
+      "countries": null,
+      "mustDetect": {
+        "SECRET": [
+          "Qv7Rt2Mw9Kd5NpHb3Lf8Zx4C/uTn6Ys1+Wq0Ej7A/Rk3Vd9M"
+        ]
+      },
+      "notes": "The key body must not absorb the slashes in front of it. Anchoring the high-entropy rule with a class lookbehind instead of \\b widened the span leftwards over them; the result matched the protocol-relative URL shape the endpoint suppressor drops, and the key was left in the clear."
     }
   ]
 }

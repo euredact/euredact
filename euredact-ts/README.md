@@ -313,7 +313,7 @@ for (const page of pages) {
   offset += page.length;
 }
 
-// page 1: "Factuur — IBAN NL91ABNA0417164300, info@jansen.nl"
+// page 1: "Factuur — IBAN NL91ABNA0417164300, info@example.nl"
 // page 7: "Telefoon 0612345678"  -> PHONE (NL), not NATIONAL_ID (DK)
 ```
 

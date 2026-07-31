@@ -57,8 +57,8 @@ from eval_full import CATEGORY_MAP, DOB_CATEGORIES, EXCLUDED_CATEGORIES  # noqa:
 
 DATA_DIR = Path(os.environ.get(
     "EUREDACT_CORPUS",
-    "/Users/jorenjanssens/Library/Mobile Documents/com~apple~CloudDocs/Werken/JNJS/"
-    "Apps/PII-EuroMask/Data-Generation",
+    # The corpus lives beside the code checkout, not inside it.
+    str(Path(__file__).resolve().parents[3] / "Data-Generation"),
 ))
 
 #: The ten canonical datasets. `euromask_international_10k.json.bak` is

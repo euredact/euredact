@@ -53,6 +53,17 @@ jobs:
   publish-python:
     needs: [build-python, build-ts]
     runs-on: ubuntu-latest
+    # Gates the mint-and-publish step behind the environment's protection rules
+    # (required reviewers). Without it, anyone holding repo write could publish
+    # to both registries unreviewed by cutting a release or dispatching this
+    # workflow from any branch.
+    #
+    # REQUIRES matching configuration, or publishing fails closed:
+    #   1. A repository environment named "release" (Settings -> Environments)
+    #      with the reviewers who may approve a publish.
+    #   2. PyPI trusted publisher for this project set to environment "release".
+    #   3. npm trusted publisher for this package set to environment "release".
+    environment: release
     permissions:
       id-token: write
     steps:
@@ -71,6 +82,8 @@ jobs:
   publish-ts:
     needs: [build-python, build-ts]
     runs-on: ubuntu-latest
+    # See publish-python for what this requires on the registry side.
+    environment: release
     defaults:
       run:
         working-directory: euredact-ts
@@ -83,12 +96,18 @@ jobs:
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
-      # Node 20 ships npm 10, which predates OIDC trusted publishing. Kept to a
-      # major range rather than @latest so a bad npm release cannot break the
-      # release pipeline, and rather than a pin so it does not go stale.
-      - run: npm install -g npm@^11
+      # Node 20 ships npm 10, which predates OIDC trusted publishing. Pinned to
+      # an exact version rather than a range: this job holds the npm OIDC
+      # identity, so a compromised release anywhere in "^11" would run with the
+      # credential that publishes the package. Bump deliberately.
+      - run: npm install -g npm@11.6.2
       - run: npm ci
       - run: npm run build
+      # This job re-checks-out rather than consuming build-ts's artifact, so on
+      # workflow_dispatch it can resolve a different commit than the one that
+      # was tested. Running the suite here means whatever is about to be
+      # published is what passed.
+      - run: npm test
       # Authenticates via OIDC trusted publishing — no NPM_TOKEN. Requires a
       # trusted publisher on npmjs.com for this package: organisation
       # "euredact", repository "euredact", workflow "publish.yml", environment

@@ -315,8 +315,13 @@ function suppressUnits(text: string, match: RawMatch): boolean {
  * keyword window. That window is what made the postal rule claim years in
  * dates; widening its reach to fix a different symptom would repeat the error.
  */
+// Hoisted out of the suppressor bodies: rebuilding these per candidate cost
+// ~260k Set allocations per 1 MB document, and GC was 10.7% of the profile.
+const REFERENCE_TYPES = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.IBAN, EntityType.CHAMBER_OF_COMMERCE, EntityType.POSTAL_CODE]);
+const LEGAL_TYPES = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.POSTAL_CODE]);
+
 function suppressReference(text: string, match: RawMatch): boolean {
-  const applicable = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.IBAN, EntityType.CHAMBER_OF_COMMERCE, EntityType.POSTAL_CODE]);
+  const applicable = REFERENCE_TYPES;
   if (!applicable.has(match.patternDef.entityType)) return false;
   const [before] = getContext(text, match.start, match.end);
   if (REFERENCE_BEFORE.test(before)) return true;
@@ -325,7 +330,7 @@ function suppressReference(text: string, match: RawMatch): boolean {
 }
 
 function suppressLegal(text: string, match: RawMatch): boolean {
-  const applicable = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.POSTAL_CODE]);
+  const applicable = LEGAL_TYPES;
   if (!applicable.has(match.patternDef.entityType)) return false;
   const [before] = getContext(text, match.start, match.end);
   return LEGAL_BEFORE.test(before);
@@ -543,8 +548,14 @@ function enclosingLine(text: string, start: number, end: number): [number, numbe
 function structuralUnit(text: string, start: number, end: number): string {
   const [lineStart, lineEnd] = enclosingLine(text, start, end);
 
+  // Both walks stop as soon as the paragraph is too wide to be used, because
+  // everything past that point is discarded by the cap below anyway. Applying
+  // the cap only to the *result* meant that on a document with no blank lines
+  // each walk ran to the top and bottom of the whole text — O(document) per
+  // candidate, O(n^2) overall.
   let paraStart = lineStart;
   while (paraStart > 0) {
+    if (lineEnd - paraStart > MAX_UNIT_CHARS) return text.slice(lineStart, lineEnd);
     const prevEnd = paraStart - 1;
     const prevStart = text.lastIndexOf("\n", prevEnd - 1) + 1;
     if (text.slice(prevStart, prevEnd).trim() === "") break;
@@ -553,6 +564,7 @@ function structuralUnit(text: string, start: number, end: number): string {
 
   let paraEnd = lineEnd;
   while (paraEnd < text.length) {
+    if (paraEnd - paraStart > MAX_UNIT_CHARS) return text.slice(lineStart, lineEnd);
     const nextStart = paraEnd + 1;
     let nextEnd = text.indexOf("\n", nextStart);
     if (nextEnd === -1) nextEnd = text.length;
@@ -589,24 +601,67 @@ function escapeRe(s: string): string {
  * heading. Measured on the corpus this alone identifies ~78% of the BIC false
  * positives with no dictionaries and no labelled data.
  */
-function occursAsLowercaseWord(text: string, token: string): boolean {
+/**
+ * Every all-letter word in the document that is not part of an email address
+ * or a domain name.
+ *
+ * `\b<word>\b` can only match a maximal run of word characters, so collecting
+ * the runs once answers the question for every candidate. Re-scanning the whole
+ * document per candidate made this quadratic: 1.58 s on a 400 KB document
+ * dense in bank codes, against ~1 ms to build this set.
+ */
+function buildDocumentWords(text: string): Set<string> {
+  const words = new Set<string>();
+  const re = /[A-Za-z0-9_]+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const word = m[0];
+    if (!/^[A-Za-z]+$/.test(word)) continue;
+    const i = m.index;
+    const before = i > 0 ? text[i - 1] : "";
+    if (before === "@") continue;
+    if (before === "." && i >= 2 && /[A-Za-z0-9]/.test(text[i - 2])) continue;
+    const after = text.slice(i + word.length, i + word.length + 8);
+    if (after.startsWith("@")) continue;
+    if (/^\.[a-zA-Z]{2,6}\b/.test(after)) continue;
+    words.add(word);
+  }
+  return words;
+}
+
+/**
+ * Per-document scratch space for suppressors that would otherwise re-derive the
+ * same whole-document facts for every candidate.
+ *
+ * Built lazily and held only for the duration of one `detect()` call, so no
+ * document text outlives the call that supplied it.
+ */
+export class SuppressionScratch {
+  private words: Set<string> | null = null;
+
+  constructor(private readonly text: string) {}
+
+  documentWords(): Set<string> {
+    if (this.words === null) this.words = buildDocumentWords(this.text);
+    return this.words;
+  }
+}
+
+/**
+ * Does `token` also occur as an ordinary lowercase word in this document?
+ *
+ * `hospital`/`HOSPITAL`, `gegevens`/`GEGEVENS` — a token that appears in
+ * ordinary case elsewhere in the same document is a word, not a bank code.
+ * Email and domain contexts are excluded, so `ing.nl` does not vouch for a
+ * heading. Measured on the corpus this alone identifies ~78% of the BIC false
+ * positives with no dictionaries and no labelled data.
+ */
+function occursAsLowercaseWord(text: string, token: string, scratch?: SuppressionScratch): boolean {
   if (!/^[A-Za-z]+$/.test(token)) return false;
   const lower = token.toLowerCase();
   const capitalised = lower[0].toUpperCase() + lower.slice(1);
-  for (const form of [lower, capitalised]) {
-    // Cheap pre-check: a plain substring test almost always answers "no".
-    if (!text.includes(form)) continue;
-    const re = new RegExp(`\\b${escapeRe(form)}\\b`, "g");
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) {
-      const before = m.index > 0 ? text[m.index - 1] : "";
-      const after = text.slice(m.index + form.length, m.index + form.length + 8);
-      if (before === "@" || (before === "." && m.index >= 2 && /[A-Za-z0-9]/.test(text[m.index - 2]))) continue;
-      if (after.startsWith("@") || /^\.[a-zA-Z]{2,6}\b/.test(after)) continue;
-      return true;
-    }
-  }
-  return false;
+  const words = scratch ? scratch.documentWords() : buildDocumentWords(text);
+  return words.has(lower) || words.has(capitalised);
 }
 
 /**
@@ -649,18 +704,18 @@ function isHeadingShape(text: string, start: number, end: number, token: string)
  * ordinary lowercase word — so it is applied on both emitting paths. It scans
  * the whole document, so it runs only on the paths that would otherwise emit.
  */
-function suppressBicWithoutEvidence(text: string, match: RawMatch): boolean {
+function suppressBicWithoutEvidence(text: string, match: RawMatch, scratch?: SuppressionScratch): boolean {
   if (match.patternDef.entityType !== EntityType.BIC) return false;
   const token = match.text.trim();
 
-  if (isRegisteredBic(token)) return occursAsLowercaseWord(text, token);
+  if (isRegisteredBic(token)) return occursAsLowercaseWord(text, token, scratch);
 
   if (isHeadingShape(text, match.start, match.end, token)) return true;
 
   // The token itself is blanked out so it cannot vouch for itself.
   const unit = structuralUnit(text, match.start, match.end).split(token).join(" ".repeat(token.length));
   if (BIC_KEYWORD.test(unit) || IBAN_SHAPE.test(unit) || BANK_BLOCK.test(unit)) {
-    return occursAsLowercaseWord(text, token);
+    return occursAsLowercaseWord(text, token, scratch);
   }
   return true;
 }
@@ -669,7 +724,11 @@ function suppressBicWithoutEvidence(text: string, match: RawMatch): boolean {
 
 // An identifier label immediately before the digits. A postal code is never
 // introduced this way; an SVNr, policy number or service number always is.
-const ID_CUE_BEFORE = /(?:[\w\-]*Nr|[\w\-]*N[°ºo]|[\w\-]*Nummer|[\w\-]*Numero|[\w\-]*Numéro|No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen)\.?\s*:?\s*$/i;
+// The `[\w\-]*` prefix is factored out of the five alternatives that share it.
+// Repeated per alternative, the engine retried the same unbounded prefix five
+// times per starting position — the most expensive single regex in the engine
+// at 197 ms per 1 MB document. Same language, 8x faster on the worst case.
+const ID_CUE_BEFORE = /(?:[\w\-]*(?:Nr|N[°ºo]|Nummer|Numero|Numéro)|No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen)\.?\s*:?\s*$/i;
 
 // An international dialling prefix earlier on the same line, with nothing but
 // number punctuation in between: these digits belong to the phone detector.
@@ -770,7 +829,9 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
   return !match.patternDef.contextKeywords.some(kw => context.includes(kw.toLowerCase()));
 }
 
-type Suppressor = (text: string, match: RawMatch) => boolean;
+// Suppressors that need whole-document facts take the optional scratch; the
+// rest ignore it, and a narrower function stays assignable to this type.
+type Suppressor = (text: string, match: RawMatch, scratch?: SuppressionScratch) => boolean;
 
 const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneAfterIdLabel, suppressPhoneServiceNumber, suppressPhoneDateOverlap, suppressPhoneAsNumberRange],
@@ -785,12 +846,12 @@ const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.CHAMBER_OF_COMMERCE]: [suppressReference],
 };
 
-export function shouldSuppress(text: string, match: RawMatch): boolean {
+export function shouldSuppress(text: string, match: RawMatch, scratch?: SuppressionScratch): boolean {
   if (suppressSequential(text, match)) return true;
   const typeSups = TYPE_SUPPRESSORS[match.patternDef.entityType];
   if (typeSups) {
     for (const s of typeSups) {
-      if (s(text, match)) return true;
+      if (s(text, match, scratch)) return true;
     }
   }
   if (match.patternDef.requiresContext) return suppressRequiresContext(text, match);

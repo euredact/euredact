@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import Iterator
@@ -27,11 +28,29 @@ class ReferentialMapper:
     Ensures referential integrity: the same input value always maps to
     the same label (e.g. ``EMAIL_1``), so relationships between
     occurrences are preserved in the redacted output.
+
+    .. warning::
+       The mapping is keyed on the **raw PII value** and is never evicted —
+       evicting would hand a previously seen value a second label and quietly
+       break the guarantee above. Two consequences worth designing around:
+
+       * It grows for as long as the process runs. Call :meth:`clear` (or
+         :meth:`EuRedact.clear`) between workloads; a warning is emitted once
+         the mapping passes :data:`MAPPING_WARN_THRESHOLD` entries.
+       * Labels are shared by every caller of the same instance — including
+         every caller of the module-level :func:`euredact.redact`. A label
+         repeated across two documents reveals that they contain the same
+         underlying value, so give each tenant its own :class:`EuRedact`
+         instance rather than sharing the module-level one.
     """
+
+    #: Entry count at which a one-time warning is emitted.
+    MAPPING_WARN_THRESHOLD = 100_000
 
     def __init__(self) -> None:
         self._counters: dict[EntityType, int] = {}
         self._mapping: dict[str, str] = {}
+        self._warned = False
 
     def get_label(self, text: str, entity_type: EntityType | str) -> str:
         """Return consistent label. Same input always returns same output."""
@@ -40,6 +59,15 @@ class ReferentialMapper:
             n = self._counters[entity_type]
             type_label = entity_type.value if isinstance(entity_type, EntityType) else entity_type
             self._mapping[text] = f"{type_label}_{n}"
+            if not self._warned and len(self._mapping) > self.MAPPING_WARN_THRESHOLD:
+                self._warned = True
+                warnings.warn(
+                    f"Referential integrity mapping holds "
+                    f"{len(self._mapping)} raw PII values and is never evicted. "
+                    f"Call clear() between workloads to release them.",
+                    ResourceWarning,
+                    stacklevel=2,
+                )
         return self._mapping[text]
 
     def clear(self) -> None:
@@ -176,17 +204,38 @@ class EuRedact:
         # Step 14: Sort detections by position
         detections.sort(key=lambda d: (d.start, -d.end))
 
-        # Step 15: Apply replacements right-to-left
-        redacted = text  # Use original text for replacements
-        for det in reversed(detections):
+        # Step 15: Apply replacements.
+        #
+        # Labels are resolved right-to-left because the referential mapper
+        # numbers each entity type in call order, and that order is part of the
+        # output contract. The string itself is then assembled in a single
+        # forward pass: rebuilding it per detection copied the whole document
+        # each time, which is O(document x detections) — 268 ms of pure copying
+        # on a 1 MB document with 8,000 detections, versus 0.7 ms here.
+        replacements: list[str] = [""] * len(detections)
+        for idx in range(len(detections) - 1, -1, -1):
+            det = detections[idx]
             if referential_integrity:
-                replacement = self._referential_mapper.get_label(
+                replacements[idx] = self._referential_mapper.get_label(
                     det.text, det.entity_type
                 )
             else:
                 label = det.entity_type.value if isinstance(det.entity_type, EntityType) else det.entity_type
-                replacement = f"[{label}]"
-            redacted = redacted[: det.start] + replacement + redacted[det.end :]
+                replacements[idx] = f"[{label}]"
+
+        parts: list[str] = []
+        pos = 0
+        for det, replacement in zip(detections, replacements):
+            # Spans reach here deduplicated and non-overlapping; a span that
+            # starts behind the cursor would silently corrupt the output, so
+            # drop it rather than splice it into the middle of a label.
+            if det.start < pos:
+                continue
+            parts.append(text[pos : det.start])
+            parts.append(replacement)
+            pos = det.end
+        parts.append(text[pos:])
+        redacted = "".join(parts)
 
         # Step 16: [COREF EXTENSION] — no-op
 

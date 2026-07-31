@@ -591,7 +591,7 @@ for page in pages:
     result = euredact.redact(page, context=ctx, chunk_offset=offset)
     offset += len(page)
 
-# page 1: "Factuur — IBAN NL91ABNA0417164300, info@jansen.nl"
+# page 1: "Factuur — IBAN NL91ABNA0417164300, info@example.nl"
 # page 7: "Telefoon 0612345678"  -> PHONE (NL)
 ```
 
@@ -656,9 +656,27 @@ Input text
 RedactResult
 ```
 
-The engine is **thread-safe**: a `threading.Lock` guards country loading, and all
-detection state is local to each `detect()` call. `Detection` objects are frozen
-dataclasses and can be safely shared across threads.
+The engine is **thread-safe**: a `threading.Lock` guards country loading and
+custom-pattern registration, and all detection state is local to each `detect()`
+call. `Detection` objects are frozen dataclasses and can be safely shared across
+threads.
+
+Registering a pattern while other threads are detecting is safe too:
+`add_custom_pattern` builds a whole new scan plan and publishes it in one
+assignment, so a scan in flight keeps using the plan it started with and sees
+the pattern set as of either before or after the registration — never a mixture.
+It will not observe the new pattern until it next calls `detect()`.
+
+Two caveats that are about *sharing*, not locking:
+
+- **Referential integrity is per instance.** Labels (`EMAIL_1`, …) come from a
+  mapper owned by the `EuRedact` instance, so every caller of the module-level
+  `euredact.redact()` shares one namespace. A label appearing in two documents
+  tells you they contain the same underlying value. Give each tenant its own
+  `EuRedact()` instance.
+- **The mapper is never evicted**, because evicting would give a previously seen
+  value a second label. It grows until you call `clear()`, which is the right
+  thing to do between workloads in a long-running process.
 
 ### Suppression Zones
 

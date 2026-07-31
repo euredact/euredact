@@ -17,7 +17,7 @@ van uw documenten.
 BSN: 111222333
 IBAN: NL91ABNA0417164300
 Telefoon: 06-12345678
-E-mail: jan.vandenberg@gmail.com
+E-mail: jan.vandenberg@example.com
 
 Graag ontvangen wij nog een kopie van uw identiteitsbewijs.
 

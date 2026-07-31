@@ -6,7 +6,7 @@
  * contain no IBAN, no `+CC` number and no ccTLD infers nothing at all, even
  * when the first page identified the document beyond doubt:
  *
- *     page 1   "Factuur — IBAN NL91ABNA0417164300, info@jansen.nl"
+ *     page 1   "Factuur — IBAN NL91ABNA0417164300, info@example.nl"
  *     page 7   "Telefoon 0612345678"        <- Dutch mobile, or Danish CPR?
  *
  * Scanned alone, page 7 has nothing to go on. Sharing a context across the two

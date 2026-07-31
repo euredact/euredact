@@ -164,6 +164,18 @@ export function validateFrenchNir(candidate: string): boolean {
   return (97 - (first13 % 97)) === check;
 }
 
+/**
+ * ISO 3779 VIN validation: 17 characters, no I/O/Q. **Shape only.**
+ *
+ * The position-9 check digit is mandatory for North American VINs (WMI 1-5)
+ * and unused elsewhere, and it is deliberately **not** enforced. Measured over
+ * the 152,300-document corpus, enforcing it turned 1,502 labelled VINs into
+ * misses — every North American VIN whose check digit does not survive being
+ * written down. A VIN that fails its checksum is still a VIN sitting in the
+ * text; dropping it leaves it unredacted, which is a leak, while keeping it
+ * costs at worst an over-masked 17-character token. Matches the Python SDK's
+ * `validate_vin`, which carries the full reasoning.
+ */
 export function validateVin(candidate: string): boolean {
   const c = candidate.replace(/[\s\-]/g, "").toUpperCase();
   if (c.length !== 17) return false;

@@ -217,45 +217,37 @@ def validate_french_nir(candidate: str) -> bool:
 
 
 def validate_vin(candidate: str) -> bool:
-    """ISO 3779 VIN validation: 17 characters, no I/O/Q.
+    """ISO 3779 VIN validation: 17 characters, no I/O/Q. **Shape only.**
 
-    Check digit (position 9) is only mandatory for North American VINs
-    (WMI starting with 1-5). European VINs skip the check digit.
+    The position-9 check digit is mandatory for North American VINs (WMI 1-5)
+    and unused elsewhere, and it is deliberately **not** enforced here.
+
+    It was previously present but unreachable behind `if False`, which read as
+    an oversight. It is not: enforcing it costs recall in the one direction
+    this library must not fail. Measured over the 152,300-document corpus,
+    enforcing it turned **1,502 labelled VINs into misses** — every North
+    American VIN whose check digit does not survive being written down. Real
+    documents carry OCR slips, transcription errors and deliberately masked
+    digits, and a VIN that fails its checksum is still a VIN sitting in the
+    text. Dropping it leaves it unredacted, which is a leak; keeping it costs
+    at worst an over-masked 17-character token.
+
+    That is the same trade the deduplication ranking makes when it puts span
+    length above validation ("a redaction tool masking more than it must is
+    recoverable; masking less is not").
+
+    The consequence to know about: this counts as a validator for ranking, so
+    a VIN-shaped span is tier-3 on the strength of its shape alone and can win
+    a contested span against an unvalidated candidate. The 17-character
+    no-I/O/Q shape is specific enough that this has not been observed to cause
+    a misattribution, but it is a weaker claim than a checksum makes.
     """
     clean = candidate.replace(" ", "").replace("-", "").upper()
     if len(clean) != 17:
         return False
 
     # VIN cannot contain I, O, Q
-    if any(c in clean for c in "IOQ"):
-        return False
-
-    # Check digit validation is skipped for synthetic/test VINs
-    # In production, only enforce for confirmed North American VINs
-    # For now, character set + length validation provides sufficient accuracy
-    if False and clean[0] in "12345":  # Disabled: synthetic data won't pass
-        transliteration = {
-            "A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7, "H": 8,
-            "J": 1, "K": 2, "L": 3, "M": 4, "N": 5, "P": 7, "R": 9,
-            "S": 2, "T": 3, "U": 4, "V": 5, "W": 6, "X": 7, "Y": 8, "Z": 9,
-        }
-        weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2]
-
-        total = 0
-        for i, ch in enumerate(clean):
-            if ch.isdigit():
-                val = int(ch)
-            else:
-                val = transliteration.get(ch, 0)
-            total += val * weights[i]
-
-        remainder = total % 11
-        check_char = clean[8]
-        if remainder == 10:
-            return check_char == "X"
-        return check_char == str(remainder)
-
-    return True
+    return not any(c in clean for c in "IOQ")
 
 
 # ISO 3166-1 alpha-2 codes, plus the reserved codes SWIFT assigns BICs under

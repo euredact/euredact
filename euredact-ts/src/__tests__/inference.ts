@@ -115,7 +115,7 @@ test("out of scope is flagged, not dropped", () => {
 // ── The inference is auditable ─────────────────────────────────────────
 
 test("every inference traces to a span", () => {
-  const text = "IBAN NL91ABNA0417164300, BTW NL123456789B01, tel +31 6 12345678, mail info@jansen.nl";
+  const text = "IBAN NL91ABNA0417164300, BTW NL123456789B01, tel +31 6 12345678, mail info@example.nl";
   const r = sdk.redact(text, { cache: false });
   assert.deepEqual(new Set(r.evidence.map(e => e.source)),
                    new Set(["ibanPrefix", "vatPrefix", "e164Prefix", "emailTld"]));
@@ -126,7 +126,7 @@ test("every inference traces to a span", () => {
 });
 
 test("evidence is returned in document order", () => {
-  const r = sdk.redact("IBAN NL91ABNA0417164300, tel +31 6 12345678, mail info@jansen.nl", { cache: false });
+  const r = sdk.redact("IBAN NL91ABNA0417164300, tel +31 6 12345678, mail info@example.nl", { cache: false });
   const starts = r.evidence.map(e => e.span[0]);
   assert.deepEqual(starts, [...starts].sort((a, b) => a - b));
 });
@@ -184,7 +184,7 @@ test("a hint and a declaration agree on attribution", () => {
 
 // ── Chunked documents ──────────────────────────────────────────────────
 
-const PAGE_1 = "Factuur — IBAN NL91ABNA0417164300, info@jansen.nl";
+const PAGE_1 = "Factuur — IBAN NL91ABNA0417164300, info@example.nl";
 // Deliberately cue-free. "Telefoon 0612345678" would be decided by the
 // local-cue tiebreak before the context was ever consulted, which is correct
 // behaviour but makes the test vacuous — it would pass with contexts removed.

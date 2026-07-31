@@ -46,8 +46,8 @@ from presidio_analyzer.nlp_engine import SpacyNlpEngine  # noqa: E402
 #: pointed at the corpus the same way.
 DATA_DIR = Path(os.environ.get(
     "EUREDACT_CORPUS",
-    "/Users/jorenjanssens/Library/Mobile Documents/com~apple~CloudDocs/"
-    "Werken/JNJS/Apps/PII-EuroMask/Data-Generation",
+    # The corpus lives beside the code checkout, not inside it.
+    str(Path(__file__).resolve().parents[2] / "Data-Generation"),
 ))
 
 #: The same ten canonical datasets `tests/metrics.py` scores euRedact on, listed

@@ -882,9 +882,16 @@ def _structural_unit(text: str, start: int, end: int) -> str:
     """
     line_start, line_end = _enclosing_line(text, start, end)
 
-    # Expand upwards to the start of the blank-line-delimited paragraph
+    # Both walks stop as soon as the paragraph is too wide to be used, because
+    # everything past that point is discarded by the cap below anyway. The cap
+    # used to be applied only to the *result*, so on a document with no blank
+    # lines each walk ran to the top and bottom of the whole text — O(document)
+    # per candidate, O(n^2) overall. A 256 KB file of bank details took 32 s,
+    # which extrapolates to roughly 14 hours at the 10 MB input limit.
     para_start = line_start
     while para_start > 0:
+        if line_end - para_start > _MAX_UNIT_CHARS:
+            return text[line_start:line_end]
         prev_end = para_start - 1
         prev_start = text.rfind("\n", 0, prev_end) + 1
         if not text[prev_start:prev_end].strip():
@@ -894,6 +901,8 @@ def _structural_unit(text: str, start: int, end: int) -> str:
     # Expand downwards to the end of the paragraph
     para_end = line_end
     while para_end < len(text):
+        if para_end - para_start > _MAX_UNIT_CHARS:
+            return text[line_start:line_end]
         next_start = para_end + 1
         next_end = text.find("\n", next_start)
         if next_end == -1:

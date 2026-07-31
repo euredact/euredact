@@ -172,9 +172,26 @@ diagnostic on its own. Check in this order:
 
 Publishing uses **OIDC trusted publishing**, not `NPM_TOKEN`. It requires a
 trusted publisher on npmjs.com (org `euredact`, repo `euredact`, workflow
-`publish.yml`, environment blank — the job declares none, so a value there
-will not match) and npm 11+, which is why the job upgrades npm from the Node 20
-default.
+`publish.yml`, environment `release`) and npm 11+, which is why the job
+installs a pinned npm over the Node 20 default.
+
+### Both publish jobs run in the `release` environment
+
+They declare `environment: release` so a publish waits on that environment's
+required reviewers — otherwise anyone with repo write could ship to both
+registries unreviewed, including via `workflow_dispatch` from any branch.
+
+This only works if all three sides agree, and a publish **fails closed** until
+they do:
+
+1. A repository environment named `release` exists (Settings → Environments)
+   with reviewers configured.
+2. The PyPI trusted publisher for this project names environment `release`.
+3. The npm trusted publisher for this package names environment `release`.
+
+If a release fails to authenticate against either registry, check this first:
+an environment mismatch is indistinguishable from an ordinary auth failure in
+the error text.
 
 ## Cross-SDK parity
 

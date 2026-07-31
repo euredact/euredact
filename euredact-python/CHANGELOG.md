@@ -1,5 +1,138 @@
 # Changelog
 
+## 0.3.7 (2026-07-31)
+
+Findings from a security and performance review of the package. Detection
+output is unchanged: the shared benchmark corpus produces byte-identical
+redacted text before and after, and cross-SDK parity is unmoved at 0.52%
+divergence over 1,500 documents.
+
+### Security
+
+- **Two patterns could be made to backtrack quadratically (ReDoS).** The
+  high-entropy `SECRET` rule ended in `\b`, which cannot match when a token run
+  ends on `-`, `+` or `/` — so an ordinary dashed rule line (`x-----…`) sent the
+  engine backtracking across two overlapping quantified classes. 80 KB of that
+  took **39.8 s**; it now takes 28 ms and scales linearly. The `EMAIL` rule had
+  the same shape at its start: because `.` is in the local-part class, a long
+  dotted token (a dependency manifest, a stack trace) plus any `@` in the
+  document cost O(n²). Both are now pinned with class lookarounds instead of
+  `\b`. Neither needed an attacker — ordinary machine-generated text triggers
+  them. The `EMAIL` fix adopts the anchoring the TypeScript SDK already used.
+  One visible consequence: base64 padding (`==`) is now inside the redacted
+  span rather than trailing outside it, and an email preceded by a dot has that
+  dot included.
+
+- **A pattern registered during detection could silently drop PII.**
+  `add_custom_pattern` rebuilt the matcher's scan structures in place while
+  scans — which deliberately run without the lock, so concurrent `detect()`
+  calls do not serialise — were reading them. A scan racing the rebuild could
+  zip a fresh slot list against a stale pattern list, truncate to the shorter
+  of the two, and skip patterns, returning fewer detections with no error
+  raised. `compile()` now builds a whole new plan and publishes it in one
+  assignment, so a scan sees the pattern set as of before or after the
+  registration, never a mixture. Covered by `tests/test_thread_safety.py`,
+  which fails against the previous implementation.
+
+- **The custom-pattern ReDoS screen only recognised one spelling.** It searched
+  for the literal shape `+)+`, so `(a|a)+$`, `(a{1,10})+$` and `^(\w+\s?)*$`
+  all passed and then ran exponentially — while the error message promised the
+  pattern had been checked for catastrophic backtracking. It now rejects
+  quantifiers inside repeated groups and repeated groups whose alternatives
+  overlap, and the docstring says plainly that it is a conservative heuristic
+  over known-bad shapes, not a proof of safety.
+
+- **The VIN check digit is now an explicit decision rather than dead code.**
+  `validate_vin` carried a full ISO 3779 check-digit implementation behind
+  `if False`, which read as an oversight. It is not, and enabling it was
+  measured to be wrong: over the 152,300-document corpus it turned **1,502
+  labelled VINs into misses**. A VIN that fails its checksum is still a VIN
+  sitting in the text, and real documents carry OCR slips and transcription
+  errors — dropping it leaves it unredacted, which is a leak, while keeping it
+  costs at worst an over-masked 17-character token. That is the same trade the
+  deduplication ranking already makes when it puts span length above
+  validation. The dead branch is gone and the reasoning, including the caveat
+  that VIN therefore claims validator priority on shape alone, is in the
+  docstring. The TypeScript SDK carries the matching note.
+
+- **The result cache was bounded by entry count, not by size.** 1024 entries
+  said nothing about memory: 1024 cached 1 MB documents is a gigabyte of
+  PII-bearing text held live. The cache now also enforces a character budget
+  (`DEFAULT_MAX_CHARS`, ~16M) and skips results too large to fit.
+
+- **The referential-integrity mapping is documented as unevicted and shared.**
+  It is keyed on the raw PII value and cannot be evicted without breaking the
+  guarantee it exists to provide, so it grows until `clear()` is called — now
+  warned about once past 100,000 entries. Its labels are also shared by every
+  caller of the module-level `redact()`, which means a repeated label discloses
+  that two documents contain the same value; the README now says to give each
+  tenant its own `EuRedact` instance.
+
+- The maintainer's home directory is no longer hardcoded in six committed
+  files; the corpus path comes from `EUREDACT_CORPUS` with a repo-relative
+  default. The false-positive export writes a 120-character context window
+  instead of every source document. Example addresses use RFC 2606 domains.
+
+### Performance
+
+Measured on a 12-core M3 Pro with the `[fast]` extra, cache disabled:
+
+| document | before | after |
+|---|---:|---:|
+| 5 KB | 4.2 ms | 4.1 ms |
+| 50 KB | 146.9 ms | 128.4 ms |
+| 1 MB | 3,597 ms | 2,354 ms |
+
+- **The BIC context window walked the whole document per candidate.**
+  `_structural_unit` expanded to the enclosing paragraph and only *then*
+  applied its 600-character cap, so on text with no blank lines — a CSV, a log,
+  a bank-details export — each BIC-shaped token cost O(document). A 256 KB file
+  took 32 s, which extrapolates to roughly 14 hours at the 10 MB input limit.
+  Both walks now stop once the paragraph is too wide to be used, which is the
+  point past which the result was discarded anyway. Measured on a BIC-dense
+  136 KB document: 1,051 ms to 422 ms, byte-identical output.
+
+- **The fragment check was O(candidates × failed spans).** For every
+  validator-less candidate it walked — and list-sliced — the whole prefix of
+  failed spans: 125.6 million inner iterations on a 1 MB document, 43% of
+  runtime, and the sole cause of superlinear scaling. A running maximum of the
+  span ends answers the same question in O(1) for all but an exact-end tie.
+
+- **Redaction rebuilt the whole document per detection.** `redacted[:start] +
+  label + redacted[end:]` in a loop is O(document × detections) — 268 ms of
+  pure copying on a 1 MB document with 8,000 detections, against 0.7 ms for a
+  single forward pass joined once. Labels are still resolved right-to-left, so
+  referential numbering is unchanged.
+
+- The cache key no longer copies the entire input into an f-string before
+  hashing it, and a dead loop in the normalizer that ran a per-character NFC
+  pass and discarded the result is gone (with its `F841` ruff exemption).
+
+- **Regression check.** The full 152,300-document corpus scores identically to
+  0.3.6 on every entity type in both detection modes — same support, TP, FP and
+  FN — so none of the above changed what is detected. Two regressions were
+  caught this way and fixed before landing: enforcing the VIN check digit (see
+  above), and anchoring the high-entropy rule with a lookbehind, which widened
+  its span over a leading `//` and let the endpoint suppressor drop an SSH key.
+  The latter is now pinned by conformance vector
+  `secret-ssh-key-preceded-by-slashes`, which runs in both SDKs.
+
+### CI
+
+- Both publish jobs now run in a `release` environment, so shipping to PyPI and
+  npm waits on that environment's reviewers rather than being available to
+  anyone with repo write. **This requires matching configuration on all three
+  sides — the GitHub environment and both trusted-publisher entries — and a
+  publish fails closed until they agree.** See the release skill.
+- The npm upgrade inside the publish job is pinned to an exact version instead
+  of floating on `^11`; that job holds the npm OIDC identity.
+- `publish-ts` runs the test suite before publishing, since it re-checks-out
+  rather than consuming the tested artifact and can resolve a different commit
+  under `workflow_dispatch`.
+- Removed `euredact-python/.github/workflows/ci.yml`: nested workflow
+  directories are never executed by GitHub, so it was dead config that had
+  drifted from the real pipeline while looking like coverage.
+
 ## 0.3.6 (2026-07-30)
 
 ### Fixed

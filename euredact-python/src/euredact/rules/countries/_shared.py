@@ -79,7 +79,13 @@ class SharedConfig(CountryConfig):
             # --- Email ---
             PatternDef(
                 entity_type=EntityType.EMAIL,
-                pattern=r"\b[\w._%+\-]+@(?:[\w\-]+\.)+[a-zA-Z]{2,}\b",
+                # The leading guard is a lookbehind, not \b: with \b the
+                # local-part class (which contains ".") could start matching at
+                # every offset inside a long dotted run, backtracking O(n^2) —
+                # a 1 MB manifest or stack trace took hours. The lookbehind
+                # pins the match to the true start of the run. Matches the
+                # TypeScript pattern, which was already written this way.
+                pattern=r"(?<![\w._%+\-])[\w._%+\-]+@(?:[\w\-]+\.)+[a-zA-Z]{2,}\b",
                 validator=None,
                 description="Email address (RFC 5322 simplified)",
             ),
@@ -387,7 +393,25 @@ class SharedConfig(CountryConfig):
             # --- Secret / API Key (entropy-based fallback for longer tokens) ---
             PatternDef(
                 entity_type=EntityType.SECRET,
-                pattern=r"\b[A-Za-z0-9_\-+/]{24,}[A-Za-z0-9_\-+/=]*\b",
+                # Only the *trailing* \b is replaced. It could not match when
+                # the token run ended on "-", "+" or "/", so the engine
+                # backtracked across two overlapping quantified classes: an
+                # ordinary dashed rule line ("x-----...") cost O(n^2), 39 s for
+                # 80 KB. The lookahead simply asserts the run is over, which is
+                # what \b was there to express, and it cannot fail after a
+                # maximal run — so there is nothing to backtrack into.
+                #
+                # The leading \b stays. Replacing it with a class lookbehind
+                # also worked and read more symmetrically, but it widened the
+                # span leftwards over any "/" in front: an authorized_keys
+                # entry then started "//..." , matched the protocol-relative
+                # URL shape in `_URL_LIKE`, and was suppressed as an endpoint,
+                # leaving the key in the clear. One label in the 152,300-
+                # document corpus, and it was SSH key material.
+                #
+                # Base64 padding is now inside the span instead of trailing
+                # outside it; that is the only intended difference.
+                pattern=r"\b[A-Za-z0-9_\-+/]{24,}[A-Za-z0-9_\-+/=]*(?![A-Za-z0-9_\-+/=])",
                 validator="high_entropy",
                 description="High-entropy token near context keyword",
                 context_keywords=SECRET_CONTEXT,

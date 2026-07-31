@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "euredact"
-version = "0.3.6"
+version = "0.3.7"
 description = "European PII redaction SDK — rule engine for 31 countries"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -83,4 +83,3 @@ select = ["E", "F", "W", "I"]
 "src/euredact/rules/engine.py" = ["E501"]
 "src/euredact/rules/matchers.py" = ["E501"]
 "src/euredact/sdk.py" = ["E501"]
-"src/euredact/normalizer.py" = ["F841"]  # unused vars in offset mapping (complex algorithm)

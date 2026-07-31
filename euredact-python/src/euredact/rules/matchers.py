@@ -224,30 +224,56 @@ def _extract_literal_prefix(pattern: str) -> str | None:
     return result if len(result) >= 2 else None
 
 
+@dataclass(frozen=True)
+class _ScanPlan:
+    """Everything a scan reads, frozen together as one swappable unit.
+
+    Scans run without the engine lock so that concurrent ``detect()`` calls do
+    not serialise. That is only safe if the structures they read never change
+    underneath them, so :meth:`MultiPatternMatcher.compile` builds a whole new
+    plan and publishes it with a single attribute assignment. A scan reads the
+    reference once and keeps using that plan even if a pattern is registered
+    mid-scan — it sees the pattern set as of before or after the registration,
+    never a half-rebuilt mixture of the two.
+
+    Rebuilding these lists in place is what the old code did, and a scan racing
+    it could zip a fresh ``_re2_slot`` against a stale ``_patterns``, truncate
+    to the shorter one, and silently skip patterns — dropping detections with
+    no error raised.
+    """
+
+    patterns: tuple[tuple[re.Pattern[str], PatternDef, str], ...]
+    re2_set: object | None
+    # Parallel to `patterns`: the automaton index for a pattern the prefilter
+    # covers, or None for one that must always run. Keeping it parallel means
+    # the scan emits matches in pattern-registration order, which deduplication
+    # relies on to break ties the same way every path does.
+    re2_slot: tuple[int | None, ...]
+    ac_automaton: object | None
+    # For each AC entry: patterns sharing that literal prefix.
+    ac_patterns: tuple[tuple[tuple[re.Pattern[str], PatternDef, str], ...], ...]
+    ac_prefix_lens: tuple[int, ...]
+    # Patterns without an extractable prefix (always scanned sequentially).
+    no_prefix: tuple[tuple[re.Pattern[str], PatternDef, str], ...]
+
+
 class MultiPatternMatcher:
     """Compiles all active patterns and scans text adaptively."""
 
     def __init__(self) -> None:
         self._patterns: list[tuple[re.Pattern[str], PatternDef, str]] = []
         self._compiled = False
-
-        # AC structures (built on compile, used for long texts)
-        self._ac_automaton: object | None = None
-        # For each AC entry: list of (compiled_regex, PatternDef, country_code)
-        self._ac_patterns: list[list[tuple[re.Pattern[str], PatternDef, str]]] = []
-        # Patterns without extractable prefix (always scanned sequentially)
-        self._no_prefix: list[tuple[re.Pattern[str], PatternDef, str]] = []
-
-        # RE2 prefilter. _re2_slot is parallel to _patterns: the automaton
-        # index for a pattern the prefilter covers, or None for one that must
-        # always run. Keeping it parallel means the scan emits matches in
-        # pattern-registration order, which deduplication relies on to break
-        # ties the same way every path does.
-        self._re2_set: object | None = None
-        self._re2_slot: list[int | None] = []
+        self._plan = _ScanPlan(
+            patterns=(), re2_set=None, re2_slot=(), ac_automaton=None,
+            ac_patterns=(), ac_prefix_lens=(), no_prefix=(),
+        )
 
     def add_pattern(self, pattern_def: PatternDef, country_code: str) -> None:
-        """Add a single pattern."""
+        """Add a single pattern.
+
+        The active plan is deliberately left in place until :meth:`compile`
+        publishes a new one, so a concurrent scan keeps a consistent view.
+        """
         compiled = re.compile(_ascii_word_boundaries(pattern_def.pattern), re.UNICODE)
         self._patterns.append((compiled, pattern_def, country_code))
         self._compiled = False
@@ -260,14 +286,26 @@ class MultiPatternMatcher:
         self._compiled = False
 
     def compile(self) -> None:
-        """Build scan structures."""
-        if _HAS_AC:
-            self._build_ac()
-        if _HAS_RE2:
-            self._build_re2()
+        """Build scan structures and publish them as one new plan."""
+        patterns = tuple(self._patterns)
+        ac_automaton, ac_patterns, ac_prefix_lens, no_prefix = (
+            self._build_ac(patterns) if _HAS_AC else (None, (), (), ())
+        )
+        re2_set, re2_slot = self._build_re2(patterns) if _HAS_RE2 else (None, ())
+        # Single assignment: readers see the old plan or this one, never a
+        # partially populated structure.
+        self._plan = _ScanPlan(
+            patterns=patterns,
+            re2_set=re2_set,
+            re2_slot=re2_slot,
+            ac_automaton=ac_automaton,
+            ac_patterns=ac_patterns,
+            ac_prefix_lens=ac_prefix_lens,
+            no_prefix=no_prefix,
+        )
         self._compiled = True
 
-    def _build_re2(self) -> None:
+    def _build_re2(self, patterns):
         """Build the RE2 prefilter over every pattern it can express.
 
         Two kinds of pattern opt out and always run: those RE2 cannot compile
@@ -279,28 +317,28 @@ class MultiPatternMatcher:
         # already ASCII-only, so the semantics match, while the rewrite uses
         # lookbehind that RE2 cannot compile.
         automaton = _re2.Set.SearchSet()
-        self._re2_slot = []
+        slots: list[int | None] = []
         added = 0
         with _silence_stderr():
-            for _compiled, pdef, _code in self._patterns:
+            for _compiled, pdef, _code in patterns:
                 if _max_match_width(pdef.pattern) > _RE2_OVERLAP:
-                    self._re2_slot.append(None)
+                    slots.append(None)
                     continue
                 try:
                     automaton.Add(pdef.pattern)
                 except Exception:  # noqa: BLE001 - RE2 rejects some Python syntax
-                    self._re2_slot.append(None)
+                    slots.append(None)
                     continue
-                self._re2_slot.append(added)
+                slots.append(added)
                 added += 1
             if added:
                 automaton.Compile()
         if added:
-            self._re2_set = automaton
-        else:  # pragma: no cover - only if every pattern opted out
-            self._re2_set = None
+            return automaton, tuple(slots)
+        # pragma: no cover - only if every pattern opted out
+        return None, tuple(slots)
 
-    def _build_ac(self) -> None:
+    def _build_ac(self, patterns):
         """Build Aho-Corasick automaton from patterns with literal prefixes.
 
         A prefix-indexed pattern is only ever run over a bounded window after
@@ -313,24 +351,24 @@ class MultiPatternMatcher:
         redacting private keys altogether — the block was left in the output.
         """
         prefix_map: dict[str, list[tuple[re.Pattern[str], PatternDef, str]]] = {}
-        self._no_prefix = []
+        no_prefix: list[tuple[re.Pattern[str], PatternDef, str]] = []
 
-        for compiled, pdef, code in self._patterns:
+        for compiled, pdef, code in patterns:
             prefix = _extract_literal_prefix(pdef.pattern)
             if prefix and _max_match_width(pdef.pattern) <= _AC_WINDOW:
                 prefix_map.setdefault(prefix, []).append((compiled, pdef, code))
             else:
-                self._no_prefix.append((compiled, pdef, code))
+                no_prefix.append((compiled, pdef, code))
 
         A = ahocorasick.Automaton()
-        self._ac_patterns = []
-        self._ac_prefix_lens: list[int] = []
-        for idx, (prefix, patterns) in enumerate(prefix_map.items()):
+        ac_patterns: list[tuple[tuple[re.Pattern[str], PatternDef, str], ...]] = []
+        ac_prefix_lens: list[int] = []
+        for idx, (prefix, group) in enumerate(prefix_map.items()):
             A.add_word(prefix, idx)
-            self._ac_patterns.append(patterns)
-            self._ac_prefix_lens.append(len(prefix))
+            ac_patterns.append(tuple(group))
+            ac_prefix_lens.append(len(prefix))
         A.make_automaton()
-        self._ac_automaton = A
+        return A, tuple(ac_patterns), tuple(ac_prefix_lens), tuple(no_prefix)
 
     def scan(self, text: str, country_codes: set[str] | None = None) -> list[RawMatch]:
         """Scan text against patterns.
@@ -347,13 +385,17 @@ class MultiPatternMatcher:
         if not self._compiled:
             self.compile()
 
-        if self._re2_set is not None:
-            return self._scan_re2(text, country_codes)
-        if self._ac_automaton is not None:
-            return self._scan_ac(text, country_codes)
-        return self._scan_sequential(text, country_codes)
+        # Read the plan reference exactly once. Everything below works from
+        # this snapshot, so a concurrent compile() cannot change the structures
+        # mid-scan.
+        plan = self._plan
+        if plan.re2_set is not None:
+            return self._scan_re2(text, plan, country_codes)
+        if plan.ac_automaton is not None:
+            return self._scan_ac(text, plan, country_codes)
+        return self._scan_sequential(text, plan, country_codes)
 
-    def _scan_re2(self, text: str, country_codes: set[str] | None = None) -> list[RawMatch]:
+    def _scan_re2(self, text: str, plan: _ScanPlan, country_codes: set[str] | None = None) -> list[RawMatch]:
         """RE2-prefiltered scan. Identical output to :meth:`_scan_sequential`.
 
         One DFA pass per window reports which patterns match anywhere in it —
@@ -368,7 +410,7 @@ class MultiPatternMatcher:
         pos = 0
         while pos < length:
             end = min(length, pos + _RE2_WINDOW)
-            hits = self._re2_set.Match(text[pos:end])  # type: ignore[attr-defined]
+            hits = plan.re2_set.Match(text[pos:end])  # type: ignore[attr-defined]
             if hits:
                 candidates.update(hits)
             if end >= length:
@@ -376,7 +418,7 @@ class MultiPatternMatcher:
             pos += step
 
         matches: list[RawMatch] = []
-        for slot, (regex, pdef, country_code) in zip(self._re2_slot, self._patterns):
+        for slot, (regex, pdef, country_code) in zip(plan.re2_slot, plan.patterns):
             if slot is not None and slot not in candidates:
                 continue
             if country_codes is not None and country_code not in country_codes:
@@ -391,10 +433,10 @@ class MultiPatternMatcher:
                 )
         return matches
 
-    def _scan_sequential(self, text: str, country_codes: set[str] | None = None) -> list[RawMatch]:
+    def _scan_sequential(self, text: str, plan: _ScanPlan, country_codes: set[str] | None = None) -> list[RawMatch]:
         """Scan patterns sequentially. Optimal for short texts."""
         matches: list[RawMatch] = []
-        for regex, pdef, country_code in self._patterns:
+        for regex, pdef, country_code in plan.patterns:
             if country_codes is not None and country_code not in country_codes:
                 continue
             for m in regex.finditer(text):
@@ -407,7 +449,7 @@ class MultiPatternMatcher:
                 )
         return matches
 
-    def _scan_ac(self, text: str, country_codes: set[str] | None = None) -> list[RawMatch]:
+    def _scan_ac(self, text: str, plan: _ScanPlan, country_codes: set[str] | None = None) -> list[RawMatch]:
         """AC-accelerated scan for long texts.
 
         Phase 1: AC automaton finds prefix hits → targeted regex on regions.
@@ -417,10 +459,10 @@ class MultiPatternMatcher:
         seen: set[tuple[int, int, int]] = set()  # dedup (start, end, pattern_id)
 
         # Phase 1: prefix-indexed patterns via AC
-        ac: Any = self._ac_automaton
+        ac: Any = plan.ac_automaton
         for end_pos, entry_idx in ac.iter(text):
-            patterns = self._ac_patterns[entry_idx]
-            prefix_len = self._ac_prefix_lens[entry_idx]
+            patterns = plan.ac_patterns[entry_idx]
+            prefix_len = plan.ac_prefix_lens[entry_idx]
             # AC reports end_pos as the last char index of the prefix match
             # So the prefix starts at (end_pos - prefix_len + 1)
             # Allow some margin before for \b and after for the rest of the pattern
@@ -443,7 +485,7 @@ class MultiPatternMatcher:
                         )
 
         # Phase 2: no-prefix patterns (full scan, but fewer patterns)
-        for regex, pdef, code in self._no_prefix:
+        for regex, pdef, code in plan.no_prefix:
             if country_codes is not None and code not in country_codes:
                 continue
             for m in regex.finditer(text):

@@ -108,10 +108,10 @@ def test_no_prefix_indexed_pattern_can_outrun_the_window():
         config = registry.load(code)
         if config is not None:
             matcher.add_country(config)
-    matcher._build_ac() if matchers._HAS_AC else None
+    matcher.compile()
     if not matchers._HAS_AC:  # pragma: no cover - depends on optional extra
         pytest.skip("pyahocorasick not installed")
-    for group in matcher._ac_patterns:
+    for group in matcher._plan.ac_patterns:
         for _compiled, pdef, code in group:
             assert _max_match_width(pdef.pattern) <= _AC_WINDOW, (
                 f"{code} pattern can match beyond the AC window: "
@@ -131,7 +131,7 @@ def test_unbounded_patterns_are_routed_to_full_scan():
     if not matchers._HAS_AC:  # pragma: no cover
         pytest.skip("pyahocorasick not installed")
     routed = [
-        pdef for _c, pdef, _code in matcher._no_prefix
+        pdef for _c, pdef, _code in matcher._plan.no_prefix
         if _extract_literal_prefix(pdef.pattern)
         and _max_match_width(pdef.pattern) > _AC_WINDOW
     ]
@@ -178,7 +178,9 @@ def test_re2_path_matches_sequential_exactly(text):
             for m in matches
         )
 
-    assert key(matcher._scan_re2(text)) == key(matcher._scan_sequential(text))
+    assert key(matcher._scan_re2(text, matcher._plan)) == key(
+        matcher._scan_sequential(text, matcher._plan)
+    )
 
 
 @pytest.mark.skipif(not matchers._HAS_RE2, reason="google-re2 not installed")
@@ -187,8 +189,8 @@ def test_re2_emits_in_pattern_registration_order():
     not reorder what it emits — only drop patterns that match nowhere."""
     matcher = _all_countries_matcher()
     text = "Rekening: BE68 5390 0754 7034 - BIC: GEBABEBB, tel +32 2 123 45 67"
-    got = [id(m.pattern_def) for m in matcher._scan_re2(text)]
-    expected = [id(m.pattern_def) for m in matcher._scan_sequential(text)]
+    got = [id(m.pattern_def) for m in matcher._scan_re2(text, matcher._plan)]
+    expected = [id(m.pattern_def) for m in matcher._scan_sequential(text, matcher._plan)]
     assert got == expected
 
 
@@ -198,9 +200,9 @@ def test_patterns_re2_cannot_express_still_run():
     SECRET rules are the ones that matter — silently dropping them would be
     the private-key leak again, by a different route."""
     matcher = _all_countries_matcher()
-    opted_out = sum(1 for slot in matcher._re2_slot if slot is None)
+    opted_out = sum(1 for slot in matcher._plan.re2_slot if slot is None)
     assert opted_out > 0, "expected some patterns to opt out of the prefilter"
-    assert len(matcher._re2_slot) == len(matcher._patterns)
+    assert len(matcher._plan.re2_slot) == len(matcher._plan.patterns)
 
     # The rule under test is the generic "high-entropy token after a
     # delimiter" lookbehind, so the token deliberately carries no vendor
@@ -209,8 +211,10 @@ def test_patterns_re2_cannot_express_still_run():
     # teaching a repository to wave those through.
     token = "Zx4Qv" + "7Rt2Mw" + "9Kd5Np" + "3Hb8Lf"
     text = f"config:\n  api_key = {token}"
-    found = matcher._scan_re2(text)
-    assert [m.text for m in found] == [m.text for m in matcher._scan_sequential(text)]
+    found = matcher._scan_re2(text, matcher._plan)
+    assert [m.text for m in found] == [
+        m.text for m in matcher._scan_sequential(text, matcher._plan)
+    ]
     assert any(m.pattern_def.entity_type == EntityType.SECRET for m in found), \
         "the lookbehind SECRET rule did not fire — the fallback is not running"
 
@@ -219,7 +223,7 @@ def test_patterns_re2_cannot_express_still_run():
 def test_prefilter_never_windows_a_pattern_that_could_outrun_the_overlap():
     """The sliding window would straddle such a pattern's match."""
     matcher = _all_countries_matcher()
-    for slot, (_compiled, pdef, code) in zip(matcher._re2_slot, matcher._patterns):
+    for slot, (_compiled, pdef, code) in zip(matcher._plan.re2_slot, matcher._plan.patterns):
         if slot is not None:
             assert _max_match_width(pdef.pattern) <= _RE2_OVERLAP, (
                 f"{code} pattern can outrun the prefilter overlap: "

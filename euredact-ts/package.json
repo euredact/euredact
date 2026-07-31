@@ -1,6 +1,6 @@
 {
   "name": "euredact",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "European PII redaction SDK -- fast, zero-dependency, rule-based detection and redaction of personal data across 31 European countries",
   "homepage": "https://euredact.dev",
   "license": "Apache-2.0",
@@ -65,8 +65,9 @@
     "dump": "node --import tsx src/__tests__/dump.ts"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "tsx": "^4.7.0"
+    "@types/node": "22.10.2",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
   },
   "bugs": {
     "url": "https://github.com/euredact/euredact/issues"

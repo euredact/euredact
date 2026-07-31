@@ -60,7 +60,7 @@ class TestForeignChecksumDoesNotWin:
 class TestEvidenceIsAuditable:
     def test_every_inference_traces_to_a_span(self, sdk):
         text = ("IBAN NL91ABNA0417164300, BTW NL123456789B01, "
-                "tel +31 6 12345678, mail info@jansen.nl")
+                "tel +31 6 12345678, mail info@example.nl")
         r = sdk.redact(text, cache=False)
         assert {e.source for e in r.evidence} == {
             "iban_prefix", "vat_prefix", "e164_prefix", "email_tld"}

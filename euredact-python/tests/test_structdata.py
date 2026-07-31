@@ -1,6 +1,7 @@
 """Extensive evaluation against structured test data."""
 
 import json
+import os
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -36,7 +37,12 @@ CATEGORY_MAP: dict[str, set[str]] = {
 def load_data():
     if not DATA_FILE.exists():
         # Try alternate path
-        alt = Path("/Users/jorenjanssens/Library/Mobile Documents/com~apple~CloudDocs/Werken/JNJS/Apps/PII-EuRedact/Data-Generation/euredact_structdata_BENLLUFRDE.json")
+        alt = Path(
+            os.environ.get(
+                "EUREDACT_CORPUS",
+                str(Path(__file__).resolve().parents[3] / "Data-Generation"),
+            )
+        ) / "euredact_structdata_BENLLUFRDE.json"
         if alt.exists():
             with open(alt) as f:
                 return json.load(f)

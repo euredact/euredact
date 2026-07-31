@@ -37,8 +37,8 @@ from euredact.types import EntityType  # noqa: E402
 #: who has the datasets somewhere else.
 DATA_DIR = Path(os.environ.get(
     "EUREDACT_CORPUS",
-    "/Users/jorenjanssens/Library/Mobile Documents/com~apple~CloudDocs/Werken/JNJS/"
-    "Apps/PII-EuroMask/Data-Generation",
+    # The corpus lives beside the code checkout, not inside it.
+    str(Path(__file__).resolve().parents[3] / "Data-Generation"),
 ))
 
 #: Country arguments that must all yield the same spans. Cheap enough to run on

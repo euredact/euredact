@@ -1,5 +1,99 @@
 # Changelog
 
+## 0.3.7 (2026-07-31)
+
+Findings from a security and performance review of the package. Detection
+output is unchanged: the shared benchmark corpus produces byte-identical
+redacted text before and after, and cross-SDK parity is unmoved at 0.52%
+divergence over 1,500 documents.
+
+### Security
+
+- **The high-entropy `SECRET` pattern could be made to backtrack
+  quadratically (ReDoS).** It ended in `\b`, which cannot match when a token run
+  ends on `-`, `+` or `/`, so an ordinary dashed rule line (`x-----…`) sent the
+  engine backtracking across two overlapping quantified classes — 8.3 s for
+  80 KB. It is now pinned with class lookarounds. This needed no attacker;
+  ordinary text triggers it. One visible consequence: base64 padding (`==`) is
+  now inside the redacted span rather than trailing outside it. The same fix
+  landed in the Python SDK, which additionally had the defect in its `EMAIL`
+  rule — this SDK's email pattern was already anchored correctly.
+
+- **Cache keys used a non-cryptographic hash.** Keys were a length plus two
+  32-bit FNV-1a hashes, which is collidable by construction: in a shared-process
+  deployment an attacker able to guess a victim's document could submit a
+  same-length colliding one and be served the victim's cached result, raw
+  matched PII included. Keys are now SHA-256 (`node:crypto`), matching the
+  Python SDK. `@types/node` is added as a dev-only dependency for this; there
+  are still zero runtime dependencies and the published tarball is unchanged.
+
+- **The result cache was bounded by entry count, not by size.** 1024 entries
+  said nothing about memory: 50 cached 200 KB results already cost 56 MB. The
+  cache now also enforces a character budget and skips results too large to fit.
+
+- **The referential-integrity mapping is documented as unevicted and shared.**
+  It is keyed on the raw PII value and cannot be evicted without breaking the
+  guarantee it exists to provide, so it grows until `clear()` is called — now
+  warned about once past 100,000 entries. Its labels are shared by every caller
+  of the module-level `redact()`, so a repeated label discloses that two
+  documents contain the same value; give each tenant its own instance.
+
+- **VIN validation stays shape-only, now explicitly.** Adding the ISO 3779
+  check digit for North American VINs was measured against the 152,300-document
+  corpus and turned 1,502 labelled VINs into misses, so it is deliberately not
+  enforced; the docstring in the Python SDK carries the full reasoning.
+
+- The maintainer's home directory is no longer hardcoded in the four evaluation
+  scripts; the corpus path comes from `EUREDACT_CORPUS` with a repo-relative
+  default. Example addresses use RFC 2606 domains.
+
+### Performance
+
+Measured on a 12-core M3 Pro, cache disabled:
+
+| document | before | after |
+|---|---:|---:|
+| 5 KB | 1.2 ms | 1.3 ms |
+| 50 KB | 27.7 ms | 26.9 ms |
+| 1 MB | 1,176 ms | 311 ms |
+
+- **Redaction rebuilt the whole document per detection.** `redacted.slice(0,
+  start) + label + redacted.slice(end)` in a loop is O(document × detections),
+  and was **61% of total runtime** — 1.68 s of pure copying on a 1 MB document,
+  against 2 ms for a single forward pass joined once. Labels are still resolved
+  right-to-left, so referential numbering is unchanged.
+
+- **The BIC context window walked the whole document per candidate.**
+  `structuralUnit` expanded to the enclosing paragraph and only *then* applied
+  its character cap, so on text with no blank lines each BIC-shaped token cost
+  O(document). Both walks now stop once the paragraph is too wide to be used.
+
+- **The BIC suppressor scanned the whole document per candidate.**
+  `occursAsLowercaseWord` compiled a fresh word-boundary regex and ran it over
+  the entire text for every bank-code candidate, which is quadratic: 1.58 s on
+  a 400 KB document dense in bank codes. The document's words are now collected
+  once per `detect()` call and tested by set membership.
+
+- **`ID_CUE_BEFORE` retried an unbounded prefix five times per position.** Five
+  alternatives each began `[\w\-]*`; factoring the shared prefix out makes it
+  8× faster on its worst case. It was the single most expensive regex in the
+  engine at 197 ms per 1 MB document.
+
+- The fragment check now uses a binary search plus a running maximum of span
+  ends instead of a linear walk; the dedup tier is resolved once per candidate
+  instead of inside the sort comparator, which rebuilt a key string on every
+  comparison; and two suppressors no longer allocate a `Set` per candidate
+  (~260k allocations per 1 MB document, with GC at 10.7% of the profile).
+
+- **Regression check.** The full 152,300-document corpus scores identically to
+  0.3.6 on every entity type in both detection modes — same support, TP, FP and
+  FN — so none of the above changed what is detected. Two regressions were
+  caught this way and fixed before landing: enforcing the VIN check digit (see
+  above), and anchoring the high-entropy rule with a lookbehind, which widened
+  its span over a leading `//` and let the endpoint suppressor drop an SSH key.
+  The latter is now pinned by conformance vector
+  `secret-ssh-key-preceded-by-slashes`, which runs in both SDKs.
+
 ## 0.3.6 (2026-07-30)
 
 ### Fixed

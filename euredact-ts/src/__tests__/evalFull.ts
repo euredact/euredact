@@ -1,3 +1,4 @@
+import { fileURLToPath } from "url";
 /**
  * Full-corpus evaluation, mirroring the Python `tests/eval_full.py` methodology
  * exactly so the two engines' numbers are directly comparable:
@@ -16,8 +17,11 @@ import { readFileSync, readdirSync } from "fs";
 import { EuRedact } from "../sdk.js";
 import { availableCountries } from "../index.js";
 
+// The corpus lives beside the code checkout, not inside it. `EUREDACT_CORPUS`
+// is the same override the Python tooling honours.
 const DATA_DIR =
-  "/Users/jorenjanssens/Library/Mobile Documents/com~apple~CloudDocs/Werken/JNJS/Apps/PII-EuroMask/Data-Generation";
+  process.env.EUREDACT_CORPUS ??
+  fileURLToPath(new URL("../../../../Data-Generation", import.meta.url));
 
 interface Pii { PII_identifier: string; PII_category: string; PII_country: string }
 interface Entry { source_text: string; PII: Pii[] }
