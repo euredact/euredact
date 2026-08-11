@@ -1,5 +1,76 @@
 # Changelog
 
+## 0.3.9 (2026-08-11)
+
+The labels the corpus actually contains, and the gate that should have caught
+the rest of this. Mirrors the Python SDK exactly — the cue table is generated
+from it, so the two cannot drift — and the shared conformance vectors are the
+check. Cross-SDK masking parity is unchanged at 0.61% over 2,000 documents;
+cross-SDK **type** divergence is 0.
+
+### Fixed
+
+- **The cue table held the abbreviation and not the word.** `BSN:` was cued and
+  `Burgerservicenummer:` was not. `Companies House Registration:`,
+  `Company Registration Number:`, `Medical Card No.:`, `AGB-code:`,
+  `sort code`, `account number` and `PLZ-Bereiche:` were all typed `PHONE`.
+  `sort code 20-45-91` was typed `LICENSE_PLATE`: a UK sort code is `NN-NN-NN`,
+  which collides with a plate, and the label sat right in front of it.
+
+- **`Sozialversicherungsnummer:` was in the table the whole time and could not
+  be reached.** At 27 characters it did not fit `CUE_WINDOW = 22`, so the
+  label's own start fell outside the window where the boundary anchors. The
+  window is now 32.
+
+- **This SDK and Python filed the same value under different types.** Two
+  unrelated causes, neither of them the cue table:
+
+  *Ranking.* Where all seven sort fields tie, the stable sort fell through to
+  country registration order — alphabetical in Python, curated here — so
+  `Burgerservicenummer (BSN): 274839165` was a Czech `NATIONAL_ID` there and a
+  Portuguese `PHONE` here. `tieKey` is now shared, and reproduces the order
+  Python already had rather than inventing one.
+
+  *`\w`.* Slovak `telefón` and Bulgarian `пощенски кодове` need the cue's
+  run-on to absorb a non-ASCII letter. JavaScript's `\w` is ASCII-only, so it
+  stopped and Python's did not. 0.3.8 fixed this for `\b` and for the qualifier
+  class and left `\w*` in the run-on. It is now written
+  `(?:[A-Za-z0-9_]|[^\x00-\x7F])` — `\w` plus the non-ASCII letters `\w` should
+  have matched. A negated class was tried first and cost 46 false positives
+  with hints and 57 blind, because it also admits `'`, `%`, `&` and `@`.
+
+- **A four-digit run became a `POSTAL_CODE`** once any real postal code
+  established the country: `Opgericht in 2016`, `(toest. 3841)`,
+  `poste interne 3318`. Ambiguous prepositions need a founding or payment
+  participle; unambiguous ones (`sinds`, `since`, `depuis`) do not. Belgian
+  postal codes are year-shaped and Antwerp's is 2018, so disqualifying on a
+  bare `in` suppressed a real postal code.
+
+- **A label ending in more than one mark now reaches its value** —
+  `Steuer-IdNr.:`, `Passport No.:`, `Numéro de sécurité sociale (NIR) :`.
+
+### Added
+
+- **`make parity` compares types, not just characters**, and fails above
+  `--max-type-divergence`, now 0.0. Character parity cannot see a type
+  disagreement by construction: all three reported cases masked exactly the
+  same characters, which is why 0.3.8 shipped with them.
+
+- **Cue targets for `HEALTHCARE_PROVIDER`, `BANK_ACCOUNT`, `PASSPORT` and
+  `SECRET`.** The report asks for a `CREDENTIAL` type for `TAN-activatiecode`;
+  this SDK has no such type, so those are `SECRET`.
+
+### Changed
+
+- `CUE_TARGETS` and `RESCUE_TARGETS` are separate sets. `BANK_ACCOUNT` joins
+  the first so `sort code` is not a `LICENSE_PLATE`, and stays out of the
+  second because mod-97 failing really does mean "not an account number".
+
+- `NATIONAL_ID` is retypable only at country score 0, so a label can overrule a
+  checksum that passed by luck but never a domestic identifier.
+
+- 20 new shared conformance vectors (127 → 147).
+
 ## 0.3.8 (2026-08-11)
 
 A label in front of a value now decides what that value is called. Mirrors the

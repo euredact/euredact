@@ -20,7 +20,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "euredact"
-version = "0.3.8"
+version = "0.3.9"
 description = "European PII redaction SDK — rule engine for 31 countries"
 requires-python = ">=3.10"
 license = "Apache-2.0"

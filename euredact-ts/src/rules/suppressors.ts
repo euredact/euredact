@@ -387,6 +387,60 @@ function suppressYearAsPostal(text: string, match: RawMatch): boolean {
   return true;
 }
 
+// ── Postal code: disqualified by the word in front of it ───────────────
+//
+// The mirror image of `rules/cues.ts`. There a label promotes a type; here a
+// word refuses one. Both were reported together: a bare four-digit run becomes
+// a POSTAL_CODE as soon as *any* real postal code establishes the country,
+// which is to say in almost every real document, because POSTAL_CONTEXT_NEAR
+// above then rescues it from suppressYearAsPostal. Measured on the training
+// corpus: 55 bare years in prose ("Opgericht in 2016", "Fondée en 2017") plus
+// telephone extensions ("(toest. 3841)", "(poste interne 3318)", "(ext. 2219)").
+
+/**
+ * Prepositions that can only be temporal. Nothing is ever located "since 2018",
+ * so these disqualify a postal code on their own.
+ */
+const YEAR_WORD_BEFORE =
+  /(?<![A-Za-z0-9_])(?:sinds|since|depuis|seit|siden|sedan|desde|vuonna|anno|dal)\s+$/i;
+
+/**
+ * "in", "en" and "im" are *both* temporal and locative, and in exactly the
+ * countries whose postal codes are year-shaped. Belgian 2000 is Antwerp and
+ * 2018 is one of its districts, so "Rustige ligging in 2018, vlakbij openbaar
+ * vervoer" is an address, not a date — an earlier version of this rule
+ * suppressed it and lost a real postal code, which is the worse error for a
+ * redaction tool. So an ambiguous preposition needs a founding or payment
+ * participle in front of it, which is what every case in the report had:
+ * "Opgericht in 2016", "Fondée en 2017", "versé en 2025".
+ */
+const YEAR_VERB_BEFORE =
+  /(?<![A-Za-z0-9_])(?:opgericht|gesticht|opgestart|founded|established|created|fond[ée]e?|cr[ée][ée]e?|gegründet|gegruendet|errichtet|grundlagt|grundad|perustettu|fundada|fundado|fondata|costituita|vers[ée]|betaald|uitbetaald|ausgezahlt|paid|geboren|born)\s+(?:in|en|im|op|the)\s+$/i;
+
+/**
+ * A capitalised word immediately after keeps the candidate: "in 2000 Antwerpen"
+ * really is a postal code, and so is the "AZ" of a Dutch "1105 AZ". Without
+ * this the rule would suppress the very addresses it is meant to leave alone.
+ */
+const TOWN_AFTER = /^\s*[A-ZÀ-ÞĀ-Ž]/;
+
+/**
+ * A telephone extension marker. "poste interne 3318" puts one qualifier word
+ * between the marker and the number, so allow exactly one.
+ */
+const EXTENSION_BEFORE =
+  /(?<![A-Za-z0-9_])(?:toest(?:el)?|ext|extension|poste|durchwahl|doorkiesnummer|tst|nebenstelle)\.?\s*(?:[a-zà-ÿ]{2,10}\s*)?[:.]?\s*$/i;
+
+/** Suppress a postal code the word in front of it rules out. */
+function suppressPostalAfterDisqualifyingWord(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
+  const before = text.slice(Math.max(0, match.start - 24), match.start);
+  if (EXTENSION_BEFORE.test(before)) return true;
+  return RECENT_YEAR.test(match.text.trim())
+    && (YEAR_WORD_BEFORE.test(before) || YEAR_VERB_BEFORE.test(before))
+    && !TOWN_AFTER.test(text.slice(match.end, match.end + 3));
+}
+
 function suppressPhoneServiceNumber(_text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.PHONE) return false;
   return SERVICE_NUMBER.test(match.text);
@@ -837,7 +891,7 @@ const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressNatidAsPassport, suppressSeNatidAsOrg],
   [EntityType.SSN]: [suppressCurrency, suppressUnits, suppressReference, suppressMath],
   [EntityType.TAX_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressTaxidAsIpAddress],
-  [EntityType.POSTAL_CODE]: [suppressCurrency, suppressUnits, suppressMath, suppressLegal, suppressYearAsPostal, suppressPostalInsideIban, suppressPostalAsHouseNumber, suppressPostalInLongerIdentifier, suppressReference],
+  [EntityType.POSTAL_CODE]: [suppressCurrency, suppressUnits, suppressMath, suppressLegal, suppressYearAsPostal, suppressPostalAfterDisqualifyingWord, suppressPostalInsideIban, suppressPostalAsHouseNumber, suppressPostalInLongerIdentifier, suppressReference],
   [EntityType.BIC]: [suppressBicWithoutEvidence],
   [EntityType.BANK_ACCOUNT]: [suppressReference],
   [EntityType.LICENSE_PLATE]: [suppressPlateInCompound, suppressDePlateUnknownDistrict, suppressPlateAsCurrencyAmount],

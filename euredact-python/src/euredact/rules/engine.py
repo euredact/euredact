@@ -201,21 +201,56 @@ _RETYPABLE: frozenset[EntityType] = frozenset({
     EntityType.PHONE, EntityType.POSTAL_CODE, EntityType.LICENSE_PLATE,
 })
 
-# Right of the arrow: types a label can assert on its own. Also the types
-# eligible for the rescue above, for the same reason read the other way — a
-# label may vouch for one of these, so it may also vouch for a malformed one.
+# Retypable, but only when the document gives its country no support at all.
+#
+# These carry a checksum, so normally the pattern outranks any label. But a
+# checksum only says the digits fit *some* national scheme, and a weak one fits
+# by luck — the same reasoning that demotes an uncorroborated validated
+# candidate to priority 1 above. When the country score is 0.0 the engine is
+# already saying "this passed a Czech checksum in a document with nothing Czech
+# about it", and at that point an explicit "Passport No.:" in front of the value
+# is the better evidence.
+#
+# Restricted to zero country support on purpose. A Dutch BSN in a Dutch document
+# scores above zero and stays a NATIONAL_ID whatever label sits near it, so this
+# cannot relabel a domestic identifier — only the coincidental foreign ones,
+# which is exactly the population "Passport No.: 512847603" and
+# "Betriebsstättennr. 260326822" fell into, both reported as Czech.
+_RETYPABLE_UNCORROBORATED: frozenset[EntityType] = frozenset({
+    EntityType.NATIONAL_ID,
+})
+
+# Right of the arrow: types a label can assert on its own.
 #
 # PHONE is absent on purpose: "Tel:" in front of something no phone pattern
 # matched means the document is laid out oddly, not that the value is a phone
-# number. So are EMAIL, SECRET, DOB, VIN and the rest — those carry their own
+# number. So are EMAIL, DOB, VIN and the rest — those carry their own
 # structure, and a nearby word is not entitled to overrule it.
+_CUE_TARGETS: frozenset[EntityType] = frozenset({
+    EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID,
+    EntityType.HEALTH_INSURANCE, EntityType.HEALTHCARE_PROVIDER,
+    EntityType.CHAMBER_OF_COMMERCE, EntityType.VAT, EntityType.POSTAL_CODE,
+    EntityType.PASSPORT, EntityType.INTERNAL_ID, EntityType.BANK_ACCOUNT,
+    EntityType.SECRET,
+})
+
+# Which of those a label may also *rescue* — re-admit after its checksum
+# failed. Until 0.3.9 this was the same set as _CUE_TARGETS, and it cannot stay
+# that way: re-typing a span the engine already decided to mask is cheap to be
+# wrong about, while rescuing one asserts that a value which failed its check
+# digit is a real identifier anyway.
 #
 # BIC's absence is what keeps the rescue honest. Its validator is a *registry
 # lookup*, not a checksum, so a failure means "no such bank", which no label can
 # talk you out of. Rescuing it read 34 unlisted codes behind a "BIC:" label as
 # real ones. The same reasoning keeps CREDIT_CARD and BANK_ACCOUNT out: Luhn and
 # mod-97 are strong enough that a failure really does mean "not one of these".
-_CUE_TARGETS: frozenset[EntityType] = frozenset({
+# BANK_ACCOUNT joined _CUE_TARGETS in 0.3.9 so that "sort code 20-45-91" stops
+# being a LICENSE_PLATE, and is kept out here for exactly the 0.3.8 reason.
+#
+# HEALTHCARE_PROVIDER and SECRET are absent because neither is checksummed;
+# there is no failed validation for a label to overrule in the first place.
+_RESCUE_TARGETS: frozenset[EntityType] = frozenset({
     EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID,
     EntityType.HEALTH_INSURANCE, EntityType.CHAMBER_OF_COMMERCE,
     EntityType.VAT, EntityType.POSTAL_CODE, EntityType.PASSPORT,
@@ -223,19 +258,75 @@ _CUE_TARGETS: frozenset[EntityType] = frozenset({
 })
 
 
-def _retyped(text: str, start: int, entity_type: object) -> EntityType | None:
+def _retyped(
+    text: str, start: int, entity_type: object, country_score: float
+) -> EntityType | None:
     """The type a cue overrules *entity_type* with, or None to leave it alone.
 
     Only reached for a candidate that already won its span, and only when no
     candidate of the cued type claimed that span — one would have won on the
-    cue bonus above.
+    cue bonus above. *country_score* is the document's support for the country
+    the winning pattern came from; see :data:`_RETYPABLE_UNCORROBORATED`.
     """
-    if entity_type not in _RETYPABLE:
+    if entity_type not in _RETYPABLE and not (
+        entity_type in _RETYPABLE_UNCORROBORATED and country_score == 0.0
+    ):
         return None
     cued = cues.cued_type(text, start)
     if cued is None or cued == entity_type or cued not in _CUE_TARGETS:
         return None
     return cued
+
+
+def tie_key(match: RawMatch | None, prebuilt: Detection | None) -> str:
+    """Last-resort ordering for candidates every other field has tied on.
+
+    Reaching this means the engine has no evidence left: same span, no cue, same
+    priority, the same (usually zero) country score, and the same declared
+    scope. Something still has to win, and before this the winner was whichever
+    candidate happened to be generated first — which is country *registration*
+    order, and the two SDKs do not share one. Python registers alphabetically
+    (``AT, BE, BG, CH, CY, CZ, ...``) and TypeScript in a curated order
+    (``NL, BE, DE, AT, CH, FR, ..., PT, LU, PL, ..., CZ``), so a bare digit run
+    that several national schemes accept was filed as a Czech ``NATIONAL_ID`` by
+    Python and a Portuguese ``PHONE`` by Node. Identical characters masked,
+    contradictory labels, and `make parity` compared only characters so it
+    stayed green through the whole of 0.3.8.
+
+    The order reproduces what Python already did, rather than inventing a new
+    one, and TypeScript converges onto it. That is the whole design constraint:
+    every accuracy figure this engine has ever published was measured with
+    Python resolving these ties by its own registration order, so a *different*
+    rule — however principled — silently re-tunes the corpus. Ordering on the
+    entity type instead of the country was tried first and did exactly that,
+    turning the German ``Steuerß12345678911`` from ``TAX_ID``/DE into
+    ``NATIONAL_ID``/EL because "NATIONAL_ID" sorts before "TAX_ID". These ties
+    are not rare, and each one decides a label.
+
+    So: shared patterns first, then countries alphabetically. Nothing further.
+
+    Deliberately **not** total, and the entity type in particular is not part of
+    it. Adding the type as a final discriminator was measured against the corpus
+    and moved 820 spans that had nothing to do with this defect — ``DOB`` became
+    ``DATE_OF_DEATH`` throughout, both being SHARED patterns on the same span
+    with "DATE_OF_DEATH" sorting first. Candidates from the *same* country are
+    left to the stable sort, which preserves the order that country's pattern
+    list was written in, and both SDKs write theirs in the same order. Promoting
+    the validated candidate instead — the tempting, apparently-principled choice
+    — would re-promote exactly what the ``vouched`` demotion above pushed down.
+
+    Taken from the **pattern**, never from the finished detection: Python
+    re-types a cued candidate inside :meth:`_deduplicate`, after this sort,
+    while TypeScript re-types before it. Keyed on anything the re-typing touches
+    the two would disagree again, in a way only this gate would ever catch.
+    """
+    country = match.country_code if match is not None else (
+        prebuilt.country if prebuilt is not None else "") or ""
+    # "SHARED" and "CUSTOM" are not countries and sort as themselves under a
+    # plain alphabetical key — landing between PT and SK, rather than ahead of
+    # every country the way the registry loads them. The bucket restores that.
+    bucket = {"SHARED": "0", "CUSTOM": "1"}.get(country, "2")
+    return f"{bucket}\x00{country}"
 
 
 def check_country_arg(value: object, param: str) -> None:
@@ -422,7 +513,7 @@ class RuleEngine:
                 failed_spans.append(
                     (m.start, m.end, m.country_code, m.pattern_def.entity_type)
                 )
-                if (m.pattern_def.entity_type in _CUE_TARGETS
+                if (m.pattern_def.entity_type in _RESCUE_TARGETS
                         and cues.cued_type(text, m.start) == m.pattern_def.entity_type):
                     rescued.append(m)
 
@@ -569,7 +660,7 @@ class RuleEngine:
         # rescued checksum failure. It is not part of the sort key.
         candidates: list[
             tuple[int, int, int, float, int, int, int, RawMatch | None,
-                  Detection | None, str]
+                  Detection | None, str, str]
         ] = []
         for match, has_valid_validator in validated:
             # A validator-less match inside a failed-validation span used to be
@@ -671,7 +762,8 @@ class RuleEngine:
             cue = _local_cue_bonus(text, match.start, match.pattern_def.entity_type)
             candidates.append(
                 (blind_priority, cue, priority, country_score, in_scope,
-                 match.start, match.end, match, None, "high")
+                 match.start, match.end, match, None, "high",
+                 tie_key(match, None))
             )
 
         # A declined identifier the document itself labels. Cue-backed by
@@ -691,13 +783,17 @@ class RuleEngine:
             in_scope = 1 if (declared is None or match.country_code in declared) else 0
             candidates.append(
                 (1, 1, 0, country_scores.get(match.country_code, 0.0), in_scope,
-                 match.start, match.end, match, None, "low")
+                 match.start, match.end, match, None, "low",
+                 tie_key(match, None))
             )
 
         # Structural detectors (JSON field names, CSV headers). These arrive as
         # finished Detections, carry no RawMatch, and are not suppressed.
         for d in detect_structural_dob(text):
-            candidates.append((1, 0, 1, 0.0, 1, d.start, d.end, None, d, "high"))
+            candidates.append(
+                (1, 0, 1, 0.0, 1, d.start, d.end, None, d, "high",
+                 tie_key(None, d))
+            )
 
         # Deduplicate: validated > custom > regex-only, then longer wins
         detections = self._deduplicate(text, candidates, declared)
@@ -722,7 +818,7 @@ class RuleEngine:
         text: str,
         candidates: list[
             tuple[int, int, int, float, int, int, int, RawMatch | None,
-                  Detection | None, str]
+                  Detection | None, str, str]
         ],
         declared: set[str] | None = None,
     ) -> list[Detection]:
@@ -783,14 +879,15 @@ class RuleEngine:
                 -c[2],                         # country priority } — decides the
                 -c[3],                         # country evidence } LABEL only
                 -c[4],                         # declared scope   }
+                c[10],                         # total tie-break  } — see tie_key
             ),
         )
         result: list[Detection] = []
         occupied: set[int] = set()
         span_verdicts: dict[tuple[object, int, int], bool] = {}
 
-        for (_bp, _cue, _prio, _score, in_scope,
-             start, end, match, prebuilt, confidence) in sorted_cands:
+        for (_bp, _cue, _prio, score, in_scope,
+             start, end, match, prebuilt, confidence, _tie) in sorted_cands:
             if any(p in occupied for p in range(start, end)):
                 continue
 
@@ -820,7 +917,7 @@ class RuleEngine:
                 )
                 out_of_scope = not in_scope
 
-                retyped = _retyped(text, start, entity_type)
+                retyped = _retyped(text, start, entity_type, score)
                 if retyped is not None:
                     # The country came from the pattern that matched, and that
                     # pattern was just overruled: a Finnish phone rule saying

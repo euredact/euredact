@@ -1455,6 +1455,261 @@
         ]
       },
       "notes": "VAT labels carry punctuation inside the run-on, so that cue keeps a wider run-on class than the rest."
+    },
+    {
+      "id": "cue-uk-companies-house-registration",
+      "text": "Companies House Registration: 09284731",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "09284731"
+        ]
+      },
+      "notes": "Spelled-out UK register label. 0.3.8 typed this PHONE."
+    },
+    {
+      "id": "cue-uk-companies-house-no",
+      "text": "Companies House No: 08841763",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "08841763"
+        ]
+      }
+    },
+    {
+      "id": "cue-uk-company-registration-number",
+      "text": "Company Registration Number: 09274561",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "09274561"
+        ]
+      },
+      "notes": "Three words. The tail allows a run-on OR one qualifier, never a second word, so the label is spelled out in the table."
+    },
+    {
+      "id": "cue-nl-burgerservicenummer-spelled-out",
+      "text": "Burgerservicenummer: 619 034 852",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "619 034 852"
+        ]
+      },
+      "notes": "The abbreviation BSN was cued; the word it abbreviates was not."
+    },
+    {
+      "id": "cue-nl-burgerservicenummer-with-parenthetical",
+      "text": "Burgerservicenummer (BSN): 274839165",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "274839165"
+        ]
+      },
+      "notes": "Closing parenthesis between label and value. Also needed CUE_WINDOW past 22."
+    },
+    {
+      "id": "cue-at-sozialversicherungsnummer",
+      "text": "Sozialversicherungsnummer: 2891 140388",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "SSN": [
+          "2891 140388"
+        ]
+      },
+      "notes": "Was in the cue table throughout 0.3.8 and unreachable: at 27 characters the label did not fit CUE_WINDOW=22, so its own start fell outside the window where the boundary anchors."
+    },
+    {
+      "id": "cue-uk-passport-no-abbreviated",
+      "text": "Passport No.: 512847603",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "512847603"
+        ]
+      },
+      "notes": "Two trailing marks, and the winner was a Czech NATIONAL_ID whose checksum passed with zero Czech evidence in the document."
+    },
+    {
+      "id": "cue-nl-agb-code-is-a-provider",
+      "text": "AGB-code: 01-44217",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "HEALTHCARE_PROVIDER": [
+          "01-44217"
+        ]
+      },
+      "notes": "The clinician, not the patient: distinct from HEALTH_INSURANCE."
+    },
+    {
+      "id": "cue-ie-medical-card-number",
+      "text": "Medical Card No.: 73920014",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "HEALTH_INSURANCE": [
+          "73920014"
+        ]
+      }
+    },
+    {
+      "id": "cue-uk-account-number",
+      "text": "account number 83621047",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "83621047"
+        ]
+      },
+      "notes": "No colon. A label without one is still a label."
+    },
+    {
+      "id": "cue-uk-sort-code-is-not-a-plate",
+      "text": "sort code 20-45-91",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "20-45-91"
+        ]
+      },
+      "notes": "NN-NN-NN collides with a licence-plate shape, and 0.3.8 typed it LICENSE_PLATE with the label in front of it."
+    },
+    {
+      "id": "cue-be-tan-activation-code",
+      "text": "vermeld uw TAN-activatiecode 5129-8374",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "5129-8374"
+        ]
+      },
+      "notes": "Typed SECRET: this SDK has no CREDENTIAL type."
+    },
+    {
+      "id": "cue-ch-plz-bereiche",
+      "text": "PLZ-Bereiche: 8000-8099, 3000-3099",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "8000-8099"
+        ]
+      }
+    },
+    {
+      "id": "cue-de-betriebsstaettennr-is-internal",
+      "text": "Betriebsstättennr. 260326822",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "260326822"
+        ]
+      },
+      "notes": "Abbreviating full stop, no colon. Reported as a Czech NATIONAL_ID by Python and a Portuguese PHONE by Node."
+    },
+    {
+      "id": "negcue-nl-year-in-prose-is-not-postal",
+      "text": "Adres: Meibergdreef 9, 1105 AZ Amsterdam.\nOpgericht in 2016, 53 professionals.",
+      "countries": [
+        "NL"
+      ],
+      "notes": "A bare four-digit run became POSTAL_CODE as soon as one real postal code established the country. mustDetect is exact, so listing only '1105 AZ' is what asserts 2016 is absent.",
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1105 AZ"
+        ]
+      }
+    },
+    {
+      "id": "negcue-be-phone-extension-is-not-postal",
+      "text": "Adres: Frankrijklei 118, 2000 Antwerpen\nTel: +31 20 563 9200 (toest. 3841)",
+      "countries": [
+        "BE"
+      ],
+      "notes": "Extension inside a phone parenthetical. Exact-match on POSTAL_CODE is what asserts 3841 is absent.",
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2000"
+        ]
+      }
+    },
+    {
+      "id": "negcue-fr-poste-interne-is-not-postal",
+      "text": "Bureau à Paris, poste interne 3318",
+      "countries": [
+        "FR"
+      ],
+      "notes": "One qualifier word between the extension marker and the number.",
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "negcue-guard-postal-after-in-keeps-town",
+      "text": "Onze vestiging: 1105 AZ Amsterdam",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1105 AZ"
+        ]
+      },
+      "notes": "Guard: the disqualifying-word rule must not eat a real postal code."
+    },
+    {
+      "id": "negcue-guard-be-year-shaped-postal-survives",
+      "text": "Te huur: Lange Nieuwstraat 12, rustige ligging in 2018, vlakbij openbaar vervoer.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2018"
+        ]
+      },
+      "notes": "Antwerp's postal code is 2018 and Belgian codes are year-shaped, so an ambiguous 'in' must not disqualify one. The first version of the disqualifying-word rule suppressed this and lost a real postal code; only a founding or payment participle ('Opgericht in', 'Fondee en') disqualifies now."
+    },
+    {
+      "id": "negcue-nl-founded-in-year-is-not-postal",
+      "text": "Adres: Keizersgracht 5, 1015 CJ Amsterdam. Opgericht in 2016, telt het bedrijf 41 medewerkers.",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1015 CJ"
+        ]
+      },
+      "notes": "The participle is what disqualifies 2016; the real postal code in the same sentence must survive."
     }
   ]
 }

@@ -12,10 +12,19 @@ fired 52 times over 2,000 documents and got roughly 30 of those wrong.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from euredact.rules.cues import CUE_WINDOW, CUES, cued_type
-from euredact.rules.engine import _CUE_TARGETS, _RETYPABLE, _retyped
+from euredact.rules.engine import (
+    _CUE_TARGETS,
+    _RESCUE_TARGETS,
+    _RETYPABLE,
+    _RETYPABLE_UNCORROBORATED,
+    _retyped,
+)
 from euredact.sdk import EuRedact
 from euredact.types import EntityType
 
@@ -103,6 +112,20 @@ class TestRetypingGate:
         assert _RETYPABLE == {
             EntityType.PHONE, EntityType.POSTAL_CODE, EntityType.LICENSE_PLATE,
         }
+        # The conditional half, pinned for the same reason. Every type here is
+        # checksummed, so each one added is a claim that its checksum can pass
+        # by luck often enough for a label to be better evidence.
+        assert _RETYPABLE_UNCORROBORATED == {EntityType.NATIONAL_ID}
+
+    def test_a_label_never_rescues_a_failed_luhn_or_mod97(self) -> None:
+        # Retyping and rescuing are different powers and 0.3.9 split the sets.
+        # BANK_ACCOUNT became retypable so "sort code 20-45-91" stops being a
+        # LICENSE_PLATE; it must not thereby become rescuable, because mod-97
+        # failing really does mean "not an account number".
+        assert EntityType.BANK_ACCOUNT in _CUE_TARGETS
+        assert EntityType.BANK_ACCOUNT not in _RESCUE_TARGETS
+        assert EntityType.BIC not in _RESCUE_TARGETS
+        assert EntityType.CREDIT_CARD not in _RESCUE_TARGETS
 
     def test_nothing_is_ever_relabelled_to_phone(self) -> None:
         # A phone cue in front of a span no phone pattern matched means the
@@ -112,14 +135,27 @@ class TestRetypingGate:
         # it stopped detecting anything the test would pass for the wrong
         # reason.
         assert EntityType.PHONE not in _CUE_TARGETS
-        assert _retyped("Tel: 1006", 5, EntityType.POSTAL_CODE) is None
+        assert _retyped("Tel: 1006", 5, EntityType.POSTAL_CODE, 0.0) is None
 
     def test_the_gate_admits_a_structured_target(self) -> None:
         # The counterpart to the two refusals above: with both halves satisfied
         # the gate does fire, so those None results mean "blocked", not
         # "unreachable".
-        assert _retyped("IČO: 08234567", len("IČO: "), EntityType.PHONE) == \
+        assert _retyped("IČO: 08234567", len("IČO: "), EntityType.PHONE, 0.0) == \
             EntityType.CHAMBER_OF_COMMERCE
+
+    def test_a_checksummed_type_is_retyped_only_without_country_support(self) -> None:
+        # NATIONAL_ID carries a checksum, so it is retypable only where that
+        # checksum can be coincidence: a country the document does not support
+        # at all. "Passport No.: 512847603" was reported as a Czech national ID
+        # in a British document, on a checksum that fits about one 9-digit run
+        # in eleven.
+        text, start = "Passport No.: 512847603", len("Passport No.: ")
+        assert _retyped(text, start, EntityType.NATIONAL_ID, 0.0) == EntityType.PASSPORT
+        # The same span in a document that *does* support the country keeps its
+        # type, whatever label sits in front of it. This is what stops a
+        # domestic identifier being relabelled.
+        assert _retyped(text, start, EntityType.NATIONAL_ID, 0.88) is None
 
     def test_retyping_never_moves_a_span(self, sdk: EuRedact) -> None:
         # Invariant I1: a cue decides the label, never which characters are
@@ -166,3 +202,43 @@ class TestDeclinedIdentifierRescue:
         # to emit a national ID; only the type's own label is. The whole list is
         # asserted, so this cannot pass by the span quietly ceasing to exist.
         assert types_of(sdk, "Tel: 85.03.19-284.73", ["BE"]) == []
+
+
+class TestCrossSdkCueTable:
+    """The TypeScript cue table is generated from this one and must match it.
+
+    0.3.9's cross-SDK type divergence came from the two engines behaving
+    differently on the same label, and the cheapest way to keep them honest is
+    to assert the tables are the same text rather than to trust that whoever
+    edits one remembers the other. The TypeScript table is regenerated from
+    `CUES`, so a drift here means someone hand-edited it.
+    """
+
+    TS_CUES = (
+        Path(__file__).resolve().parents[2] / "euredact-ts" / "src" / "rules" / "cues.ts"
+    )
+
+    def _ts_entries(self) -> list[tuple[str, str]]:
+        source = self.TS_CUES.read_text(encoding="utf-8")
+        start = source.index("export const CUES")
+        block = source[start:source.index("];", start)]
+        return re.findall(r"\[EntityType\.([A-Z_]+),\s*\n\s*/(.*)/i\],", block)
+
+    @pytest.mark.skipif(not TS_CUES.exists(), reason="TypeScript SDK not in this checkout")
+    def test_every_cue_matches_the_typescript_table(self) -> None:
+        entries = self._ts_entries()
+        assert len(entries) == len(CUES), (
+            f"{len(CUES)} Python cues, {len(entries)} TypeScript cues"
+        )
+        for (py_type, py_pattern), (ts_type, ts_pattern) in zip(CUES, entries):
+            assert py_type.value == ts_type
+            # Python leaves "/" unescaped; a JavaScript regex literal cannot.
+            expected = re.sub(r"(?<!\\)/", r"\\/", py_pattern.pattern)
+            assert expected == ts_pattern, f"{py_type.value} differs between the SDKs"
+
+    @pytest.mark.skipif(not TS_CUES.exists(), reason="TypeScript SDK not in this checkout")
+    def test_the_cue_window_matches_the_typescript_one(self) -> None:
+        source = self.TS_CUES.read_text(encoding="utf-8")
+        found = re.search(r"CUE_WINDOW = (\d+);", source)
+        assert found is not None
+        assert int(found.group(1)) == CUE_WINDOW

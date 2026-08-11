@@ -1,7 +1,7 @@
 import { DetectionSource, EntityType, type CountryConfig, type CountryEvidence, type Detection, type PatternDef } from "../types.js";
 import { MultiPatternMatcher, type RawMatch } from "./matchers.js";
 import { shouldSuppress, SuppressionScratch } from "./suppressors.js";
-import { CUE_TARGETS, CUE_WINDOW, cuedType, retypedBy } from "./cues.js";
+import { CUE_TARGETS, CUE_WINDOW, RESCUE_TARGETS, cuedType, retypedBy } from "./cues.js";
 import { detectStructuralDob } from "./structural.js";
 import { COUNTRY_CONFIGS } from "./countries/index.js";
 import * as evidenceMod from "./evidence.js";
@@ -48,6 +48,49 @@ export function resolveCountryCode(countryCode: string): string | null {
   let code = countryCode.trim().toUpperCase();
   code = COUNTRY_CODE_ALIASES[code] ?? code;
   return code in COUNTRY_CONFIGS && code !== "SHARED" ? code : null;
+}
+
+/**
+ * Last-resort ordering for candidates every other field has tied on.
+ *
+ * Reaching this means the engine has no evidence left: same span, no cue, same
+ * priority, the same (usually zero) country score, and the same declared scope.
+ * Something still has to win, and before this the winner was whichever candidate
+ * happened to be generated first — which is country *registration* order, and
+ * the two SDKs do not share one. Python registers alphabetically
+ * (`AT, BE, BG, CH, CY, CZ, ...`); this SDK uses a curated order
+ * (`NL, BE, DE, AT, CH, FR, ..., PT, LU, PL, ..., CZ`). So a bare digit run that
+ * several national schemes accept was filed as a Czech `NATIONAL_ID` by Python
+ * and a Portuguese `PHONE` here — identical characters masked, contradictory
+ * labels, and `make parity` compared only characters, so it stayed green through
+ * the whole of 0.3.8.
+ *
+ * The order reproduces what Python already did rather than inventing a new one,
+ * because every accuracy figure this engine has published was measured with
+ * Python resolving these ties by its registration order. Ordering on the entity
+ * type instead was tried first and re-tuned the corpus twice over: it turned the
+ * German `Steuerß12345678911` from `TAX_ID`/DE into `NATIONAL_ID`/EL, and moved
+ * 820 further spans from `DOB` to `DATE_OF_DEATH`. So the key is deliberately
+ * not total — candidates from the same country are left to the stable sort,
+ * which preserves the order that country's pattern list was written in, and both
+ * SDKs write theirs in the same order.
+ *
+ * Taken from the **pattern**, never the finished detection: this SDK re-types a
+ * cued candidate before the sort and Python re-types after it, so keying on the
+ * final type would reintroduce the divergence in a subtler form.
+ *
+ * Kept character-for-character in step with `tie_key` in `rules/engine.py`.
+ */
+export function tieKey(countryCode: string): string {
+  // "SHARED" and "CUSTOM" are not countries and sort as themselves under a
+  // plain alphabetical key — landing between PT and SK, rather than ahead of
+  // every country the way the registry loads them. The bucket restores that.
+  const bucket = countryCode === "SHARED" ? "0" : countryCode === "CUSTOM" ? "1" : "2";
+  // NUL separator, written as an escape so this file stays plain ASCII, and
+  // matching Python byte for byte. It must sort below every character a code
+  // or type name can contain, or a code that is a prefix of another would
+  // order differently in the two SDKs.
+  return `${bucket}\u0000${countryCode}`;
 }
 
 const warnedCountries = new Set<string>();
@@ -219,7 +262,7 @@ export class RuleEngine {
       } else if (m.patternDef.validator !== null && !m.patternDef.requiresContext) {
         failedSpans.push({ start: m.start, end: m.end, code: m.countryCode,
                            etype: String(m.patternDef.entityType) });
-        if (CUE_TARGETS.has(String(m.patternDef.entityType))
+        if (RESCUE_TARGETS.has(String(m.patternDef.entityType))
             && cuedType(text, m.start) === m.patternDef.entityType) rescued.push(m);
       }
     }
@@ -321,6 +364,8 @@ export class RuleEngine {
       countryScore: number;
       inScope: number;
       det: Detection;
+      // Total tie-break, from the pattern rather than the detection. See tieKey.
+      tie: string;
       // Filled in below, once every candidate for the span is known.
       tier: number;
     }
@@ -432,7 +477,8 @@ export class RuleEngine {
       // the value is filed as a Cypriot identity number. Dropping it also clears
       // outOfScope, which would otherwise claim the detection belongs to a
       // country the caller did not declare while naming no country at all.
-      const retyped = retypedBy(text, match.start, entityType);
+      const retyped = retypedBy(text, match.start, entityType,
+                                countryScores.get(match.countryCode) ?? 0);
       if (retyped !== null) {
         entityType = retyped;
         country = null;
@@ -447,6 +493,7 @@ export class RuleEngine {
         length: match.end - match.start,
         countryScore: countryScores.get(match.countryCode) ?? 0,
         inScope: declared === null || declared.has(match.countryCode) ? 1 : 0,
+        tie: tieKey(match.countryCode),
         tier: 0,
         det: {
           entityType,
@@ -485,6 +532,7 @@ export class RuleEngine {
         length: match.end - match.start,
         countryScore: countryScores.get(match.countryCode) ?? 0,
         inScope: declared === null || declared.has(match.countryCode) ? 1 : 0,
+        tie: tieKey(match.countryCode),
         tier: 0,
         det: {
           entityType: match.patternDef.entityType,
@@ -501,7 +549,8 @@ export class RuleEngine {
 
     for (const d of detectStructuralDob(text)) {
       candidates.push({ blindPriority: 1, cue: 0, priority: 1, length: d.end - d.start,
-                        countryScore: 0, inScope: 1, tier: 0, det: d });
+                        countryScore: 0, inScope: 1, tier: 0, det: d,
+                        tie: tieKey(d.country ?? "") });
     }
 
     const detections = this.deduplicate(candidates);
@@ -526,6 +575,7 @@ export class RuleEngine {
   private deduplicate(
     candidates: Array<{ blindPriority: number; cue: number; priority: number;
                         length: number; countryScore: number; inScope: number;
+                        tie: string;
                         tier: number; det: Detection }>,
   ): Detection[] {
     if (candidates.length === 0) return [];
@@ -576,7 +626,8 @@ export class RuleEngine {
       b.cue - a.cue ||                     // local cue         } country-aware
       b.priority - a.priority ||           // country priority  } — decides the
       b.countryScore - a.countryScore ||   // country evidence  } LABEL only
-      b.inScope - a.inScope);              // declared scope    }
+      b.inScope - a.inScope ||             // declared scope    }
+      (a.tie < b.tie ? -1 : a.tie > b.tie ? 1 : 0));  // total   } — see tieKey
     const result: Detection[] = [];
     const occupied = new Set<number>();
     for (const { det } of sorted) {

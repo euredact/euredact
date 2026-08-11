@@ -1,5 +1,125 @@
 # Changelog
 
+## 0.3.9 (2026-08-11)
+
+The labels the corpus actually contains, and the gate that should have caught
+the rest of this. Reported by the training pipeline against 0.3.8: over 4,273
+adjudicated documents, 530 of the spans the rules engine claimed were filed
+under the wrong type, and — separately — the two SDKs disagreed on type for
+three of twenty-two hand-written cases while `make parity` reported
+byte-identical masking and stayed green.
+
+Accuracy over the 152,300-document corpus is unchanged: 99.8% recall / 99.8%
+precision with country hints, 99.8% / 99.6% blind. False positives are unmoved
+with hints (1,232) and up 11 blind (2,361 → 2,372). Cross-SDK masking parity is
+unchanged at 0.61% over 2,000 documents; cross-SDK **type** divergence is 0.
+
+### Fixed
+
+- **The cue table held the abbreviation and not the word.** `BSN:` was cued and
+  `Burgerservicenummer:` — the same identifier, spelled out, in the same
+  language — was not. `Companies House Registration:`, `Company Registration
+  Number:`, `Medical Card No.:`, `AGB-code:`, `sort code`, `account number` and
+  `PLZ-Bereiche:` are all the official name of an identifier in the document's
+  own language, and all were typed `PHONE`. `sort code 20-45-91` was typed
+  `LICENSE_PLATE`: a UK sort code is `NN-NN-NN`, which collides with a plate,
+  and the label sat right in front of it.
+
+  Measured on 4,000 corpus documents: 18 spans re-filed to the correct type, 8
+  newly detected, 5 suppressed — and no change in recall or precision.
+
+- **`Sozialversicherungsnummer:` was in the table the whole time and could not
+  be reached.** At 27 characters the label did not fit `CUE_WINDOW = 22`, so
+  the window held `"lversicherungsnummer: "` and the label's own start was
+  outside it, where the `(?<![A-Za-z0-9_])` boundary anchors. That reads
+  exactly like a missing label and is not one — the window is now 32, which
+  covers `"Companies House Registration: "`, the longest label the corpus
+  contains. The window bounds how long a *label* may be, never how far it may
+  sit from the value: every pattern is anchored to the end of the window, so
+  the tail still has to reach the span.
+
+- **The two SDKs filed the same value under different types.** Two unrelated
+  causes, neither of them the cue table:
+
+  *Ranking.* For a bare digit run that several national schemes accept, all
+  seven sort fields tie — same span, no cue, same priority, no country
+  evidence, both out of scope — and the stable sort then fell through to
+  country *registration* order. Python registers alphabetically
+  (`AT, BE, BG, CH, CY, CZ, ...`) and TypeScript in a curated order
+  (`NL, BE, DE, AT, CH, FR, ..., PT, LU, PL, ..., CZ`), so
+  `Burgerservicenummer (BSN): 274839165` was a Czech `NATIONAL_ID` in Python
+  and a Portuguese `PHONE` in Node. There is now a shared tie-break, and it
+  reproduces the order Python already had rather than inventing one: every
+  accuracy figure this engine has published was measured with Python resolving
+  these ties that way.
+
+  *`\w`.* Slovak `telefón 0956550012` needs the cue's run-on to absorb "efón"
+  after `tel`, and Bulgarian `пощенски кодове 4000-4999` needs "ове" after
+  `пощенски код`. `\w` is Unicode-aware in Python and ASCII-only in JavaScript,
+  so Python matched and Node did not. 0.3.8 fixed exactly this for `\b` and for
+  the qualifier class, and left `\w*` in the run-on.
+
+- **A four-digit run became a `POSTAL_CODE` as soon as any real postal code
+  established the country**, which is to say in almost every real document:
+  `Opgericht in 2016`, `Fondée en 2017` and telephone extensions
+  `(toest. 3841)`, `(ext. 3214)`, `poste interne 3318`. The mirror image of a
+  cue — a word that rules a type *out* rather than in.
+
+  Ambiguous prepositions need a founding or payment participle in front of
+  them, and unambiguous ones (`sinds`, `since`, `depuis`) do not. That
+  distinction is load-bearing: Belgian postal codes are year-shaped, Antwerp's
+  is 2018, and disqualifying on a bare `in` suppressed the real postal code in
+  `rustige ligging in 2018, vlakbij openbaar vervoer`. A miss is the worse
+  error for a redaction tool, so the ambiguous case now needs the verb.
+
+- **A label ending in more than one mark now reaches its value.**
+  `Steuer-IdNr.:`, `Passport No.:` and `Numéro de sécurité sociale (NIR) :`
+  need an abbreviating full stop *and* a colon, or a closing parenthesis first.
+  German tax IDs, a French NIR and Belgian VAT numbers that 0.3.8 left entirely
+  unmasked are now detected.
+
+### Added
+
+- **`make parity` compares types, not just characters.** It reports type
+  disagreement over the spans both engines masked identically, separately from
+  character divergence, and fails above `--max-type-divergence` — now 0.0,
+  because 0.3.9 closed the last case and 10,344 identically-masked spans agree
+  on all 10,344.
+
+  This is the gate that should have caught the divergence above. Character
+  parity cannot see it by construction: all three reported cases masked exactly
+  the same characters. The 0.3.8 release notes quoted this script's 0.61% as
+  evidence the SDKs agreed, and it was never evidence of that.
+
+- **Cue targets for `HEALTHCARE_PROVIDER`, `BANK_ACCOUNT`, `PASSPORT` and
+  `SECRET`.** `HEALTHCARE_PROVIDER` identifies the clinician or practice (the
+  Dutch AGB-code, the German LANR, the UK GMC number) as distinct from
+  `HEALTH_INSURANCE`, which identifies the insured person.
+
+  The training pipeline's report asks for a `CREDENTIAL` type for
+  `TAN-activatiecode`; this SDK has no such type, so those are `SECRET`.
+  Adding a public `EntityType` is a caller-facing decision and is not made here.
+
+### Changed
+
+- **Re-typing and rescuing are no longer the same set.** `_CUE_TARGETS` decides
+  what a label may relabel a span *to*; `_RESCUE_TARGETS` decides what it may
+  re-admit after a checksum *failed*. `BANK_ACCOUNT` joins the first so
+  `sort code 20-45-91` stops being a `LICENSE_PLATE`, and stays out of the
+  second for exactly the reason 0.3.8 gave: mod-97 failing really does mean
+  "not an account number".
+
+- **`NATIONAL_ID` is retypable, but only at country score 0.0.** A checksum
+  says the digits fit *some* national scheme, and a weak one fits by luck; when
+  the document supports that country not at all, an explicit `Passport No.:` is
+  the better evidence. Gated this way it cannot touch a domestic identifier — a
+  Dutch BSN in a Dutch document scores above zero and keeps its type whatever
+  label sits near it.
+
+- 20 new shared conformance vectors (127 → 147), including guards for the
+  Antwerp postal code, for `Privat:` staying an e-mail, and for a real postal
+  code surviving in the same sentence as a disqualified year.
+
 ## 0.3.8 (2026-08-11)
 
 A label in front of a value now decides what that value is called. Reported by

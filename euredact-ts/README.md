@@ -230,10 +230,37 @@ SOCIAL_HANDLE     SECRET            INTERNAL_ID       OTHER
 
 `INTERNAL_ID` — an employee, badge or customer number tied to a person — is
 emitted **only** when an explicit label names it (`medarbejdernummer:`,
-`Personalnummer:`, `Employee No:`). There is no pattern for one, because there
-is no shape for one: without the label, a digit run is not distinguishable from
-any other. The type exists so that a labelled employee number is filed
-correctly instead of being claimed by the phone pattern.
+`Personalnummer:`, `Employee No:`, `Betriebsstättennr.`, `Badge`). There is no
+pattern for one, because there is no shape for one: without the label, a digit
+run is not distinguishable from any other. The type exists so that a labelled
+employee number is filed correctly instead of being claimed by the phone
+pattern.
+
+### What a label in front of a value decides
+
+A label touching the left edge of a value decides what that value is called.
+The label may be the abbreviation or the word it abbreviates — `BSN:` and
+`Burgerservicenummer:` both reach `NATIONAL_ID` — and it may be the official
+name in the document's own language:
+
+| label | type |
+|---|---|
+| `Companies House Registration:`, `Company Registration Number:` | `CHAMBER_OF_COMMERCE` |
+| `Sozialversicherungsnummer:` | `SSN` |
+| `Passport No.:`, `Paspoortnummer:` | `PASSPORT` |
+| `AGB-code:`, `LANR`, `GMC Number:` | `HEALTHCARE_PROVIDER` |
+| `Medical Card No.:` | `HEALTH_INSURANCE` |
+| `sort code`, `account number` | `BANK_ACCOUNT` |
+| `TAN-activatiecode`, `activation code` | `SECRET` |
+
+A label can also *rule a type out*. A four-digit run is not a postal code when
+a founding or payment participle introduces it (`Opgericht in 2016`,
+`Fondée en 2017`) or when it sits in a telephone parenthetical (`(toest. 3841)`,
+`(ext. 2219)`). Postal codes that merely look like years are unaffected —
+Antwerp's `2018` in `rustige ligging in 2018` is still a `POSTAL_CODE`.
+
+A label never moves a span; it only decides the label. Which characters are
+masked is unchanged either way.
 
 For custom patterns, `entityType` is a plain string (e.g. `"EMPLOYEE_ID"`).
 
