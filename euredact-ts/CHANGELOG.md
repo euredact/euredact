@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.3.8 (2026-08-11)
+
+A label in front of a value now decides what that value is called. Mirrors the
+Python SDK exactly — same cue table, same gates, same outcomes — and the shared
+conformance vectors are the check. Cross-SDK masking parity is byte-identical to
+before at 0.61% divergence over 2,000 documents.
+
+### Fixed
+
+- **An explicit identifier label no longer loses to the phone pattern.**
+  `Αρ. Ταυτότητας: 00892341` (Cypriot ID), `ΑΦΜ: 147382965` (Greek tax number),
+  `IČO: 08234567` (Czech company register), `Cod postal: 040171` and
+  `medarbejdernummer: 2023-1156` were all typed `PHONE`, in seven countries.
+  This is the general form of the defect 0.3.3 fixed for one Belgian case.
+
+  The cue table now lives in `rules/cues.ts` and does two things it could not do
+  before: relabel a winning generic candidate whose type a label contradicts,
+  and re-admit a candidate whose checksum failed when the label names that same
+  type. Which characters are masked does not change — a cue decides the label
+  and can never move a span.
+
+- **A labelled identifier that fails its checksum is masked instead of
+  dropped.** `redact("Rijksregisternummer: 85.03.19-284.73", { countries: ["BE"] })`
+  returned the text unchanged, printing in full an identifier the engine had
+  recognised and rejected. Such a span is now emitted as its own type with
+  `confidence: "low"`. Restricted to checksummed identifiers: `BIC` is excluded
+  because its validator is a registry lookup rather than a checksum, and
+  `CREDIT_CARD` and `BANK_ACCOUNT` because Luhn and mod-97 are strong enough
+  that a failure really does mean "not one of these".
+
+- **`ΑΦΜ` reaches `TAX_ID`** rather than `NATIONAL_ID`. Greece's ΑΦΜ is issued
+  by the tax authority; the identity-document number is the ΑΔΤ.
+
+### Added
+
+- **`EntityType.INTERNAL_ID`** — an employee, badge or customer number tied to a
+  person, emitted only behind an explicit label.
+
+- **`Detection.confidence` is now meaningful:** `"high"` (pattern plus checksum),
+  `"medium"` (type comes from a label) and `"low"` (checksum failed but the
+  document labels the span as that type). Every detection is masked regardless.
+
+### Changed
+
+- `suppressPhoneAfterIdLabel` and its `ID_LABEL_BEFORE` table are gone; their
+  labels are typed entries in `rules/cues.ts` and relabel rather than delete.
+
+- Cue boundaries are written `(?<![A-Za-z0-9_])` rather than `\b`. JavaScript's
+  `\b` is ASCII-only, so `\bΑΦΜ` cannot match — with `\b` this SDK would have
+  gone silently blind to every non-Latin label while the Python suite stayed
+  green. The `VAT` cue gained the boundary it never had, so `Privat:` no longer
+  reads as a VAT label via `iva`.
+
 ## 0.3.7 (2026-07-31)
 
 Findings from a security and performance review of the package. Detection

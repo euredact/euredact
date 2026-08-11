@@ -176,23 +176,17 @@ _DIALLING_PREFIX_BEFORE = re.compile(r"\+\d{1,3}[\d\s\-().]*$")
 _COUNTRY_PREFIXED = re.compile(r"(?:^|[^A-Za-z0-9])[A-Z]{1,2}$")
 
 # ── Phone: preceded by ID/tax label ────────────────────────────────────
-
-# The leading \b is load-bearing. Without it the short alternatives match the
-# *tail* of an ordinary word: "NIS" matched "tālru**nis** ", the Latvian for
-# "telephone", so every Latvian phone number was suppressed as though it sat
-# behind a Belgian national-ID label. 653 misses from a missing word boundary.
-_ID_LABEL_BEFORE = re.compile(
-    r"\b(?:BSN|RR|NN|NIR|INSZ|NISS|NIS|Steuer-?ID|TIN|NIF|NIE|SSN|"
-    r"rijksregisternummer|numéro\s*national|national\s*number|"
-    r"matricule|Ausweisnummer|Personalausweis|"
-    r"Versichertennummer|KVNR|KV-Nr|"
-    r"Steuernummer|St\.\-Nr|StNr|Finanzamt\s+ist|"
-    # Belgian enterprise number context
-    r"Ondernemingen\s+onder\s+nummer|ondernemingsnummer|"
-    r"numéro\s*d'entreprise|enterprise\s*number|"
-    r"Kruispuntbank)\s*[:.]?\s*$",
-    re.IGNORECASE,
-)
+#
+# `_ID_LABEL_BEFORE` and `suppress_phone_after_id_label` lived here. Their
+# labels are now typed entries in `rules/cues.py`, and a phone-shaped span
+# behind one is *relabelled* rather than dropped.
+#
+# Dropping was the wrong verb. The span is found either way, so removing the
+# claim decided only whether the value was masked — and the answer was "no":
+# "Rijksregisternummer: 85.03.19-284.73" produced no detection at all, a
+# redaction library printing in full an identifier it had recognised and
+# rejected. The 653-miss word-boundary lesson recorded here moved with the
+# labels; see the module docstring in `cues.py`.
 
 # ── Phone: 0800 service numbers ─────────────────────────────────────────
 
@@ -697,14 +691,6 @@ def suppress_year_as_postal(text: str, match: RawMatch) -> bool:
     return True
 
 
-def suppress_phone_after_id_label(text: str, match: RawMatch) -> bool:
-    """Suppress phone detections preceded by an ID-type or enterprise label."""
-    if match.pattern_def.entity_type != EntityType.PHONE:
-        return False
-    before, _ = _get_context(text, match.start, match.end)
-    return bool(_ID_LABEL_BEFORE.search(before))
-
-
 def suppress_phone_service_number(text: str, match: RawMatch) -> bool:
     """Suppress 0800 toll-free / service numbers — not personal PII."""
     if match.pattern_def.entity_type != EntityType.PHONE:
@@ -1157,7 +1143,7 @@ _CONTEXT_ONLY = [suppress_requires_context]  # Always last
 _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
     EntityType.PHONE: [
         suppress_currency, suppress_units, suppress_reference, suppress_math,
-        suppress_phone_after_id_label, suppress_phone_service_number,
+        suppress_phone_service_number,
         suppress_phone_date_overlap, suppress_phone_as_number_range,
     ],
     EntityType.NATIONAL_ID: [

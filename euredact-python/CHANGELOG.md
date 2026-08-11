@@ -1,5 +1,82 @@
 # Changelog
 
+## 0.3.8 (2026-08-11)
+
+A label in front of a value now decides what that value is called. Reported by
+the training pipeline: over 400 adjudicated documents, 110 of the 490 spans the
+rules engine handed over (22%) were filed under the wrong type, 71 of them as
+`PHONE`. Recall and precision over the 152,300-document corpus are unchanged
+(99.8% / 99.8% with hints, 99.8% / 99.6% blind); false positives fall by 320 in
+blind detection and are unmoved with hints; cross-SDK parity is byte-identical
+to before at 0.61% over 2,000 documents.
+
+### Fixed
+
+- **An explicit identifier label no longer loses to the phone pattern.**
+  `Αρ. Ταυτότητας: 00892341` (Cypriot ID), `ΑΦΜ: 147382965` (Greek tax number),
+  `IČO: 08234567` (Czech company register), `Cod postal: 040171` and
+  `medarbejdernummer: 2023-1156` were all typed `PHONE`, in seven countries.
+  This is the general form of the defect 0.3.3 fixed for one Belgian case; the
+  conformance suite had encoded that example rather than the rule, which is why
+  it went unnoticed for four releases.
+
+  The cue table that already resolved `Phone: 0705237535` against the Swedish
+  personnummer checksum now lives in `rules/cues.py`, covers the languages the
+  report named, and does two things it could not do before: relabel a winning
+  generic candidate whose type a label contradicts, and re-admit a candidate
+  whose checksum failed when the label names that same type.
+
+  Relabelling, never suppression. Which characters are masked does not change —
+  a cue decides the label and can never move a span, so invariant I1 holds.
+
+- **A labelled identifier that fails its checksum is masked instead of
+  dropped.** `redact("Rijksregisternummer: 85.03.19-284.73", countries=["BE"])`
+  returned the text *unchanged*: the national-number rule declined on the check
+  digit, the generic phone rule was denied the span as a fragment, and a
+  redaction library printed in full an identifier it had recognised and
+  rejected. The conformance case covering it asserted only that the value was
+  not a `PHONE`, so it passed throughout. Such a span is now emitted as its own
+  type with `confidence="low"`.
+
+  Restricted to checksummed identifiers. `BIC` is excluded because its validator
+  is a registry lookup rather than a checksum — a failure there means "no such
+  bank", which no label can talk you out of — and `CREDIT_CARD` and
+  `BANK_ACCOUNT` because Luhn and mod-97 are strong enough that a failure really
+  does mean "not one of these".
+
+- **`ΑΦΜ` reaches `TAX_ID`.** Greece's ΑΦΜ is issued by the tax authority; the
+  identity-document number is the ΑΔΤ. A value cued `ΑΦΜ:` was returned as
+  `NATIONAL_ID`, attributed to whichever foreign scheme happened to validate.
+
+### Added
+
+- **`EntityType.INTERNAL_ID`** — an employee, badge or customer number tied to a
+  person. Emitted **only** behind an explicit label (`medarbejdernummer:`,
+  `Personalnummer:`, `Employee No:`); there is no pattern for one, because
+  without the label a digit run is not distinguishable from any other. The type
+  exists so that a labelled employee number is filed correctly instead of being
+  claimed by the phone pattern.
+
+- **`Detection.confidence` is now meaningful.** `"high"` — a pattern matched and
+  its checksum passed. `"medium"` — the type comes from a label, because no
+  pattern of that type claimed the span. `"low"` — a pattern matched, its
+  checksum failed, and the document labels the span as that very type. Every
+  detection is masked regardless; filter on `"high"` for checksum-backed types
+  only.
+
+### Changed
+
+- `suppress_phone_after_id_label` and its `_ID_LABEL_BEFORE` table are gone.
+  Their labels are typed entries in `rules/cues.py` and now relabel rather than
+  delete. Dropping was the wrong verb: the span is found either way, so removing
+  the claim decided only whether the value was masked.
+
+- The `VAT` cue gained the word boundary it never had, so `Privat:` no longer
+  reads as a VAT label via `iva`. Boundaries across the table are written
+  `(?<![A-Za-z0-9_])` rather than `\b`, because JavaScript's `\b` is ASCII-only
+  and `\bΑΦΜ` cannot match there — with `\b` the two SDKs would disagree on
+  every non-Latin label.
+
 ## 0.3.7 (2026-07-31)
 
 Findings from a security and performance review of the package. Detection

@@ -71,8 +71,15 @@ BIC               VIN               IMEI              SECRET
 IP_ADDRESS        IPV6_ADDRESS      MAC_ADDRESS        UUID
 GPS_COORDINATES   SOCIAL_HANDLE     DOB               DATE_OF_DEATH
 HEALTH_INSURANCE  HEALTHCARE_PROVIDER  CHAMBER_OF_COMMERCE
-RESIDENCE_PERMIT  NAME              ADDRESS
+RESIDENCE_PERMIT  NAME              ADDRESS           INTERNAL_ID
 ```
+
+Each detection carries a `confidence` of `"high"` (a pattern matched and its
+checksum passed), `"medium"` (the type comes from a label touching the span,
+because no pattern of that type claimed it) or `"low"` (a pattern matched, its
+checksum failed, and the document labels the span as that very type). Every
+detection is masked regardless; filter on `confidence == "high"` if you need
+only checksum-backed types.
 
 ## Custom Patterns
 

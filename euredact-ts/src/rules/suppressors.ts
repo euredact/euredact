@@ -63,11 +63,16 @@ const SEQUENTIAL_PATTERNS = /^(?:0{6,}|1234567890?|0123456789|9876543210?|111111
 
 // YEAR_PATTERN kept for reference but replaced by RECENT_YEAR in suppressYearAsPostal
 
-// The leading \b is load-bearing. Without it the short alternatives match the
-// *tail* of an ordinary word: "NIS" matched "tālru**nis** ", the Latvian for
-// "telephone", so every Latvian phone number was suppressed as though it sat
-// behind a Belgian national-ID label. 653 misses from a missing word boundary.
-const ID_LABEL_BEFORE = /\b(?:BSN|RR|NN|NIR|INSZ|NISS|NIS|Steuer-?ID|TIN|NIF|NIE|SSN|rijksregisternummer|numéro\s*national|national\s*number|matricule|Ausweisnummer|Personalausweis|Versichertennummer|KVNR|KV-Nr|Steuernummer|St\.\-Nr|StNr|Finanzamt\s+ist|Ondernemingen\s+onder\s+nummer|ondernemingsnummer|numéro\s*d'entreprise|enterprise\s*number|Kruispuntbank)\s*[:.]?\s*$/i;
+// `ID_LABEL_BEFORE` and `suppressPhoneAfterIdLabel` lived here. Their labels are
+// now typed entries in `cues.ts`, and a phone-shaped span behind one is
+// *relabelled* rather than dropped.
+//
+// Dropping was the wrong verb. The span is found either way, so removing the
+// claim decided only whether the value was masked — and the answer was "no":
+// "Rijksregisternummer: 85.03.19-284.73" produced no detection at all, a
+// redaction library printing in full an identifier it had recognised and
+// rejected. The 653-miss word-boundary lesson recorded here moved with the
+// labels; see the module comment in `cues.ts`.
 
 const SERVICE_NUMBER = /^0800[\-\s]/;
 const DATE_PATTERN_FULL = /^\d{2}[-/.]\d{2}[-/.]\d{4}$|^\d{4}[-/.]\d{2}[-/.]\d{2}$/;
@@ -380,12 +385,6 @@ function suppressYearAsPostal(text: string, match: RawMatch): boolean {
   if (DATE_KEYWORD_NEAR.test(context)) return true;
   // Suppress: recent years without postal context are almost never postal codes
   return true;
-}
-
-function suppressPhoneAfterIdLabel(text: string, match: RawMatch): boolean {
-  if (match.patternDef.entityType !== EntityType.PHONE) return false;
-  const [before] = getContext(text, match.start, match.end);
-  return ID_LABEL_BEFORE.test(before);
 }
 
 function suppressPhoneServiceNumber(_text: string, match: RawMatch): boolean {
@@ -834,7 +833,7 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
 type Suppressor = (text: string, match: RawMatch, scratch?: SuppressionScratch) => boolean;
 
 const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
-  [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneAfterIdLabel, suppressPhoneServiceNumber, suppressPhoneDateOverlap, suppressPhoneAsNumberRange],
+  [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneServiceNumber, suppressPhoneDateOverlap, suppressPhoneAsNumberRange],
   [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressNatidAsPassport, suppressSeNatidAsOrg],
   [EntityType.SSN]: [suppressCurrency, suppressUnits, suppressReference, suppressMath],
   [EntityType.TAX_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressTaxidAsIpAddress],

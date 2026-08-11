@@ -32,6 +32,16 @@ export enum EntityType {
   HEALTH_INSURANCE = "HEALTH_INSURANCE",
   HEALTHCARE_PROVIDER = "HEALTHCARE_PROVIDER",
   CHAMBER_OF_COMMERCE = "CHAMBER_OF_COMMERCE",
+  /**
+   * Employee, badge or customer number tied to a person.
+   *
+   * Emitted **only** when an explicit label names it — see `rules/cues.ts`.
+   * There is no pattern for an internal identifier because there is no shape
+   * for one; without the label, a digit run is not distinguishable from any
+   * other. The type exists so that a labelled employee number is filed
+   * correctly instead of being claimed by the phone pattern.
+   */
+  INTERNAL_ID = "INTERNAL_ID",
   IMEI = "IMEI",
   GPS_COORDINATES = "GPS_COORDINATES",
   UUID = "UUID",

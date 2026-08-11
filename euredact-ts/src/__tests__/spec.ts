@@ -11,6 +11,7 @@ import { EuRedact } from "../sdk.js";
 import { EntityType, LEGACY_TYPE_ALIASES } from "../types.js";
 import { setBicRegistry } from "../rules/bicRegistry.js";
 import { resolveCountryCode } from "../rules/engine.js";
+import { CUES, CUE_WINDOW, cuedType, retypedBy } from "../rules/cues.js";
 import { validateBic, validateE164, validateIban } from "../rules/validators.js";
 
 const sdk = new EuRedact();
@@ -293,6 +294,55 @@ test("email is not misread as a social handle", () => {
   assert.ok(types.has(EntityType.EMAIL));
   assert.ok(!types.has(EntityType.SOCIAL_HANDLE));
 });
+
+// ── Cue table: the gates, mirroring tests/test_cues.py ─────────────────
+//
+// The shared vectors already cover the outcomes in both SDKs. What is asserted
+// here is the machinery underneath, and above all the boundary construct: a
+// JavaScript `\b` cannot match before a Greek letter, so a table written with
+// `\b` would leave every non-Latin cue dead in this SDK while the Python suite
+// stayed green. That is exactly the kind of divergence these tests exist for.
+
+test("cue touching the span is read", () =>
+  assert.equal(cuedType("ΑΦΜ: 147382965", 5), EntityType.TAX_ID));
+test("cue beyond the window is not", () => {
+  const text = "ΑΦΜ:" + " ".repeat(CUE_WINDOW + 1) + "147382965";
+  assert.equal(cuedType(text, text.length - 9), null);
+});
+test("one qualifier word is allowed", () =>
+  assert.equal(cuedType("ΑΦΜ εταιρειας: 998765432", 15), EntityType.TAX_ID));
+test("a whole phrase between label and value is not", () =>
+  assert.equal(cuedType("ΑΦΜ van de klant: 147382965", 18), null));
+test("non-Latin labels are reachable in JavaScript", () => {
+  assert.equal(cuedType("Αρ. Ταυτότητας: 1", 16), EntityType.NATIONAL_ID);
+  assert.equal(cuedType("IČO: 1", 5), EntityType.CHAMBER_OF_COMMERCE);
+});
+test("no cue pattern uses a bare word boundary", () => {
+  for (const [entityType, pattern] of CUES) {
+    assert.ok(!pattern.source.includes("\\b"),
+      `${entityType} uses \\b, which is ASCII-only here and would diverge from Python`);
+  }
+});
+test("label at the tail of a word is not a cue", () =>
+  assert.notEqual(cuedType("tālrunis 24329456", 9), EntityType.NATIONAL_ID));
+test("iva inside Privat is not a VAT label", () =>
+  assert.notEqual(cuedType("Privat: 12345678", 8), EntityType.VAT));
+
+test("the re-typing gate admits a structured target", () =>
+  assert.equal(retypedBy("IČO: 08234567", 5, EntityType.PHONE),
+               EntityType.CHAMBER_OF_COMMERCE));
+test("nothing is ever relabelled to PHONE", () =>
+  assert.equal(retypedBy("Tel: 1006", 5, EntityType.POSTAL_CODE), null));
+test("an email behind a VAT label stays an email", () =>
+  assert.deepEqual(of("BTW: klant@voorbeeld.nl", "NL", EntityType.EMAIL),
+                   ["klant@voorbeeld.nl"]));
+test("a declined identifier the document labels is masked, not dropped", () => {
+  const r = sdk.redact("Rijksregisternummer: 85.03.19-284.73", { countries: ["BE"] });
+  assert.equal(r.redactedText, "Rijksregisternummer: [NATIONAL_ID]");
+  assert.equal(r.detections[0].confidence, "low");
+});
+test("an unlabelled checksum failure is still declined", () =>
+  assert.deepEqual(sdk.redact("Referentie 85.03.19-284.73", { countries: ["BE"] }).detections, []));
 
 // ── Report ─────────────────────────────────────────────────────────────
 

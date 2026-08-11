@@ -1170,6 +1170,291 @@
         ]
       },
       "notes": "The key body must not absorb the slashes in front of it. Anchoring the high-entropy rule with a class lookbehind instead of \\b widened the span leftwards over them; the result matched the protocol-relative URL shape the endpoint suppressor drops, and the key was left in the clear."
+    },
+    {
+      "id": "cue-cy-id-number-greek-label",
+      "countries": [
+        "CY"
+      ],
+      "text": "Αρ. Ταυτότητας: 00892341",
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "00892341"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "notes": "Αρ. Ταυτότητας is Greek for 'ID number' and is official on a Cypriot identity document. No Cypriot pattern matches a bare 8-digit ID, so the span was claimed by a Finnish phone rule; the cue relabels it."
+    },
+    {
+      "id": "cue-cy-id-number-turkish-label",
+      "countries": [
+        "CY"
+      ],
+      "text": "Kimlik numarası: 00847263",
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "00847263"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "cue-el-afm-is-a-tax-id-not-a-national-id",
+      "countries": [
+        "EL"
+      ],
+      "text": "ΑΦΜ: 147382965",
+      "mustDetect": {
+        "TAX_ID": [
+          "147382965"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "PHONE"
+      ],
+      "notes": "Greece's ΑΦΜ is issued by the tax authority; the identity-document number is the ΑΔΤ. The value failed the AFM checksum, so the Greek rule declined and a Czech birth-number pattern that happened to validate took the span."
+    },
+    {
+      "id": "cue-el-afm-with-qualifier-word",
+      "countries": [
+        "EL"
+      ],
+      "text": "ΑΦΜ εταιρειας: 998765432",
+      "mustDetect": {
+        "TAX_ID": [
+          "998765432"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "notes": "One qualifier word may sit between the label and the colon."
+    },
+    {
+      "id": "cue-cz-ico-is-a-company-register-number",
+      "countries": [
+        "CZ"
+      ],
+      "text": "IČO: 08234567",
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "08234567"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "cue-ro-postal-code-outranks-a-phone-pattern",
+      "countries": [
+        "RO"
+      ],
+      "text": "Cod postal: 040171",
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "040171"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "notes": "The Romanian postal candidate existed and passed its context gate, but postal codes rank below everything by design, so a German phone pattern won. A cue outranks priority."
+    },
+    {
+      "id": "cue-dk-employee-number-is-an-internal-id",
+      "countries": [
+        "DK"
+      ],
+      "text": "medarbejdernummer: 2023-1156",
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "2023-1156"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "notes": "The canon annotates INTERNAL_ID with an LLM, so the engine has no pattern for one — but it had a phone pattern that claimed it. Emitted from the cue alone."
+    },
+    {
+      "id": "cue-be-declined-nrn-is-masked-not-dropped",
+      "countries": [
+        "BE"
+      ],
+      "text": "Rijksregisternummer: 85.03.19-284.73",
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "85.03.19-284.73"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "notes": "Strengthens be-invalid-nrn-is-not-a-phone, which asserts only that this is not a PHONE — and passed for four releases while the engine emitted nothing at all, printing in full an identifier it had recognised and rejected. A declined identifier with its own label in front of it is still that identifier."
+    },
+    {
+      "id": "cue-be-declined-nrn-without-colon",
+      "countries": [
+        "BE"
+      ],
+      "text": "Nationaal nummer 82.09.04-317.68",
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "82.09.04-317.68"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "cue-guard-phone-el",
+      "countries": [
+        "EL"
+      ],
+      "text": "Tel: +30 210 123 4567",
+      "mustDetect": {
+        "PHONE": [
+          "+30 210 123 4567"
+        ]
+      }
+    },
+    {
+      "id": "cue-guard-phone-cy",
+      "countries": [
+        "CY"
+      ],
+      "text": "Tel: +357 22 123456",
+      "mustDetect": {
+        "PHONE": [
+          "+357 22 123456"
+        ]
+      }
+    },
+    {
+      "id": "cue-guard-phone-dk",
+      "countries": [
+        "DK"
+      ],
+      "text": "Tel: +45 33 12 34 56",
+      "mustDetect": {
+        "PHONE": [
+          "+45 33 12 34 56"
+        ]
+      }
+    },
+    {
+      "id": "cue-guard-phone-cz",
+      "countries": [
+        "CZ"
+      ],
+      "text": "Tel: +420 222 111 333",
+      "mustDetect": {
+        "PHONE": [
+          "+420 222 111 333"
+        ]
+      }
+    },
+    {
+      "id": "cue-guard-phone-ro",
+      "countries": [
+        "RO"
+      ],
+      "text": "Tel: +40 21 123 4567",
+      "mustDetect": {
+        "PHONE": [
+          "+40 21 123 4567"
+        ]
+      }
+    },
+    {
+      "id": "cue-guard-email-behind-a-vat-label-stays-an-email",
+      "countries": [
+        "NL"
+      ],
+      "text": "BTW: klant@voorbeeld.nl",
+      "mustDetect": {
+        "EMAIL": [
+          "klant@voorbeeld.nl"
+        ]
+      },
+      "mustNotDetect": [
+        "VAT"
+      ],
+      "notes": "Re-typing is gated to generic numeric shapes. EMAIL carries its own structure and a nearby word may not overrule it."
+    },
+    {
+      "id": "cue-guard-privat-is-not-a-vat-label",
+      "countries": [
+        "DE"
+      ],
+      "text": "Privat: hans@beispiel.de",
+      "mustDetect": {
+        "EMAIL": [
+          "hans@beispiel.de"
+        ]
+      },
+      "mustNotDetect": [
+        "VAT"
+      ],
+      "notes": "The VAT cue had no left boundary, so 'iva' matched inside 'Privat'. Same class of defect as 'NIS' matching the tail of 'tālrunis'."
+    },
+    {
+      "id": "cue-guard-latvian-phone-word-still-a-phone",
+      "countries": [
+        "LV"
+      ],
+      "text": "Contact: tālrunis 24329456, e-pasts ed@x.lv",
+      "mustDetect": {
+        "PHONE": [
+          "24329456"
+        ]
+      },
+      "notes": "653 Latvian phone numbers were once suppressed because 'NIS' matched the tail of 'tālrunis'. The boundary that fixed it moved into the cue table with the label."
+    },
+    {
+      "id": "cue-guard-surname-then-label-is-not-a-cue",
+      "countries": [
+        "FI"
+      ],
+      "text": "Name: Matti Nieminen\nDOB: 08.05.1994",
+      "mustDetect": {
+        "DOB": [
+          "08.05.1994"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "A cue label may run on into a longer word, or take one qualifier word — never both. Allowing both let 'nie' grow into 'Nieminen' and then swallow the real 'DOB' label, reading 52 dates of birth across the corpus as Spanish NIEs."
+    },
+    {
+      "id": "cue-guard-unlisted-bic-is-not-rescued",
+      "countries": null,
+      "text": "BIC: AABORIHH",
+      "mustNotDetect": [
+        "BIC"
+      ],
+      "notes": "The rescue applies to checksummed identifiers, not registry lookups. A BIC validator failure means 'no such bank', which a label cannot talk you out of; rescuing it read 34 unlisted codes as real ones."
+    },
+    {
+      "id": "cue-vat-label-with-punctuation-run-on",
+      "countries": [
+        "DE"
+      ],
+      "text": "USt-IdNr: DE123456789",
+      "mustDetect": {
+        "VAT": [
+          "DE123456789"
+        ]
+      },
+      "notes": "VAT labels carry punctuation inside the run-on, so that cue keeps a wider run-on class than the rest."
     }
   ]
 }

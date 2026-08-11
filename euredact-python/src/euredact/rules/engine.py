@@ -7,6 +7,7 @@ import re
 import threading
 from dataclasses import replace
 
+from euredact.rules import cues
 from euredact.rules import evidence as evidence_mod
 from euredact.rules.countries._base import PatternDef
 from euredact.rules.matchers import MultiPatternMatcher, RawMatch
@@ -173,39 +174,68 @@ def _validate_custom_pattern(pattern: str) -> None:
 #
 # Measured: 263 phone numbers were reported as national IDs and 18 French SIREN
 # as national IDs, each with an explicit cue in front of it.
-_LOCAL_CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
-    (EntityType.PHONE, re.compile(
-        r"(?:phone|tel|telephone|téléphone|telefoon|telefon|telefono|teléfono"
-        r"|tlf|mobil|mobile|gsm|handy|sími|puh|móvil|cell)\w*\s*[:.\-]?\s*$",
-        re.IGNORECASE)),
-    (EntityType.CHAMBER_OF_COMMERCE, re.compile(
-        r"(?:siren|siret|kbo|bce|kvk|ondernemingsnummer|handelsregister"
-        r"|company\s*(?:no|number|reg)|organisationsnummer|orgnr)\w*"
-        r"\s*[:.\-]?\s*$", re.IGNORECASE)),
-    (EntityType.VAT, re.compile(
-        r"(?:vat|btw|tva|ust|iva|moms|alv|mwst)[\w.\-]*\s*[:.\-]?\s*$",
-        re.IGNORECASE)),
-    (EntityType.BIC, re.compile(
-        r"(?:bic|swift)[\w/]*\s*[:.\-]?\s*\(?\s*$", re.IGNORECASE)),
-    (EntityType.NATIONAL_ID, re.compile(
-        r"(?:bsn|personnummer|rijksregisternummer|national\s*id"
-        r"|identiteitsnummer|henkilötunnus|kennitala|cpr|nif|dni)\w*"
-        r"\s*[:.\-]?\s*$", re.IGNORECASE)),
-)
-
-#: How far back a cue may sit. Short on purpose: a cue is only evidence about
-#: the value it introduces, which is the lesson of the postal-code year defect,
-#: where a cue 150 characters away licensed every number in the window.
-_CUE_WINDOW = 22
+#
+# The table itself lives in `cues.py`, because two other steps read it: the
+# rescue of a declined identifier below, and the re-typing in _deduplicate.
 
 
 def _local_cue_bonus(text: str, start: int, entity_type: object) -> int:
     """1 when a cue naming *entity_type* sits immediately before the span."""
-    before = text[max(0, start - _CUE_WINDOW):start]
-    for cued_type, pattern in _LOCAL_CUES:
-        if cued_type == entity_type and pattern.search(before):
-            return 1
-    return 0
+    return 1 if cues.cued_type(text, start) == entity_type else 0
+
+
+# ── Re-typing: which claims a cue may overrule ──────────────────────────
+#
+# A cue relabels a span; it never moves one. But it may only relabel a claim
+# weak enough to be worth overruling, and only into a type a label can actually
+# assert. Measured over 2,000 corpus documents, re-typing without these two
+# gates fired 52 times and got roughly 30 of them wrong — EMAIL read as VAT,
+# a date of birth as a phone number, a VIN as VAT — against 20 real fixes.
+# With the gates: 14 re-typings, every one of them PHONE to a structured
+# identifier.
+#
+# Left of the arrow: shapes so generic that a label in front is better evidence
+# than the pattern that matched. A bare digit run is not a phone number because
+# it *could* be dialled.
+_RETYPABLE: frozenset[EntityType] = frozenset({
+    EntityType.PHONE, EntityType.POSTAL_CODE, EntityType.LICENSE_PLATE,
+})
+
+# Right of the arrow: types a label can assert on its own. Also the types
+# eligible for the rescue above, for the same reason read the other way — a
+# label may vouch for one of these, so it may also vouch for a malformed one.
+#
+# PHONE is absent on purpose: "Tel:" in front of something no phone pattern
+# matched means the document is laid out oddly, not that the value is a phone
+# number. So are EMAIL, SECRET, DOB, VIN and the rest — those carry their own
+# structure, and a nearby word is not entitled to overrule it.
+#
+# BIC's absence is what keeps the rescue honest. Its validator is a *registry
+# lookup*, not a checksum, so a failure means "no such bank", which no label can
+# talk you out of. Rescuing it read 34 unlisted codes behind a "BIC:" label as
+# real ones. The same reasoning keeps CREDIT_CARD and BANK_ACCOUNT out: Luhn and
+# mod-97 are strong enough that a failure really does mean "not one of these".
+_CUE_TARGETS: frozenset[EntityType] = frozenset({
+    EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID,
+    EntityType.HEALTH_INSURANCE, EntityType.CHAMBER_OF_COMMERCE,
+    EntityType.VAT, EntityType.POSTAL_CODE, EntityType.PASSPORT,
+    EntityType.INTERNAL_ID,
+})
+
+
+def _retyped(text: str, start: int, entity_type: object) -> EntityType | None:
+    """The type a cue overrules *entity_type* with, or None to leave it alone.
+
+    Only reached for a candidate that already won its span, and only when no
+    candidate of the cued type claimed that span — one would have won on the
+    cue bonus above.
+    """
+    if entity_type not in _RETYPABLE:
+        return None
+    cued = cues.cued_type(text, start)
+    if cued is None or cued == entity_type or cued not in _CUE_TARGETS:
+        return None
+    return cued
 
 
 def check_country_arg(value: object, param: str) -> None:
@@ -369,7 +399,20 @@ class RuleEngine:
         # regex-only match inside it is weak evidence. It is *demoted* below
         # every other candidate rather than deleted — see the priority
         # assignment below for why deletion was wrong.
+        #
+        # One kind of failure is rescued rather than recorded: a span the
+        # document itself labels as the very type whose checksum just failed.
+        # "Rijksregisternummer: 85.03.19-284.73" is a Belgian national number
+        # with a bad check digit — mistyped, OCR'd, or invented — and it is
+        # still a national number. Before this, the pattern declined, the
+        # generic phone rule was denied the span as a fragment, and the value
+        # was left in the clear: a redaction library printing an identifier it
+        # had recognised and rejected.
+        #
+        # Rescued candidates are still recorded as failed spans, so the
+        # demotion zones and the fragment rule below are unchanged.
         validated: list[tuple[RawMatch, bool]] = []  # (match, is_valid)
+        rescued: list[RawMatch] = []
         failed_spans: list[tuple[int, int, str]] = []
         for m in raw_matches:
             is_valid = self._matcher.validate(m)
@@ -379,6 +422,9 @@ class RuleEngine:
                 failed_spans.append(
                     (m.start, m.end, m.country_code, m.pattern_def.entity_type)
                 )
+                if (m.pattern_def.entity_type in _CUE_TARGETS
+                        and cues.cued_type(text, m.start) == m.pattern_def.entity_type):
+                    rescued.append(m)
 
         # Evidence pass: work out which countries this document belongs to,
         # from the entities that carry their country in the string. Runs on
@@ -517,9 +563,13 @@ class RuleEngine:
         # frozen dataclass for each one is pure waste.
         # (priority, in_scope, start, end, match, prebuilt). in_scope ranks
         # candidates within a priority tier; it never removes any.
+        #
+        # The trailing `confidence` rides along rather than being derived in
+        # _deduplicate, because only this pass knows whether a candidate is a
+        # rescued checksum failure. It is not part of the sort key.
         candidates: list[
             tuple[int, int, int, float, int, int, int, RawMatch | None,
-                  Detection | None]
+                  Detection | None, str]
         ] = []
         for match, has_valid_validator in validated:
             # A validator-less match inside a failed-validation span used to be
@@ -621,13 +671,33 @@ class RuleEngine:
             cue = _local_cue_bonus(text, match.start, match.pattern_def.entity_type)
             candidates.append(
                 (blind_priority, cue, priority, country_score, in_scope,
-                 match.start, match.end, match, None)
+                 match.start, match.end, match, None, "high")
+            )
+
+        # A declined identifier the document itself labels. Cue-backed by
+        # construction, so `cue` is 1 — that is what lets it take a span from a
+        # foreign pattern whose checksum happened to pass, which is how
+        # "ΑΦΜ: 147382965" was reported as a Czech national ID.
+        #
+        # `priority` is 0: below every regex-only claim, so it wins only what
+        # nothing better wants. `blind_priority` is 1 so that span selection —
+        # the country-blind half of the sort — treats it like any other
+        # regex-strength claim and invariant I1 is untouched.
+        #
+        # Emitted as "low", which is the honest description: the shape and the
+        # label agree, the check digit does not. A caller wanting only
+        # checksum-backed detections filters on it.
+        for match in rescued:
+            in_scope = 1 if (declared is None or match.country_code in declared) else 0
+            candidates.append(
+                (1, 1, 0, country_scores.get(match.country_code, 0.0), in_scope,
+                 match.start, match.end, match, None, "low")
             )
 
         # Structural detectors (JSON field names, CSV headers). These arrive as
         # finished Detections, carry no RawMatch, and are not suppressed.
         for d in detect_structural_dob(text):
-            candidates.append((1, 0, 1, 0.0, 1, d.start, d.end, None, d))
+            candidates.append((1, 0, 1, 0.0, 1, d.start, d.end, None, d, "high"))
 
         # Deduplicate: validated > custom > regex-only, then longer wins
         detections = self._deduplicate(text, candidates, declared)
@@ -652,7 +722,7 @@ class RuleEngine:
         text: str,
         candidates: list[
             tuple[int, int, int, float, int, int, int, RawMatch | None,
-                  Detection | None]
+                  Detection | None, str]
         ],
         declared: set[str] | None = None,
     ) -> list[Detection]:
@@ -720,7 +790,7 @@ class RuleEngine:
         span_verdicts: dict[tuple[object, int, int], bool] = {}
 
         for (_bp, _cue, _prio, _score, in_scope,
-             start, end, match, prebuilt) in sorted_cands:
+             start, end, match, prebuilt, confidence) in sorted_cands:
             if any(p in occupied for p in range(start, end)):
                 continue
 
@@ -732,19 +802,45 @@ class RuleEngine:
                     span_verdicts[key] = verdict
                 if verdict or should_suppress_claim(text, match):
                     continue
+
+                # The document labels this span as something else. Reaching
+                # here means nothing of the cued type claimed it — a candidate
+                # that did would have won on the cue bonus — so the choice is
+                # between the wrong label and this one, not between two rivals.
+                #
+                # Relabelling, not suppression. Dropping the candidate is what
+                # the previous fix did, and it left "Rijksregisternummer:
+                # 85.03.19-284.73" printed in full: the span is found either
+                # way, so removing the claim only decides whether the value is
+                # masked. Re-typing keeps the mask and fixes the filing.
+                entity_type = match.pattern_def.entity_type
+                country = (
+                    match.country_code
+                    if match.country_code not in ("SHARED", "CUSTOM") else None
+                )
+                out_of_scope = not in_scope
+
+                retyped = _retyped(text, start, entity_type)
+                if retyped is not None:
+                    # The country came from the pattern that matched, and that
+                    # pattern was just overruled: a Finnish phone rule saying
+                    # "Finland" is worthless once the value is filed as a
+                    # Cypriot identity number. Dropping it also clears
+                    # out_of_scope, which would otherwise claim the detection
+                    # belongs to a country the caller did not declare while
+                    # naming no country at all.
+                    entity_type, country, out_of_scope = retyped, None, False
+                    confidence = "medium"
+
                 detection = Detection(
-                    entity_type=match.pattern_def.entity_type,
+                    entity_type=entity_type,
                     start=start,
                     end=end,
                     text=match.text,
                     source=DetectionSource.RULES,
-                    country=(
-                        match.country_code
-                        if match.country_code not in ("SHARED", "CUSTOM")
-                        else None
-                    ),
-                    confidence="high",
-                    out_of_scope=not in_scope,
+                    country=country,
+                    confidence=confidence,
+                    out_of_scope=out_of_scope,
                 )
             else:
                 assert prebuilt is not None

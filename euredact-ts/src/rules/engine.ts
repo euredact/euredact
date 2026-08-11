@@ -1,6 +1,7 @@
 import { DetectionSource, EntityType, type CountryConfig, type CountryEvidence, type Detection, type PatternDef } from "../types.js";
 import { MultiPatternMatcher, type RawMatch } from "./matchers.js";
 import { shouldSuppress, SuppressionScratch } from "./suppressors.js";
+import { CUE_TARGETS, CUE_WINDOW, cuedType, retypedBy } from "./cues.js";
 import { detectStructuralDob } from "./structural.js";
 import { COUNTRY_CONFIGS } from "./countries/index.js";
 import * as evidenceMod from "./evidence.js";
@@ -77,31 +78,14 @@ function warnUnknownCountry(code: string): void {
 //
 // Measured: 263 phone numbers and 18 French SIREN were reported as national IDs,
 // each with an explicit cue in front of it.
-const LOCAL_CUES: Array<[EntityType, RegExp]> = [
-  [EntityType.PHONE,
-   /(?:phone|tel|telephone|téléphone|telefoon|telefon|telefono|teléfono|tlf|mobil|mobile|gsm|handy|sími|puh|móvil|cell)\w*\s*[:.\-]?\s*$/i],
-  [EntityType.CHAMBER_OF_COMMERCE,
-   /(?:siren|siret|kbo|bce|kvk|ondernemingsnummer|handelsregister|company\s*(?:no|number|reg)|organisationsnummer|orgnr)\w*\s*[:.\-]?\s*$/i],
-  [EntityType.VAT,
-   /(?:vat|btw|tva|ust|iva|moms|alv|mwst)[\w.\-]*\s*[:.\-]?\s*$/i],
-  [EntityType.BIC,
-   /(?:bic|swift)[\w/]*\s*[:.\-]?\s*\(?\s*$/i],
-  [EntityType.NATIONAL_ID,
-   /(?:bsn|personnummer|rijksregisternummer|national\s*id|identiteitsnummer|henkilötunnus|kennitala|cpr|nif|dni)\w*\s*[:.\-]?\s*$/i],
-];
-
-// How far back a cue may sit. Short on purpose: a cue is only evidence about the
-// value it introduces, which is the lesson of the postal-code year defect, where
-// a cue 150 characters away licensed every number in the window.
-const CUE_WINDOW = 22;
+//
+// The table itself lives in `cues.ts`, because two other steps read it: the
+// rescue of a declined identifier below, and the re-typing in deduplicate.
+// `CUE_WINDOW` is re-exported from there.
 
 /** 1 when a cue naming `entityType` sits immediately before the span. */
 function localCueBonus(text: string, start: number, entityType: EntityType | string): number {
-  const before = text.slice(Math.max(0, start - CUE_WINDOW), start);
-  for (const [cuedType, pattern] of LOCAL_CUES) {
-    if (cuedType === entityType && pattern.test(before)) return 1;
-  }
-  return 0;
+  return cuedType(text, start) === entityType ? 1 : 0;
 }
 
 export class RuleEngine {
@@ -215,7 +199,19 @@ export class RuleEngine {
     // but failed the checksum is recorded with its country and entity type;
     // what it is allowed to demote is decided below, once the document's
     // countries are known.
+    //
+    // One kind of failure is rescued rather than recorded: a span the document
+    // itself labels as the very type whose checksum just failed.
+    // "Rijksregisternummer: 85.03.19-284.73" is a Belgian national number with a
+    // bad check digit — mistyped, OCR'd, or invented — and it is still a
+    // national number. Before this, the pattern declined, the generic phone rule
+    // was denied the span as a fragment, and the value was left in the clear: a
+    // redaction library printing an identifier it had recognised and rejected.
+    //
+    // Rescued candidates are still recorded as failed spans, so the demotion
+    // zones and the fragment rule below are unchanged.
     const validated: Array<{ match: RawMatch; hasValidValidator: boolean }> = [];
+    const rescued: RawMatch[] = [];
     const failedSpans: Array<{ start: number; end: number; code: string; etype: string }> = [];
     for (const m of rawMatches) {
       if (this.matcher.validate(m)) {
@@ -223,6 +219,8 @@ export class RuleEngine {
       } else if (m.patternDef.validator !== null && !m.patternDef.requiresContext) {
         failedSpans.push({ start: m.start, end: m.end, code: m.countryCode,
                            etype: String(m.patternDef.entityType) });
+        if (CUE_TARGETS.has(String(m.patternDef.entityType))
+            && cuedType(text, m.start) === m.patternDef.entityType) rescued.push(m);
       }
     }
 
@@ -418,12 +416,72 @@ export class RuleEngine {
         blindPriority = 1;
       }
 
-      const country = (match.countryCode !== "SHARED" && match.countryCode !== "CUSTOM")
+      let entityType: EntityType | string = match.patternDef.entityType;
+      let country = (match.countryCode !== "SHARED" && match.countryCode !== "CUSTOM")
         ? match.countryCode : null;
+      let outOfScope = declared !== null && country !== null && !declared.has(match.countryCode);
+      let confidence = "high";
+
+      // The document labels this span as something else. Relabelling, not
+      // suppression: the span is found either way, so removing the claim would
+      // decide only whether the value is masked — and the answer was "no".
+      // "Rijksregisternummer: 85.03.19-284.73" produced no detection at all.
+      //
+      // The country came from the pattern that matched, and that pattern was
+      // just overruled: a Finnish phone rule saying "Finland" is worthless once
+      // the value is filed as a Cypriot identity number. Dropping it also clears
+      // outOfScope, which would otherwise claim the detection belongs to a
+      // country the caller did not declare while naming no country at all.
+      const retyped = retypedBy(text, match.start, entityType);
+      if (retyped !== null) {
+        entityType = retyped;
+        country = null;
+        outOfScope = false;
+        confidence = "medium";
+      }
+
       candidates.push({
         blindPriority,
         cue: localCueBonus(text, match.start, match.patternDef.entityType),
         priority,
+        length: match.end - match.start,
+        countryScore: countryScores.get(match.countryCode) ?? 0,
+        inScope: declared === null || declared.has(match.countryCode) ? 1 : 0,
+        tier: 0,
+        det: {
+          entityType,
+          start: match.start,
+          end: match.end,
+          text: match.text,
+          source: DetectionSource.RULES,
+          country,
+          confidence,
+          outOfScope,
+        },
+      });
+    }
+
+    // A declined identifier the document itself labels. Cue-backed by
+    // construction, so `cue` is 1 — that is what lets it take a span from a
+    // foreign pattern whose checksum happened to pass, which is how
+    // "ΑΦΜ: 147382965" was reported as a Czech national ID.
+    //
+    // `priority` is 0: below every regex-only claim, so it wins only what
+    // nothing better wants. `blindPriority` is 1 so that span selection — the
+    // country-blind half of the sort — treats it like any other regex-strength
+    // claim and invariant I1 is untouched.
+    //
+    // Emitted as "low", which is the honest description: the shape and the label
+    // agree, the check digit does not. A caller wanting only checksum-backed
+    // detections filters on it.
+    for (const match of rescued) {
+      if (shouldSuppress(text, match, scratch)) continue;
+      const country = (match.countryCode !== "SHARED" && match.countryCode !== "CUSTOM")
+        ? match.countryCode : null;
+      candidates.push({
+        blindPriority: 1,
+        cue: 1,
+        priority: 0,
         length: match.end - match.start,
         countryScore: countryScores.get(match.countryCode) ?? 0,
         inScope: declared === null || declared.has(match.countryCode) ? 1 : 0,
@@ -435,7 +493,7 @@ export class RuleEngine {
           text: match.text,
           source: DetectionSource.RULES,
           country,
-          confidence: "high",
+          confidence: "low",
           outOfScope: declared !== null && country !== null && !declared.has(match.countryCode),
         },
       });

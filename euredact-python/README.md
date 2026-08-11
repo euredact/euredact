@@ -234,12 +234,32 @@ class Detection:
     text: str                      # The matched substring
     source: DetectionSource        # "rules" or "cloud"
     country: str | None            # ISO code of the matched country, or None for shared/custom patterns
-    confidence: str = "high"       # Confidence level
+    confidence: str = "high"       # "high" | "medium" | "low" — see below
     country_confidence: float = 0.0  # How strongly the document supports `country`, in [0, 1].
                                      # 0.0 means the attribution rests on a checksum alone.
     out_of_scope: bool = False       # True when attributed outside the declared `countries`.
                                      # Flagged, never dropped.
 ```
+
+**`confidence`** describes how the *type* was arrived at. It never says anything
+about whether the span is masked — every detection is, at every level.
+
+| value | meaning |
+|---|---|
+| `"high"` | a pattern matched and, where one exists, its checksum passed |
+| `"medium"` | the type comes from a label touching the span, because no pattern of that type claimed it — `Αρ. Ταυτότητας: 00892341` is a `NATIONAL_ID` although nothing can checksum it |
+| `"low"` | a pattern matched, its checksum *failed*, and the document labels the span as that very type — `Rijksregisternummer: 85.03.19-284.73` is a national number with a bad check digit |
+
+Filter on it when you need only checksum-backed detections:
+
+```python
+strict = [d for d in result.detections if d.confidence == "high"]
+```
+
+A `"low"` detection is the honest description of a mistyped, OCR'd or invented
+identifier: the shape and the label agree, the check digit does not. Earlier
+versions dropped these, which meant a redaction library printed in full an
+identifier it had recognised and rejected.
 
 #### `EntityType`
 
@@ -253,8 +273,15 @@ PASSPORT          DRIVERS_LICENSE   RESIDENCE_PERMIT  LICENSE_PLATE
 VIN               VAT               POSTAL_CODE       IP_ADDRESS
 IPV6_ADDRESS      MAC_ADDRESS       HEALTH_INSURANCE  HEALTHCARE_PROVIDER
 CHAMBER_OF_COMMERCE  IMEI          GPS_COORDINATES   UUID
-SOCIAL_HANDLE     SECRET            OTHER
+SOCIAL_HANDLE     SECRET            INTERNAL_ID       OTHER
 ```
+
+`INTERNAL_ID` — an employee, badge or customer number tied to a person — is
+emitted **only** when an explicit label names it (`medarbejdernummer:`,
+`Personalnummer:`, `Employee No:`). There is no pattern for one, because there
+is no shape for one: without the label, a digit run is not distinguishable from
+any other. The type exists so that a labelled employee number is filed
+correctly instead of being claimed by the phone pattern.
 
 For custom patterns registered via `add_custom_pattern()`, `entity_type` is a
 plain string (e.g. `"EMPLOYEE_ID"`) rather than an `EntityType` enum member.
