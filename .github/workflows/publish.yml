@@ -114,4 +114,24 @@ jobs:
       # blank (this job declares none; if one is configured there it must
       # match). Provenance is implicit under trusted publishing; the flag is
       # kept so the intent survives if the auth method ever changes back.
-      - run: npm publish --access public --provenance
+      #
+      # Skipped when the registry already serves this version, which is the
+      # mirror of `skip-existing: true` on publish-python and makes a re-run of
+      # the whole workflow idempotent in the other direction too. The 0.3.8
+      # release is why: npm published from the tag and PyPI rejected the build,
+      # so the recovery dispatch had to re-enter a job whose npm publish could
+      # only fail with "cannot publish over the previously published versions"
+      # — a red run reporting a registry that was already correct.
+      #
+      # `npm view` is the check rather than a build-local guess because the
+      # registry is the only authority on what it already holds. It exits
+      # non-zero for an unpublished version, so failure means "go ahead".
+      - name: Publish to npm unless the version is already there
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          if npm view "euredact@${version}" version >/dev/null 2>&1; then
+            echo "euredact@${version} is already on the registry; skipping publish."
+          else
+            npm publish --access public --provenance
+          fi
