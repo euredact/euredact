@@ -71,7 +71,13 @@ jobs:
         with:
           name: python-dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
+      # v1.14.0 carried twine 6.1.0, which rejects Metadata-Version 2.5 and so
+      # failed the 0.3.8 publish once hatchling started emitting it. v1.14.2
+      # carries twine 7.0.0, which accepts it. This pin and the hatchling
+      # ceiling in euredact-python/pyproject.toml are two halves of one
+      # decision — the backend emits the metadata this action validates, so
+      # bump them together or the next metadata version repeats that outage.
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
         with:
           packages-dir: dist/
           # Makes the workflow idempotent: a half-failed release (PyPI up, npm

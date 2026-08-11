@@ -1,15 +1,21 @@
 [build-system]
-# Capped below 1.32 deliberately. hatchling 1.32.0, released 2026-08-11, raised
-# the emitted Metadata-Version from 2.4 to 2.5; the publishing action is pinned
-# by digest to pypa/gh-action-pypi-publish v1.14.0, whose twine rejects that
-# with "'2.5' is not a valid metadata version". The 0.3.8 publish failed there
-# after building and testing clean.
+# The ceiling is coupled to the publishing action, and the two move together.
 #
-# The asymmetry is the actual defect: the action was pinned by digest while the
-# backend that produces what it validates was unbounded, so a hatchling release
-# uploaded hours earlier broke a release without a line of this repository
-# changing. Raise this ceiling and the action pin together, never separately.
-requires = ["hatchling>=1.27,<1.32"]
+# This backend decides the Metadata-Version of what gets built; the twine inside
+# pypa/gh-action-pypi-publish decides which ones it will accept. That action is
+# pinned by digest, so it does not learn new metadata versions on its own. While
+# this line was unbounded the two drifted apart: hatchling 1.32.0 landed on
+# 2026-08-11 emitting Metadata-Version 2.5, and the digest-pinned v1.14.0 —
+# carrying twine 6.1.0 — rejected it with "'2.5' is not a valid metadata
+# version", failing the 0.3.8 publish after it had built and tested clean.
+#
+# v1.14.2 carries twine 7.0.0, whose release notes name metadata 2.5 support, so
+# 1.32 is admitted here. The bound stays because an unbounded backend paired with
+# a pinned validator is the shape of that outage: the next metadata version would
+# reach a validator that predates it. When raising it, raise the action pin in
+# .github/workflows/publish.yml in the same change and confirm the new twine
+# accepts what the new hatchling emits.
+requires = ["hatchling>=1.27,<1.33"]
 build-backend = "hatchling.build"
 
 [project]
