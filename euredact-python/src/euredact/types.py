@@ -15,7 +15,8 @@ class EntityType(str, Enum):
     redacted text — is the canonical name.
     """
 
-    NAME = "NAME"  # [CLOUD EXTENSION]
+    PERSON_NAME = "PERSON_NAME"  # [CLOUD EXTENSION]
+    NAME = "PERSON_NAME"  # legacy alias -> PERSON_NAME
     ADDRESS = "ADDRESS"  # [CLOUD EXTENSION]
     BANK_ACCOUNT = "BANK_ACCOUNT"
     IBAN = "BANK_ACCOUNT"  # legacy alias -> BANK_ACCOUNT
@@ -55,6 +56,22 @@ class EntityType(str, Enum):
     UUID = "UUID"
     SOCIAL_HANDLE = "SOCIAL_HANDLE"
     SECRET = "SECRET"
+
+    # [CLOUD EXTENSION] Types only the cloud tier can detect. The rule engine
+    # never emits these -- there is no shape to match on -- which is exactly why
+    # they exist: the model's job is what the rules cannot catch. Present in the
+    # enum so a cloud detection is a first-class Detection rather than a bare
+    # string, and named to match the detection canon the service returns.
+    ORGANISATION_NAME = "ORGANISATION_NAME"
+    JOB_TITLE = "JOB_TITLE"
+    MEDICAL_CONDITION = "MEDICAL_CONDITION"
+    SENSITIVE_ATTRIBUTE = "SENSITIVE_ATTRIBUTE"
+    BIOMETRIC_REF = "BIOMETRIC_REF"
+    FINANCIAL_AMOUNT = "FINANCIAL_AMOUNT"
+    QUASI_IDENTIFIER = "QUASI_IDENTIFIER"
+    CREDENTIAL = "CREDENTIAL"
+    URL = "URL"
+
     OTHER = "OTHER"
 
     @classmethod
@@ -72,6 +89,15 @@ class EntityType(str, Enum):
 # legacy_aliases). The engine never *emits* these names.
 LEGACY_TYPE_ALIASES: dict[str, str] = {
     "IBAN": "BANK_ACCOUNT",
+    # The cloud extension shipped as NAME while the detection canon the service
+    # is trained and evaluated against calls it PERSON_NAME. Renamed rather than
+    # translated at the boundary: two names for one type is how a whole category
+    # goes missing when someone filters on the spelling they happened to know.
+    # Nothing could depend on the old value -- the cloud tier was stubbed, so
+    # NAME was never emitted by anything.
+    "NAME": "PERSON_NAME",
+    "STREET_ADDRESS": "ADDRESS",
+    "NATIONALITY_ETHNICITY": "SENSITIVE_ATTRIBUTE",
 }
 
 

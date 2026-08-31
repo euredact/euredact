@@ -34,7 +34,8 @@ console.log(result.detections);
 ## Features
 
 - **31 European countries** with country-specific patterns
-- **25+ PII entity types:** national IDs, IBANs, phone numbers, email, VAT
+- **41 PII entity types** (30 from the rules engine, 11 from the
+  [cloud tier](#cloud-tier)): national IDs, IBANs, phone numbers, email, VAT
   numbers, license plates, credit cards, BIC/SWIFT, VIN, IMEI, GPS coordinates,
   UUIDs, social handles, IP/IPv6, MAC addresses, secrets/API keys, and more
 - **Secret/API key detection:** known-prefix patterns for AWS, GitHub, Stripe,
@@ -218,7 +219,7 @@ interface RedactResult {
 String enum with all supported PII categories:
 
 ```
-NAME              ADDRESS           BANK_ACCOUNT      BIC
+PERSON_NAME       ADDRESS           BANK_ACCOUNT      BIC
 CREDIT_CARD       PHONE             EMAIL             DOB
 DATE_OF_DEATH     NATIONAL_ID       SSN               TAX_ID
 PASSPORT          DRIVERS_LICENSE   RESIDENCE_PERMIT  LICENSE_PLATE
@@ -226,6 +227,13 @@ VIN               VAT               POSTAL_CODE       IP_ADDRESS
 IPV6_ADDRESS      MAC_ADDRESS       HEALTH_INSURANCE  HEALTHCARE_PROVIDER
 CHAMBER_OF_COMMERCE  IMEI          GPS_COORDINATES   UUID
 SOCIAL_HANDLE     SECRET            INTERNAL_ID       OTHER
+
+Cloud tier only — the rule engine never emits these, because there is no shape
+to match on. That is precisely why the model exists:
+
+ORGANISATION_NAME JOB_TITLE         MEDICAL_CONDITION SENSITIVE_ATTRIBUTE
+BIOMETRIC_REF     FINANCIAL_AMOUNT  QUASI_IDENTIFIER  CREDENTIAL
+URL
 ```
 
 `INTERNAL_ID` — an employee, badge or customer number tied to a person — is
@@ -263,6 +271,65 @@ A label never moves a span; it only decides the label. Which characters are
 masked is unchanged either way.
 
 For custom patterns, `entityType` is a plain string (e.g. `"EMPLOYEE_ID"`).
+
+## Cloud tier
+
+> **Status: private alpha.** The cloud tier is in closed testing — it is **not**
+> in public beta and is not generally available. Keys are issued to alpha
+> participants only, and the request/response surface may still change between
+> releases. The rules engine below is unaffected and is the supported path:
+> `mode="rules"` is the default and carries no alpha caveat.
+
+The rule engine catches what has a shape: IBANs, national IDs, phone numbers,
+anything with a checksum. It cannot catch what does not — a person's name, an
+employer, a diagnosis, a job title. The cloud tier adds a fine-tuned model
+asked only *what did the rules miss?*
+
+```ts
+import { configure, redactAsync } from "euredact";
+
+configure({ apiKey: "erk_..." });               // or set EUREDACT_API_KEY
+const result = await redactAsync(text, { countries: ["BE"], mode: "cloud" });
+
+result.source;                                   // "cloud"
+result.detections.map(d => [d.entityType, d.text]);
+// [["PERSON_NAME", "Bas Verhoeven"], ["PHONE", "+32 ..."]]
+```
+
+**`redact()` is synchronous and cannot serve the cloud tier**, so
+`redact(text, { mode: "cloud" })` throws and names `redactAsync`. It never
+falls back to rules-only output: a caller who believes names and diagnoses were
+checked, and ships a document that only had its phone numbers masked, is the
+one failure this library must not have.
+
+`redactAsync` with `mode: "rules"` resolves immediately with exactly what
+`redact()` returns, so a caller that may or may not use the cloud tier can hold
+one code path.
+
+Retries carry an `Idempotency-Key`, so a retry after a timeout cannot bill
+twice. `Retry-After` is obeyed. A document that outlives the service's sync
+window is polled transparently. Oversized input rejects with `TooLargeError`
+(413): the service refuses it rather than chunking, because the model has never
+seen a chunk boundary.
+
+Options the service cannot honour reject rather than being ignored: multiple
+`countries`, `countryHint`, `context`/`chunkOffset` and `referentialIntegrity`.
+
+The package stays **zero-dependency** — the client uses the platform's own
+`fetch`. Node 18+ provides one; on Node 16 the rules engine is unaffected and a
+`fetchImpl` can be supplied.
+
+## `NAME` is now `PERSON_NAME`
+
+The canonical type name is `PERSON_NAME`; `NAME` is a legacy alias, exactly as
+`IBAN` aliases `BANK_ACCOUNT`. The placeholder written into redacted text is
+`[PERSON_NAME]`.
+
+Nothing could have depended on the old value: the type is cloud-only and the
+cloud tier was stubbed until this release, so it was never emitted. Code
+matching the *string* `"NAME"` should be updated; `LEGACY_TYPE_ALIASES`
+publishes the mapping, and `STREET_ADDRESS` → `ADDRESS` and
+`NATIONALITY_ETHNICITY` → `SENSITIVE_ATTRIBUTE` are recognised the same way.
 
 ## Country codes
 
@@ -314,8 +381,9 @@ redact("Rekening: BE68 5390 0754 7034", { countries: ["AT"] });
 ### Which country a value belongs to
 
 Because every pattern runs, the same digits often match several countries'
-schemes. 36.6% of national-ID values in our corpus validate under more than one
-country's checksum, so the digits alone cannot decide it — the *document* does.
+schemes. Of the national-ID values in our corpus that pass any country's checksum,
+34.7% pass more than one country's (32,827 of 94,528), so the digits alone
+cannot decide it — the *document* does.
 
 The engine infers the document's countries from entities that carry their
 country in the string, then uses that to resolve the ambiguity:
@@ -623,18 +691,24 @@ Two tiers are less obvious than they look:
 
 ## Performance
 
-Measured on one core, all 31 countries loaded, `detectDates: true`. Cost scales
-with document length, so the input size is stated rather than averaged away.
+Measured on one core (Apple Silicon M3 Pro, Node 22.12), all 31 countries
+loaded, `detectDates: true`, cache off, over two cohorts sampled evenly from the
+corpus: 3,000 distinct short records and 611 distinct real documents. Median per
+document, 10th–90th percentile in brackets:
 
 | Input | Latency | Throughput |
 |---|---:|---:|
-| Short record (186 chars) | 155 µs | 6,462 docs/s |
-| Real document (3,424 chars) | 1.56 ms | 643 docs/s |
+| Short record (~190 chars) | 154 µs <br><sub>89 – 237</sub> | 6,494 docs/s |
+| Real document (~3,450 chars) | 1.43 ms <br><sub>1.04 – 1.96</sub> | 699 docs/s |
+
+Cost tracks identifier density rather than length: the per-candidate cue and
+suppressor checks dominate, so a form-like document dense in national IDs costs
+several times an ordinary chat log of the same size.
 
 No optional accelerator is needed or offered. The Python SDK ships an
 `[fast]` extra (RE2 / Aho-Corasick) because CPython's regex engine is the
 bottleneck there; V8's has literal prefilters that make it unnecessary here.
-Measured on the same 611 documents, this SDK runs about 3× faster than the
+Measured on the same 611 documents, this SDK runs about 6–7× faster than the
 accelerated Python path, so adding a native addon — and with it the loss of
 bundler, edge-runtime and Deno compatibility — would buy nothing.
 

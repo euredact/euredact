@@ -20,7 +20,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "euredact"
-version = "0.3.9"
+version = "0.4.0"
 description = "European PII redaction SDK — rule engine for 31 countries"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -47,6 +47,9 @@ classifiers = [
     "Topic :: Text Processing",
     "Typing :: Typed",
 ]
+# Intentionally empty. The rule engine is pure Python and drops into locked-down
+# environments without an argument; the optional extras below are what cost
+# anything. Keep it that way.
 dependencies = []
 
 [project.urls]
@@ -61,12 +64,18 @@ Changelog = "https://github.com/euredact/euredact/blob/main/euredact-python/CHAN
 Issues = "https://github.com/euredact/euredact/issues"
 
 [project.optional-dependencies]
+# The cloud tier speaks HTTP; nothing else in the package does.
+cloud = ["httpx>=0.27"]
 fast = ["pyahocorasick>=2.0.0", "google-re2>=1.1"]
-cloud = []
 coref = []
 dev = [
     "pyahocorasick>=2.0.0",
     "google-re2>=1.1",
+    # tests/test_cloud.py opens with importorskip("httpx"), so without this the
+    # 27 cloud tests do not fail in CI -- they vanish, and the run stays green.
+    # CI installs .[dev] and nothing else, so the cloud tier's only automated
+    # coverage hangs off this line.
+    "httpx>=0.27",
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "pytest-benchmark",

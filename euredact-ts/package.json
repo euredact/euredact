@@ -1,6 +1,6 @@
 {
   "name": "euredact",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "description": "European PII redaction SDK -- fast, zero-dependency, rule-based detection and redaction of personal data across 31 European countries",
   "homepage": "https://euredact.dev",
   "license": "Apache-2.0",
@@ -54,7 +54,7 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "postbuild:cjs": "echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
-    "test": "npm run test:spec && npm run test:inference && npm run test:conformance",
+    "test": "npm run test:spec && npm run test:inference && npm run test:cloud && npm run test:conformance",
     "benchmark": "node --import tsx src/__tests__/benchmark.ts",
     "prepublishOnly": "npm run build",
     "test:spec": "node --import tsx src/__tests__/spec.ts",
@@ -62,7 +62,8 @@
     "test:eval:full": "node --max-old-space-size=8192 --import tsx src/__tests__/evalFull.ts",
     "test:conformance": "node --import tsx src/__tests__/conformance.ts",
     "test:inference": "node --import tsx src/__tests__/inference.ts",
-    "dump": "node --import tsx src/__tests__/dump.ts"
+    "dump": "node --import tsx src/__tests__/dump.ts",
+    "test:cloud": "node --import tsx src/__tests__/cloud.ts"
   },
   "devDependencies": {
     "@types/node": "22.10.2",

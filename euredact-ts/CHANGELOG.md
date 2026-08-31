@@ -1,5 +1,118 @@
 # Changelog
 
+## 0.4.0 (2026-08-31)
+
+The cloud tier, brought in line with the Python SDK. **It ships in private
+alpha:** closed testing, keys issued to alpha participants only, not public beta
+and not generally available. The rules engine is unaffected and `mode: "rules"`
+remains the default.
+
+This mirrors `euredact-python`'s 0.4.0 entry — the two SDKs ship the same type
+canon, the same error hierarchy and the same retry, idempotency and polling
+semantics, and `src/__tests__/cloud.ts` mirrors `tests/test_cloud.py` so they
+cannot drift silently.
+
+```ts
+import { configure, redactAsync } from "euredact";
+
+configure({ apiKey: "erk_..." });                       // or EUREDACT_API_KEY
+const result = await redactAsync(text, { countries: ["BE"], mode: "cloud" });
+```
+
+Detection accuracy of the local rules engine is unchanged: all 400 pre-existing
+tests pass untouched, including the 149 conformance tests built from the 147
+shared vectors. The suite is now **427** tests (155 spec + 96 inference + 27
+cloud + 149 conformance). **The package remains zero-dependency** — the cloud
+client uses the platform's own `fetch`.
+
+Cross-SDK masking parity was re-measured rather than carried forward: **0.30%**
+divergence over 2,000 documents (11,272 identically masked spans, type
+divergence 0.00%), and **0.41%** over the entire 204,327-document corpus
+(1,167,027 identically masked spans). The 0.61% quoted in the 0.3.8 notes and
+repeated in 0.3.9 does not reproduce on the current corpus and is superseded by
+these figures.
+
+The property sweep was run over every document rather than the sampled default:
+all 204,327 hold every structural property (offsets, non-overlap, determinism,
+cache transparency, and `countries` never changing which spans are found).
+
+### Fixed
+
+- **`redact({ mode: "cloud" })` silently returned rules-only output.** No error,
+  no warning, `source: "rules"`, and a plausible-looking redacted document with
+  every person name still in it. The caller believes names, employers and
+  diagnoses were checked, and ships it.
+
+  `redact()` is synchronous and a cloud call cannot be, so it now **throws** and
+  names the async entry point. An unknown `mode` throws too, instead of being
+  treated as `"rules"`.
+
+### Added
+
+- `configure({ apiKey, baseUrl, ... })`, reading `EUREDACT_API_KEY` and
+  `EUREDACT_BASE_URL` so a key never has to be written into source.
+- `redactAsync(text, options)` and `EuRedact#redactAsync`. With
+  `mode: "rules"` it resolves immediately with exactly what `redact()` returns,
+  so a caller that may or may not use the cloud tier can hold one code path.
+- `CloudClient`, which retries with full jitter, obeys `Retry-After` rather than
+  second-guessing it, and sends an `Idempotency-Key` per document so a retry
+  after a timeout cannot create a second job or bill twice. A document that
+  outlives the service's sync window returns a job handle, which the client
+  polls transparently — callers never write that branch.
+- `TooLargeError` (413, permanent — the service refuses oversized input rather
+  than chunking, because the model has never seen a chunk boundary),
+  `QuotaExceededError` (429), `NotConfiguredError`, and `CloudError`.
+- Nine cloud-only entity types, matching the detection canon the service is
+  trained and evaluated against: `ORGANISATION_NAME`, `JOB_TITLE`,
+  `MEDICAL_CONDITION`, `SENSITIVE_ATTRIBUTE`, `BIOMETRIC_REF`,
+  `FINANCIAL_AMOUNT`, `QUASI_IDENTIFIER`, `CREDENTIAL`, `URL`. The rule engine
+  never emits these — there is no shape to match on, which is precisely why the
+  model exists.
+- `canonicalType(name)`, mirroring `EntityType._missing_` in Python. An
+  unrecognised name is returned unchanged rather than dropped: a client one
+  release behind the service must not silently lose a whole category of PII.
+
+### Changed
+
+- **`EntityType.NAME` is now a legacy alias of `EntityType.PERSON_NAME`**, the
+  name the detection canon uses, following the existing `IBAN` →
+  `BANK_ACCOUNT` precedent. `EntityType.NAME` keeps working;
+  `String(EntityType.NAME)` is now `"PERSON_NAME"`. Nothing could have depended
+  on the old value: the type was cloud-only and the cloud tier was stubbed, so
+  it was never emitted.
+
+  Two names for one type is how a whole category goes missing when someone
+  filters on the spelling they happened to know. `STREET_ADDRESS` → `ADDRESS`
+  and `NATIONALITY_ETHNICITY` → `SENSITIVE_ATTRIBUTE` are recognised as aliases
+  for the same reason.
+- Options the service cannot honour now reject in cloud mode rather than being
+  ignored: multiple `countries`, `countryHint`, `context`/`chunkOffset` and
+  `referentialIntegrity`. Silently dropping one returns a result that is not
+  what was asked for. `detectDates` is the deliberate exception — the service
+  always runs with dates on, because that is what the model was trained
+  against, and the difference can only cause *more* to be detected.
+
+### Known issues
+
+- **One cross-SDK type disagreement, visible only at full-corpus scale.** Over
+  all 204,327 documents the two engines masked 1,167,027 spans identically and
+  disagreed on the type of exactly one: a Hungarian address-like email,
+  `vezetéknév.keresztnév@vallalat.hu`, which Python files as `EMAIL` and Node as
+  `SECRET`. Both mask precisely the same characters, so no PII is exposed by it.
+
+  It is **not new in 0.4.0** — a build from the 0.3.9 tree reproduces the same
+  `SECRET`, and this release changes no detection code in either SDK. The
+  default `make parity` sample of 2,000 documents does not contain the document,
+  which is why the gate is green at its configured limit and only the full
+  corpus surfaces it. Left unfixed deliberately: 0.4.0 adds a network tier and
+  must not move a rules detection. Tracked for a following release.
+
+### Notes
+
+- The cloud tier needs a global `fetch`. Node 18+ provides one; on Node 16 the
+  rules engine is unaffected and a `fetchImpl` can be supplied. `engines` is
+  unchanged at `>=16.0.0` so rules-only users are not pushed to upgrade.
+
 ## 0.3.9 (2026-08-11)
 
 The labels the corpus actually contains, and the gate that should have caught

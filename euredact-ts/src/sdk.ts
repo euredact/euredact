@@ -84,6 +84,50 @@ export interface RedactOptions {
 const DEFAULT_MAX_INPUT_LENGTH = 10_485_760;  // ~10 MB of text
 
 /**
+ * Send a document to the cloud tier.
+ *
+ * Options the service cannot honour throw rather than being ignored. Silently
+ * dropping one would mean returning a result that does not match what was
+ * asked for — which, for anything that changes which spans come back, is
+ * under-redaction wearing a plausible face.
+ */
+async function redactViaCloud(
+  text: string,
+  options: RedactOptions,
+): Promise<RedactResult> {
+  const { CloudClient } = await import("./cloud/client.js");
+  const countries = options.countries ?? null;
+
+  if (!countries || countries.length !== 1) {
+    throw new Error(
+      'cloud mode needs exactly one country, e.g. { countries: ["BE"] }. The ' +
+      "model is trained and evaluated per country, so a multi-country request " +
+      "has no defined behaviour.",
+    );
+  }
+  if (options.countryHint) {
+    throw new Error("countryHint is not supported in cloud mode");
+  }
+  if (options.context || options.chunkOffset) {
+    throw new Error(
+      "context/chunkOffset are not supported in cloud mode: the model has never " +
+      "seen a chunk boundary, so the service rejects oversized input rather " +
+      "than splitting it",
+    );
+  }
+  if (options.referentialIntegrity) {
+    throw new Error("referentialIntegrity is not supported in cloud mode");
+  }
+
+  // detectDates is deliberately NOT forwarded. The service always runs its
+  // rules engine with dates on, because that is what the model was trained
+  // against; the caller's value cannot change that. It is the one ignored
+  // option that is safe to ignore — it can only cause MORE to be detected,
+  // never less, so it cannot produce under-redaction.
+  return new CloudClient().redact(text, { country: countries[0] });
+}
+
+/**
  * Reject a bare string where a list of country codes is expected.
  *
  * `countries: "NL"` is iterable, so it walks into the codes "N" and "L".
@@ -137,6 +181,24 @@ export class EuRedact {
   redact(text: string, options: RedactOptions = {}): RedactResult {
     checkCountryArg(options.countries, "countries");
     checkCountryArg(options.countryHint, "countryHint");
+
+    const requestedMode = options.mode ?? "rules";
+    if (requestedMode === "cloud") {
+      // Cannot be served synchronously: the cloud tier is a network call, and
+      // returning rules-only output instead would be the silent under-redaction
+      // this guard exists to prevent. Point at the async entry point rather
+      // than inventing a Promise-or-value union return type.
+      throw new Error(
+        'mode: "cloud" is asynchronous — use redactAsync(text, { mode: "cloud" }) ' +
+        "(or EuRedact#redactAsync). redact() is synchronous and can only serve " +
+        'mode: "rules".',
+      );
+    }
+    if (requestedMode !== "rules") {
+      throw new Error(
+        `unknown mode ${JSON.stringify(requestedMode)}: expected "rules" or "cloud"`,
+      );
+    }
 
     if (text.length > this.maxInputLength) {
       throw new Error(
@@ -248,6 +310,18 @@ export class EuRedact {
     }
 
     return result;
+  }
+
+  /**
+   * Redact, awaiting the cloud tier when `mode: "cloud"` is asked for.
+   *
+   * `mode: "rules"` resolves immediately with exactly what `redact()` returns,
+   * so callers that may or may not use the cloud tier can hold one code path.
+   */
+  async redactAsync(text: string, options: RedactOptions = {}): Promise<RedactResult> {
+    const mode = options.mode ?? "rules";
+    if (mode !== "cloud") return this.redact(text, options);
+    return redactViaCloud(text, options);
   }
 
   redactBatch(texts: string[], options: RedactOptions = {}): RedactResult[] {

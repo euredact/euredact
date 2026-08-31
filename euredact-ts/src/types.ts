@@ -1,5 +1,20 @@
 export enum EntityType {
-  NAME = "NAME",
+  /**
+   * Canonical name for a person's name. `NAME` is kept below as a legacy alias
+   * with the same value, exactly as `IBAN` aliases `BANK_ACCOUNT`, so
+   * `EntityType.NAME === EntityType.PERSON_NAME` and existing code keeps
+   * working — but the emitted value, and therefore the `[PERSON_NAME]`
+   * placeholder written into redacted text, is canonical.
+   *
+   * Renamed rather than translated at the cloud boundary: two names for one
+   * type is how a whole category goes missing when someone filters on the
+   * spelling they happened to know. Nothing could have depended on the old
+   * value — the type is cloud-only and the cloud tier was stubbed, so it was
+   * never emitted.
+   */
+  PERSON_NAME = "PERSON_NAME",
+  /** @deprecated legacy alias of {@link EntityType.PERSON_NAME} */
+  NAME = "PERSON_NAME",
   ADDRESS = "ADDRESS",
   /**
    * Canonical name for a bank account identifier. `IBAN` is kept below as a
@@ -47,6 +62,22 @@ export enum EntityType {
   UUID = "UUID",
   SOCIAL_HANDLE = "SOCIAL_HANDLE",
   SECRET = "SECRET",
+
+  // ── [CLOUD EXTENSION] ────────────────────────────────────────────────────
+  // Types only the cloud tier can detect. The rule engine never emits these —
+  // there is no shape to match on — which is exactly why they exist: the
+  // model's job is what the rules cannot catch. Named to match the detection
+  // canon the service is trained and evaluated against.
+  ORGANISATION_NAME = "ORGANISATION_NAME",
+  JOB_TITLE = "JOB_TITLE",
+  MEDICAL_CONDITION = "MEDICAL_CONDITION",
+  SENSITIVE_ATTRIBUTE = "SENSITIVE_ATTRIBUTE",
+  BIOMETRIC_REF = "BIOMETRIC_REF",
+  FINANCIAL_AMOUNT = "FINANCIAL_AMOUNT",
+  QUASI_IDENTIFIER = "QUASI_IDENTIFIER",
+  CREDENTIAL = "CREDENTIAL",
+  URL = "URL",
+
   OTHER = "OTHER",
 }
 
@@ -57,7 +88,22 @@ export enum EntityType {
  */
 export const LEGACY_TYPE_ALIASES: Record<string, string> = {
   IBAN: "BANK_ACCOUNT",
+  NAME: "PERSON_NAME",
+  STREET_ADDRESS: "ADDRESS",
+  NATIONALITY_ETHNICITY: "SENSITIVE_ATTRIBUTE",
 };
+
+/**
+ * Resolve a possibly-legacy type name to its canonical form.
+ *
+ * Mirrors `EntityType._missing_` in the Python SDK. An unrecognised name is
+ * returned unchanged rather than dropped: a client one release behind the
+ * service must not silently lose a whole category of PII.
+ */
+export function canonicalType(name: string): string {
+  const upper = String(name ?? "").trim().toUpperCase();
+  return LEGACY_TYPE_ALIASES[upper] ?? upper;
+}
 
 export enum DetectionSource {
   RULES = "rules",

@@ -22,8 +22,9 @@ from __future__ import annotations
 
 from typing import Iterator
 
-__version__ = "0.3.9"
+__version__ = "0.4.0"
 
+from euredact.cloud.config import configure
 from euredact.rules.bic_registry import set_bic_registry
 from euredact.rules.context import DocumentContext
 from euredact.sdk import EuRedact
@@ -32,6 +33,7 @@ from euredact.types import Detection, DetectionSource, EntityType, RedactResult
 __all__ = [
     "__version__",
     "add_custom_pattern",
+    "configure",
     "aredact",
     "aredact_batch",
     "available_countries",

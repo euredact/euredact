@@ -1,5 +1,141 @@
 # Changelog
 
+## 0.4.0 (2026-08-31)
+
+The cloud tier, which the package has advertised since 0.3.x and never had.
+**It ships in private alpha:** closed testing, keys issued to alpha
+participants only, not public beta and not generally available. The rules
+engine is unaffected and `mode="rules"` remains the default.
+
+`redact(mode="cloud")` sends the document to the euRedact inference service: the
+same deterministic rules engine, followed by a fine-tuned model asked only *what
+did the rules miss?* It returns the redacted document and located spans, so the
+types marked `[CLOUD EXTENSION]` — person names, organisations, job titles,
+diagnoses — are populated for the first time.
+
+```python
+pip install 'euredact[cloud]'
+
+import euredact
+euredact.configure(api_key="erk_...")          # or EUREDACT_API_KEY
+result = euredact.redact(text, countries=["BE"], mode="cloud")
+```
+
+Detection accuracy of the local rules engine is unchanged. Nothing in
+`mode="rules"` — the default — behaves differently, and `dependencies` is still
+empty: the HTTP client lives behind the new `cloud` extra.
+
+All 841 pre-existing tests pass untouched; the suite is now **868** with the 27
+new cloud tests. Detection was proved unchanged rather than assumed: every one
+of the 152,300 corpus documents was run through the published 0.3.9 and through
+this build, under both `detect_dates` settings — 304,600 runs, 1,387,430
+detections — and the `(type, start, end, text, source)` tuples plus
+`redacted_text` hash identically under SHA-256
+(`546e681a4eb0ad7abf69bc5623af51c7c5b1de0d4cb2603492ccfa04c4a20763`).
+
+Cross-SDK masking parity was re-measured rather than carried forward: **0.30%**
+divergence over 2,000 documents (11,272 identically masked spans, type
+divergence 0.00%), and **0.41%** over the entire 204,327-document corpus
+(1,167,027 identically masked spans). The 0.61% quoted in the 0.3.8 notes and
+repeated in 0.3.9 does not reproduce on the current corpus and is superseded by
+these figures.
+
+The property sweep was run over every document rather than the sampled default:
+all 204,327 hold every structural property (offsets, non-overlap, determinism,
+cache transparency, and `countries` never changing which spans are found).
+
+### Fixed
+
+- **`redact(mode="cloud")` silently returned rules-only output.** No error, no
+  warning, `source="rules"`, and a plausible-looking redacted document with
+  every person name still in it. The guard that should have caught this —
+  `NotConfiguredError`, whose message already read *"Call
+  euredact.configure(api_key=...) first"* — was unreachable, because nothing
+  ever constructed `CloudClient` and `euredact.configure()` did not exist.
+
+  This is the worst failure shape this library can have: the caller believes
+  names, employers and diagnoses were checked, sees a redacted document, and
+  ships it. It now raises `NotConfiguredError`, and an unknown `mode` raises
+  `ValueError` instead of being treated as `"rules"`.
+
+### Added
+
+- `euredact.configure(api_key=..., base_url=..., ...)`, reading
+  `EUREDACT_API_KEY` and `EUREDACT_BASE_URL` so a key never has to be written
+  into source.
+- `euredact.cloud.CloudClient` and `AsyncCloudClient`. Both retry with full
+  jitter, obey `Retry-After` rather than second-guessing it, and send an
+  `Idempotency-Key` per document so a retry after a timeout cannot create a
+  second job or bill twice. A document that outlives the service's sync window
+  returns a job handle, which the client polls transparently — callers never
+  write that branch.
+- `TooLargeError` (413, permanent — the service refuses oversized input rather
+  than chunking, because the model has never seen a chunk boundary),
+  `QuotaExceededError` (429), and `CloudError` for everything else.
+- Nine cloud-only entity types, matching the detection canon the service is
+  trained and evaluated against: `ORGANISATION_NAME`, `JOB_TITLE`,
+  `MEDICAL_CONDITION`, `SENSITIVE_ATTRIBUTE`, `BIOMETRIC_REF`,
+  `FINANCIAL_AMOUNT`, `QUASI_IDENTIFIER`, `CREDENTIAL`, `URL`. The rule engine
+  never emits these — there is no shape to match on, which is precisely why the
+  model exists.
+
+### Changed
+
+- **`EntityType.NAME` is now a legacy alias of `EntityType.PERSON_NAME`**, the
+  name the detection canon uses, following the existing `IBAN` →
+  `BANK_ACCOUNT` precedent. `EntityType.NAME` keeps working and
+  `EntityType("NAME")` still resolves; `EntityType.NAME.value` is now
+  `"PERSON_NAME"`. Nothing could have depended on the old value: the type was
+  cloud-only and the cloud tier was stubbed, so it was never emitted.
+
+  Two names for one type is how a whole category goes missing when someone
+  filters on the spelling they happened to know. `STREET_ADDRESS` →
+  `ADDRESS` and `NATIONALITY_ETHNICITY` → `SENSITIVE_ATTRIBUTE` are recognised
+  as aliases for the same reason.
+- Options the service cannot honour now raise in cloud mode rather than being
+  ignored: multiple `countries`, `country_hint`, `context`/`chunk_offset`,
+  `referential_integrity` and `coref`. Silently dropping one returns a result
+  that is not what was asked for. `detect_dates` is the deliberate exception —
+  the service always runs with dates on, because that is what the model was
+  trained against, and the difference can only cause *more* to be detected.
+
+### Removed
+
+- `euredact.cloud.hasher` and `euredact.cloud.shuffler`. Both were empty stubs
+  describing segment hashing and cross-client shuffling — a privacy
+  architecture the service does not implement. Leaving them in place implied a
+  guarantee that was never made.
+
+### Known issues
+
+- **One cross-SDK type disagreement, visible only at full-corpus scale.** Over
+  all 204,327 documents the two engines masked 1,167,027 spans identically and
+  disagreed on the type of exactly one: a Hungarian address-like email,
+  `vezetéknév.keresztnév@vallalat.hu`, which Python files as `EMAIL` and Node as
+  `SECRET`. Both mask precisely the same characters, so no PII is exposed by it.
+
+  It is **not new in 0.4.0** — a build from the 0.3.9 tree reproduces the same
+  `SECRET`, and this release changes no detection code in either SDK. The
+  default `make parity` sample of 2,000 documents does not contain the document,
+  which is why the gate is green at its configured limit and only the full
+  corpus surfaces it. Left unfixed deliberately: 0.4.0 adds a network tier and
+  must not move a rules detection. Tracked for a following release.
+
+### Note for operators of the inference stack
+
+**Shipping 0.4.0 is not a reason to upgrade the euRedact inference gateway.**
+
+The gateway pins `euredact[fast]==0.3.9` exactly, because the rules-engine
+version is part of the served model's training contract: the gateway refuses to
+serve when a model bundle's `euredact_version` does not match the installed
+package. Upgrading it to 0.4.0 without a matching rebuilt model bundle takes it
+out of service.
+
+Nothing in 0.4.0 gives the gateway a reason to move. The cloud client is what
+*calls* the service; the gateway is the server, and does not use it. Detection
+behaviour is byte-identical to 0.3.9 (verified over the full 152,300-document
+corpus, both `detect_dates` settings), so there is no accuracy argument either.
+
 ## 0.3.9 (2026-08-11)
 
 The labels the corpus actually contains, and the gate that should have caught

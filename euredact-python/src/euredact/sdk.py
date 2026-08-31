@@ -146,6 +146,19 @@ class EuRedact:
         check_country_arg(countries, "countries")
         check_country_arg(country_hint, "country_hint")
 
+        if mode == "cloud":
+            # Routed before any local work: the service runs its own rules
+            # engine, and running ours first would waste the pass and risk
+            # disagreeing with it on version.
+            return self._redact_cloud(
+                text, countries=countries, country_hint=country_hint,
+                context=context, chunk_offset=chunk_offset,
+                referential_integrity=referential_integrity, coref=coref,
+            )
+        if mode != "rules":
+            raise ValueError(
+                f"unknown mode {mode!r}: expected 'rules' or 'cloud'")
+
         if len(text) > self._max_input_length:
             raise ValueError(
                 f"Input text length ({len(text):,} chars) exceeds the maximum "
@@ -260,6 +273,52 @@ class EuRedact:
             self._cache.put(cache_key, result)
 
         return result
+
+    def _redact_cloud(
+        self,
+        text: str,
+        *,
+        countries: list[str] | None,
+        country_hint: list[str] | None,
+        context: "DocumentContext | None",
+        chunk_offset: int,
+        referential_integrity: bool,
+        coref: bool,
+    ) -> RedactResult:
+        """Send the document to the cloud tier.
+
+        Options the service cannot honour raise rather than being ignored.
+        Silently dropping one would mean returning a result that does not match
+        what was asked for -- which, for anything that changes which spans come
+        back, is under-redaction wearing a plausible face.
+        """
+        from euredact.cloud.client import CloudClient
+
+        if not countries or len(countries) != 1:
+            raise ValueError(
+                "cloud mode needs exactly one country, e.g. countries=['BE']. "
+                "The model is trained and evaluated per country, so a "
+                "multi-country request has no defined behaviour.")
+        if country_hint:
+            raise ValueError("country_hint is not supported in cloud mode")
+        if context is not None or chunk_offset:
+            raise ValueError(
+                "context/chunk_offset are not supported in cloud mode: the "
+                "model has never seen a chunk boundary, so the service rejects "
+                "oversized input rather than splitting it")
+        if referential_integrity:
+            raise ValueError(
+                "referential_integrity is not supported in cloud mode")
+        if coref:
+            raise ValueError("coref is not supported in cloud mode")
+
+        # detect_dates is deliberately NOT forwarded. The service always runs
+        # its rules engine with dates on, because that is what the model was
+        # trained against; the caller's value cannot change that. It is the one
+        # ignored option that is safe to ignore -- it can only cause MORE to be
+        # detected, never less, so it cannot produce under-redaction.
+        with CloudClient() as client:
+            return client.redact(text, country=countries[0].upper())
 
     async def aredact(
         self,

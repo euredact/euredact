@@ -30,7 +30,8 @@ print(result.detections)
 ## Features
 
 - **31 European countries** (see list below)
-- **25+ PII entity types:** national IDs, IBANs, phone numbers, email addresses,
+- **41 PII entity types** (30 from the rules engine, 11 from the
+  [cloud tier](#cloud-tier)): national IDs, IBANs, phone numbers, email addresses,
   VAT numbers, license plates, VIN, credit cards, BIC/SWIFT, IMEI, GPS
   coordinates, UUIDs, social handles, MAC addresses, IP/IPv6 addresses, health
   insurance numbers, passport numbers, driver's licenses, secrets/API keys, and more
@@ -53,8 +54,9 @@ print(result.detections)
 - **Country self-detection:** infers a document's countries from the entities
   that carry one, so an ambiguous value resolves without the caller naming a
   country — and `countries=` never gates what is looked for
-- **Fast:** ~0.5 ms for a short record, ~5 ms for a 3,400-character document
-  with `[fast]` installed (see [Performance](#performance))
+- **Fast:** ~1.1 ms for a short record, ~9 ms for a 3,500-character document
+  with `[fast]` installed — though cost tracks identifier density more than
+  length (see [Performance](#performance))
 - **Zero required dependencies** (`pip install euredact[fast]` adds optional acceleration)
 - **Thread-safe,** immutable `Detection` objects (frozen dataclasses)
 
@@ -266,7 +268,7 @@ identifier it had recognised and rejected.
 String enum with all supported PII categories:
 
 ```
-NAME              ADDRESS           BANK_ACCOUNT      BIC
+PERSON_NAME       ADDRESS           BANK_ACCOUNT      BIC
 CREDIT_CARD       PHONE             EMAIL             DOB
 DATE_OF_DEATH     NATIONAL_ID       SSN               TAX_ID
 PASSPORT          DRIVERS_LICENSE   RESIDENCE_PERMIT  LICENSE_PLATE
@@ -274,6 +276,13 @@ VIN               VAT               POSTAL_CODE       IP_ADDRESS
 IPV6_ADDRESS      MAC_ADDRESS       HEALTH_INSURANCE  HEALTHCARE_PROVIDER
 CHAMBER_OF_COMMERCE  IMEI          GPS_COORDINATES   UUID
 SOCIAL_HANDLE     SECRET            INTERNAL_ID       OTHER
+
+Cloud tier only — the rule engine never emits these, because there is no shape
+to match on. That is precisely why the model exists:
+
+ORGANISATION_NAME JOB_TITLE         MEDICAL_CONDITION SENSITIVE_ATTRIBUTE
+BIOMETRIC_REF     FINANCIAL_AMOUNT  QUASI_IDENTIFIER  CREDENTIAL
+URL
 ```
 
 `INTERNAL_ID` — an employee, badge or customer number tied to a person — is
@@ -316,6 +325,70 @@ plain string (e.g. `"EMPLOYEE_ID"`) rather than an `EntityType` enum member.
 #### `DetectionSource`
 
 String enum: `"rules"` or `"cloud"`.
+
+## Cloud tier
+
+> **Status: private alpha.** The cloud tier is in closed testing — it is **not**
+> in public beta and is not generally available. Keys are issued to alpha
+> participants only, and the request/response surface may still change between
+> releases. The rules engine below is unaffected and is the supported path:
+> `mode="rules"` is the default and carries no alpha caveat.
+
+The rule engine catches what has a shape: IBANs, national IDs, phone numbers,
+anything with a checksum. It cannot catch what does not — a person's name, an
+employer, a diagnosis, a job title. The cloud tier adds a fine-tuned model
+asked only *what did the rules miss?*
+
+```bash
+pip install 'euredact[cloud]'
+```
+
+```python
+import euredact
+
+euredact.configure(api_key="erk_...")          # or set EUREDACT_API_KEY
+result = euredact.redact(text, countries=["BE"], mode="cloud")
+
+result.source                                   # "cloud"
+[(d.entity_type, d.text) for d in result.detections]
+# [(<EntityType.PERSON_NAME>, 'Bas Verhoeven'), (<EntityType.PHONE>, '+32 ...')]
+```
+
+`mode="cloud"` **raises** `NotConfiguredError` when the tier is not configured.
+It never falls back to rules-only output: a caller who believes names and
+diagnoses were checked, and ships a document that only had its phone numbers
+masked, is the one failure this library must not have.
+
+An async client is available for the same contract:
+
+```python
+from euredact.cloud import AsyncCloudClient
+
+async with AsyncCloudClient() as client:
+    result = await client.redact(text, country="BE")
+```
+
+Retries carry an `Idempotency-Key`, so a retry after a timeout cannot bill
+twice. `Retry-After` is obeyed. A document that outlives the service's sync
+window is polled transparently — callers never write that branch. Oversized
+input raises `TooLargeError` (413): the service refuses it rather than
+chunking, because the model has never seen a chunk boundary.
+
+Options the service cannot honour raise rather than being ignored: multiple
+`countries`, `country_hint`, `context`/`chunk_offset`, `referential_integrity`
+and `coref`.
+
+## `NAME` is now `PERSON_NAME`
+
+The canonical type name is `PERSON_NAME`; `NAME` is a legacy alias, exactly as
+`IBAN` aliases `BANK_ACCOUNT`. The placeholder written into redacted text is
+`[PERSON_NAME]`.
+
+Nothing could have depended on the old value: the type is cloud-only and the
+cloud tier was stubbed until this release, so it was never emitted. Code
+matching the *string* `"NAME"` should be updated; `LEGACY_TYPE_ALIASES`
+publishes the mapping, and `STREET_ADDRESS` → `ADDRESS` and
+`NATIONALITY_ETHNICITY` → `SENSITIVE_ATTRIBUTE` are recognised the same way.
 
 ## Country codes
 
@@ -381,8 +454,9 @@ euredact.redact("Rekening: BE68 5390 0754 7034", countries=["AT"])
 ### Which country a value belongs to
 
 Because every pattern runs, the same digits often match several countries'
-schemes. 36.6% of national-ID values in our corpus validate under more than one
-country's checksum, so the digits alone cannot decide it — the *document* does.
+schemes. Of the national-ID values in our corpus that pass any country's checksum,
+34.7% pass more than one country's (32,827 of 94,528), so the digits alone
+cannot decide it — the *document* does.
 
 The engine infers the document's countries from entities that carry their
 country in the string, then uses that to resolve the ambiguity:
@@ -820,14 +894,26 @@ Each `PatternDef` can specify:
 
 ## Performance
 
-Measured on one core, all 31 countries loaded, `detect_dates=True`. Cost scales
-with document length, so the input size is stated rather than averaged away.
+Measured on one core (Apple Silicon M3 Pro, CPython 3.12.13), all 31 countries
+loaded, `detect_dates=True`, cache off, over two cohorts sampled evenly from the
+corpus: 3,000 distinct short records (~190 chars) and 611 distinct real
+documents (~3,450 chars).
+
+**Median** per document, 10th–90th percentile in brackets:
 
 | Input | Pure Python | Aho-Corasick | With `[fast]` |
 |---|---:|---:|---:|
-| Short record (186 chars) | 907 µs — 1,103/s | 775 µs — 1,290/s | **516 µs — 1,938/s** |
-| Real document (3,424 chars) | 13.6 ms — 73/s | 10.9 ms — 92/s | **5.3 ms — 190/s** |
+| Short record (~190 chars) | 1,612 µs <br><sub>1,072 – 2,417</sub> | 1,507 µs <br><sub>956 – 2,293</sub> | **1,141 µs — 876/s** <br><sub>599 – 1,958</sub> |
+| Real document (~3,450 chars) | 18.88 ms <br><sub>15.28 – 25.54</sub> | 15.95 ms <br><sub>12.51 – 22.70</sub> | **9.36 ms — 107/s** <br><sub>6.22 – 15.83</sub> |
 | Memory per country | ~50 KB | ~50 KB | ~50 KB |
+
+The spread matters more than the median: **cost tracks identifier density, not
+length.** At an identical 3,424 characters, the cheapest document in the corpus
+takes 4.8 ms on `[fast]` and the dearest 9.5 ms; across the whole long cohort
+the range is 6.2–15.8 ms. A profile shows why — the dominant cost is not the
+pattern scan but the cue and suppressor checks that run per candidate match, so
+a document dense in identifiers pays for every one of them. Quote a figure for
+*your* documents, not this table.
 
 Making `\b` catch identifiers glued to a non-ASCII letter costs something, but
 only where it must: next to a digit the ASCII reading alone is exactly
