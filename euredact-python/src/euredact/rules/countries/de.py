@@ -29,12 +29,16 @@ class DEConfig(CountryConfig):
                 description="German Steuer-ID — 11 digits with spaces/dots",
             ),
             # --- Personalausweisnummer (ID card) ---
-            # Format: LXXXXXXXX (1 letter + 8 alphanumeric) or LLXXXXXXX
+            # Format: 9 characters from the card's own alphabet (digits and CFGHJKLMNPRTVWXYZ —
+            # no vowels, no B/D/Q/S), optionally followed by the check digit. The old body
+            # class [0-9A-Z] accepted any capitalised word of the right length: CURRICULUM,
+            # HELLOWORLD, MUNICIPIUM were all "ID cards" next to a personal-details heading
+            # (issue rules-engine#1).
             PatternDef(
                 entity_type=EntityType.NATIONAL_ID,
-                pattern=r"\b[CFGHJKLMNPRTVWXYZ][0-9A-Z]{8,9}\b",
+                pattern=r"\b[CFGHJKLMNPRTVWXYZ][0-9CFGHJKLMNPRTVWXYZ]{8}\d?\b",
                 validator=None,
-                description="German Personalausweisnummer — letter + 8 alphanumeric",
+                description="German Personalausweisnummer — 9 characters, ID-card alphabet, optional check digit",
                 context_keywords=[
                     "Personalausweis", "Personalausweisnummer", "Ausweis",
                     "Ausweisnummer", "Ausweis-Nr", "identity card",
@@ -76,9 +80,9 @@ class DEConfig(CountryConfig):
             # --- Passport ---
             PatternDef(
                 entity_type=EntityType.PASSPORT,
-                pattern=r"\b[CFGHJK][0-9A-Z]{8,9}\b",
+                pattern=r"\b[CFGHJK][0-9CFGHJKLMNPRTVWXYZ]{8}\d?\b",
                 validator=None,
-                description="German passport number",
+                description="German passport number — same alphabet as the ID card",
                 context_keywords=[
                     "Reisepass", "passport", "Passnummer", "Reisepassnummer",
                     "Reisepass Nummer", "Reisepass-Nr", "Pass Nr",
