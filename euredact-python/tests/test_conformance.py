@@ -34,13 +34,23 @@ def conformance_sdk():
     return EuRedact()
 
 
-def _detections_by_type(sdk, case) -> dict[str, list[str]]:
-    result = sdk.redact(
+# Vector options are spelled as in the TypeScript RedactOptions; this maps
+# them onto the Python keyword names.
+_OPTION_NAMES = {"allowlist": "allowlist"}
+
+
+def _redact(sdk, case):
+    options = {_OPTION_NAMES[k]: v for k, v in (case.get("options") or {}).items()}
+    return sdk.redact(
         case["text"],
         countries=case.get("countries"),
         detect_dates=True,
         cache=False,
+        **options,
     )
+
+
+def _detections_by_type(result) -> dict[str, list[str]]:
     by_type: dict[str, list[str]] = {}
     for d in result.detections:
         etype = d.entity_type.value if isinstance(d.entity_type, EntityType) else d.entity_type
@@ -50,7 +60,13 @@ def _detections_by_type(sdk, case) -> dict[str, list[str]]:
 
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
 def test_conformance_vector(conformance_sdk, case):
-    got = _detections_by_type(conformance_sdk, case)
+    result = _redact(conformance_sdk, case)
+    got = _detections_by_type(result)
+
+    if "expectRedactedText" in case:
+        assert result.redacted_text == case["expectRedactedText"], (
+            f"{case['id']}: redacted text {result.redacted_text!r}"
+        )
 
     for etype in case.get("mustNotDetect", []):
         assert got.get(etype, []) == [], (
@@ -71,4 +87,6 @@ def test_vector_ids_are_unique():
 def test_every_case_asserts_something():
     """A case with neither expectation would pass silently and prove nothing."""
     for c in CASES:
-        assert c.get("mustDetect") or c.get("mustNotDetect"), f"{c['id']} asserts nothing"
+        assert (
+            c.get("mustDetect") or c.get("mustNotDetect") or "expectRedactedText" in c
+        ), f"{c['id']} asserts nothing"

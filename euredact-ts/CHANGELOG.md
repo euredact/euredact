@@ -45,6 +45,31 @@
   Mirrors `euredact-python`; `src/__tests__/tokenize.ts` mirrors
   `tests/test_tokenize.py`.
 
+- **Allowlist: values that are never redacted.** A customer's own email
+  address or organisation name is not PII to them. `redact(text, { allowlist })`
+  exempts exact values for one call; `new EuRedact({ allowlist })` does so for
+  every call on the instance, and the two merge.
+
+  ```ts
+  const sdk = new EuRedact({ allowlist: ["ACME NV", "info@acme.be"] });
+  sdk.redact("Mail info@acme.be or jan@acme.be", { countries: ["BE"] }).redactedText;
+  // 'Mail info@acme.be or [EMAIL]'
+  ```
+
+  Matching is whole-span and case-insensitive, and nothing more: `acme.be` does
+  not exempt every address at that domain, because a broader match is how "our
+  domain" turns into "everyone who ever mailed us". A bare string throws
+  `TypeError` rather than being iterated into single letters that exempt
+  nothing. Works in cloud mode via `redactAsync`, where the SDK drops the
+  exempted spans and rebuilds the text from the rest. Mirrors
+  `euredact-python`; `src/__tests__/allowlist.ts` mirrors
+  `tests/test_allowlist.py`.
+
+- **Conformance vectors can carry options and expected output.** A case may
+  now set `options` (today: `allowlist`) and `expectRedactedText`, so
+  behaviour that only shows in the masked text — not in which spans were
+  found — is pinned across both SDKs. Four allowlist vectors use it.
+
 ### Fixed
 
 - **A capitalised heading word was masked as a German ID card.** The

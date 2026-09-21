@@ -29,6 +29,29 @@
   nothing it masked is lost; a span whose offsets do not match the document
   raises `CloudError` rather than masking the wrong characters.
 
+- **Allowlist: values that are never redacted.** A customer's own email
+  address or organisation name is not PII to them. `redact(text,
+  allowlist=[...])` exempts exact values for one call; `EuRedact(allowlist=
+  [...])` does so for every call on the instance, and the two merge.
+
+  ```python
+  sdk = euredact.EuRedact(allowlist=["ACME NV", "info@acme.be"])
+  sdk.redact("Mail info@acme.be or jan@acme.be", countries=["BE"]).redacted_text
+  # 'Mail info@acme.be or [EMAIL]'
+  ```
+
+  Matching is whole-span and case-insensitive, and nothing more: `acme.be` does
+  not exempt every address at that domain, because a broader match is how "our
+  domain" turns into "everyone who ever mailed us". A bare string raises
+  `TypeError` rather than being iterated into single letters that exempt
+  nothing. Works in cloud mode, where the SDK drops the exempted spans and
+  rebuilds the text from the rest.
+
+- **Conformance vectors can carry options and expected output.** A case may
+  now set `options` (today: `allowlist`) and `expectRedactedText`, so
+  behaviour that only shows in the masked text — not in which spans were
+  found — is pinned across both SDKs. Four allowlist vectors use it.
+
 ### Fixed
 
 - **A capitalised heading word was masked as a German ID card.** The

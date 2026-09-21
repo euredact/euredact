@@ -99,6 +99,7 @@ def redact(
     mode: str = "rules",
     referential_integrity: bool = False,
     tokenize: bool = False,
+    allowlist: list[str] | None = None,
     detect_dates: bool = False,
     coref: bool = False,
     coref_model: str = "default",
@@ -121,6 +122,7 @@ def redact(
         mode=mode,
         referential_integrity=referential_integrity,
         tokenize=tokenize,
+        allowlist=allowlist,
         detect_dates=detect_dates,
         coref=coref,
         coref_model=coref_model,
@@ -138,6 +140,7 @@ async def aredact(
     mode: str = "rules",
     referential_integrity: bool = False,
     tokenize: bool = False,
+    allowlist: list[str] | None = None,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> RedactResult:
@@ -155,6 +158,7 @@ async def aredact(
         mode=mode,
         referential_integrity=referential_integrity,
         tokenize=tokenize,
+        allowlist=allowlist,
         detect_dates=detect_dates,
         cache=cache,
     )
@@ -168,6 +172,7 @@ def redact_batch(
     mode: str = "rules",
     referential_integrity: bool = False,
     tokenize: bool = False,
+    allowlist: list[str] | None = None,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> list[RedactResult]:
@@ -183,6 +188,7 @@ def redact_batch(
         mode=mode,
         referential_integrity=referential_integrity,
         tokenize=tokenize,
+        allowlist=allowlist,
         detect_dates=detect_dates,
         cache=cache,
     )
@@ -196,6 +202,7 @@ async def aredact_batch(
     mode: str = "rules",
     referential_integrity: bool = False,
     tokenize: bool = False,
+    allowlist: list[str] | None = None,
     detect_dates: bool = False,
     cache: bool = True,
     max_concurrency: int = 4,
@@ -212,6 +219,7 @@ async def aredact_batch(
         mode=mode,
         referential_integrity=referential_integrity,
         tokenize=tokenize,
+        allowlist=allowlist,
         detect_dates=detect_dates,
         cache=cache,
         max_concurrency=max_concurrency,
@@ -226,6 +234,7 @@ def redact_iter(
     mode: str = "rules",
     referential_integrity: bool = False,
     tokenize: bool = False,
+    allowlist: list[str] | None = None,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> Iterator[RedactResult]:
@@ -241,6 +250,7 @@ def redact_iter(
         mode=mode,
         referential_integrity=referential_integrity,
         tokenize=tokenize,
+        allowlist=allowlist,
         detect_dates=detect_dates,
         cache=cache,
     )

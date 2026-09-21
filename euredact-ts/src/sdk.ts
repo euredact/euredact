@@ -149,6 +149,54 @@ export function restore(text: string, tokens: Record<string, string>): string {
   return text.replace(pattern, m => tokens[m]);
 }
 
+/**
+ * Reject a bare string where a list of allowlisted values is expected.
+ *
+ * A string is iterable, so `allowlist: "ACME NV"` would become the
+ * one-character entries "A", "C", ... — none of which is a whole detection, so
+ * nothing is exempted and the caller's own name is redacted after all. Same
+ * reasoning as `checkCountryArg`.
+ */
+function checkAllowlistArg(value: unknown): void {
+  if (typeof value === "string") {
+    throw new TypeError(
+      `allowlist must be an array of values, not a bare string. ` +
+      `Pass allowlist: ["${value}"] rather than allowlist: "${value}".`,
+    );
+  }
+}
+
+/**
+ * The form an allowlist entry and a detected value are compared in. NFC
+ * because the rule engine matches on NFC-normalised text while the document
+ * may be NFD; lower-cased because an org name in a heading is the same org.
+ */
+function allowlistKey(value: string): string {
+  return value.normalize("NFC").trim().toLowerCase();
+}
+
+function normalizeAllowlist(values: string[] | null | undefined): Set<string> {
+  checkAllowlistArg(values);
+  const out = new Set<string>();
+  for (const v of values ?? []) if (v && v.trim()) out.add(allowlistKey(v));
+  return out;
+}
+
+/**
+ * Drop every detection whose value is on the allowlist.
+ *
+ * Whole span only: `euredact.be` does not exempt `joren@euredact.be`. Both the
+ * original slice and the detection's own text are checked, since the two
+ * differ when normalisation changed the document, and the cloud tier's text
+ * is whatever the service reported.
+ */
+function applyAllowlist(text: string, detections: Detection[], allowed: Set<string>): Detection[] {
+  if (allowed.size === 0) return detections;
+  return detections.filter(
+    d => !allowed.has(allowlistKey(text.slice(d.start, d.end))) && !allowed.has(allowlistKey(d.text)),
+  );
+}
+
 /** Two label schemes for the same spans cannot both apply. */
 function checkLabelOptions(options: RedactOptions): void {
   if (options.tokenize && options.referentialIntegrity) {
@@ -234,6 +282,11 @@ export interface RedactOptions {
    * are unique to the call. Cannot be combined with `referentialIntegrity`.
    */
   tokenize?: boolean;
+  /**
+   * Values never to redact, matched whole and case-insensitively against each
+   * detection. Merged with the instance's allowlist.
+   */
+  allowlist?: string[] | null;
   detectDates?: boolean;
   cache?: boolean;
 }
@@ -274,9 +327,17 @@ export class EuRedact {
   private cache = new ResultCache();
   private referentialMapper = new ReferentialMapper();
   private maxInputLength: number;
+  private allowlist: Set<string>;
 
-  constructor(options?: { maxInputLength?: number }) {
+  /**
+   * @param options.maxInputLength Longest document `redact` accepts, in characters.
+   * @param options.allowlist Values never to redact, for every call on this
+   *   instance — an organisation's own name, its own addresses. Merged with
+   *   the per-call `allowlist`. Matched whole, case-insensitively.
+   */
+  constructor(options?: { maxInputLength?: number; allowlist?: string[] | null }) {
     this.maxInputLength = options?.maxInputLength ?? DEFAULT_MAX_INPUT_LENGTH;
+    this.allowlist = normalizeAllowlist(options?.allowlist);
   }
 
   addCustomPattern(name: string, pattern: string): void {
@@ -289,6 +350,13 @@ export class EuRedact {
   clear(): void {
     this.cache.clear();
     this.referentialMapper.clear();
+  }
+
+  /** The instance allowlist merged with a call's, in comparison form. */
+  private allowedFor(options: RedactOptions): Set<string> {
+    const allowed = normalizeAllowlist(options.allowlist);
+    for (const v of this.allowlist) allowed.add(v);
+    return allowed;
   }
 
   /** The label function for one call, given its output options. */
@@ -339,9 +407,10 @@ export class EuRedact {
     // against; the caller's value cannot change that. It is the one ignored
     // option that is safe to ignore — it can only cause MORE to be detected,
     // never less, so it cannot produce under-redaction.
+    const allowed = this.allowedFor(options);
     const result = await new CloudClient().redact(text, { country: countries[0] });
-    if (options.tokenize) {
-      await this.remaskCloudResult(result, text, { tokenize: true });
+    if (options.tokenize || allowed.size > 0) {
+      await this.remaskCloudResult(result, text, { tokenize: options.tokenize ?? false, allowed });
     }
     return result;
   }
@@ -362,14 +431,15 @@ export class EuRedact {
   private async remaskCloudResult(
     result: RedactResult,
     text: string,
-    opts: { tokenize: boolean },
+    opts: { tokenize: boolean; allowed: Set<string> },
   ): Promise<void> {
     const { CloudError } = await import("./cloud/errors.js");
     for (const det of result.detections) {
       if (text.slice(det.start, det.end) !== det.text) {
-        throw new CloudError("span offsets do not match the document; cannot apply tokenize locally");
+        throw new CloudError("span offsets do not match the document; cannot apply tokenize/allowlist locally");
       }
     }
+    result.detections = applyAllowlist(text, result.detections, opts.allowed);
     const tokenMapper = opts.tokenize ? new TokenMapper(text, result.detections) : null;
     result.redactedText = applyReplacements(text, result.detections, this.labelFor(false, tokenMapper));
     result.tokens = tokenMapper ? tokenMapper.tokens : {};
@@ -379,6 +449,7 @@ export class EuRedact {
     checkCountryArg(options.countries, "countries");
     checkCountryArg(options.countryHint, "countryHint");
     checkLabelOptions(options);
+    const allowed = this.allowedFor(options);
 
     const requestedMode = options.mode ?? "rules";
     if (requestedMode === "cloud") {
@@ -431,7 +502,10 @@ export class EuRedact {
     // referentialIntegrity changes the labels, not the spans, so a cached
     // bracketed result is the wrong answer for a labelled call on the same
     // text — it has to key the cache too.
-    const cacheMode = `${mode}|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}|tok=${tokenize}`;
+    // JSON rather than a joined string: an entry may itself contain the
+    // separator, and two different lists must never share a key.
+    const allowKey = allowed.size ? JSON.stringify([...allowed].sort()) : "";
+    const cacheMode = `${mode}|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}|tok=${tokenize}|allow=${allowKey}`;
 
     let cacheKey: string | undefined;
     if (cache) {
@@ -462,6 +536,7 @@ export class EuRedact {
     if (!detectDates) {
       detections = detections.filter(d => !DATE_TYPES.has(d.entityType));
     }
+    detections = applyAllowlist(text, detections, allowed);
 
     detections.sort((a, b) => a.start - b.start || b.end - a.end);
 

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import secrets
+import unicodedata
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -126,6 +128,58 @@ class ReferentialMapper:
         self._mapping.clear()
 
 
+def check_allowlist_arg(value: object) -> None:
+    """Reject a bare string where a list of allowlisted values is expected.
+
+    ``allowlist="ACME NV"`` is iterable, so it would become the one-character
+    entries ``"A"``, ``"C"``, ... — none of which is a whole detection, so
+    nothing is exempted and the caller's own name is redacted after all. Same
+    reasoning as :func:`check_country_arg`: a wrong type is a programming
+    error with no correct interpretation to fall back on.
+    """
+    if isinstance(value, (str, bytes)):
+        shown = value.decode(errors="replace") if isinstance(value, bytes) else value
+        raise TypeError(
+            f"allowlist must be a list of values, not a bare string. "
+            f"Pass allowlist=[{shown!r}] rather than allowlist={shown!r}.")
+
+
+def _allowlist_key(value: str) -> str:
+    """The form an allowlist entry and a detected value are compared in.
+
+    NFC because the rule engine matches on NFC-normalised text while the
+    document may be NFD; case-insensitive because an org name in a heading
+    is the same org name.
+    """
+    return unicodedata.normalize("NFC", value).strip().lower()
+
+
+def _normalize_allowlist(values: list[str] | None) -> frozenset[str]:
+    check_allowlist_arg(values)
+    if not values:
+        return frozenset()
+    return frozenset(_allowlist_key(v) for v in values if v and v.strip())
+
+
+def _apply_allowlist(
+    text: str, detections: list[Detection], allowed: frozenset[str]
+) -> list[Detection]:
+    """Drop every detection whose value is on the allowlist.
+
+    Whole span only: ``euredact.be`` does not exempt ``joren@euredact.be``.
+    Both the original slice and the detection's own text are checked, since
+    the two differ when normalisation changed the document, and the cloud
+    tier's text is whatever the service reported.
+    """
+    if not allowed:
+        return detections
+    return [
+        d for d in detections
+        if _allowlist_key(text[d.start : d.end]) not in allowed
+        and _allowlist_key(d.text) not in allowed
+    ]
+
+
 #: Characters a token suffix is drawn from. No vowels, so a suffix never spells
 #: a word; no 0/1/I/O, so it survives being read back by a person; no
 #: underscore, so the type prefix stays unambiguous.
@@ -217,11 +271,24 @@ class EuRedact:
 
     DEFAULT_MAX_INPUT_LENGTH = 10_485_760  # ~10 MB of text
 
-    def __init__(self, *, max_input_length: int = DEFAULT_MAX_INPUT_LENGTH) -> None:
+    def __init__(
+        self,
+        *,
+        max_input_length: int = DEFAULT_MAX_INPUT_LENGTH,
+        allowlist: list[str] | None = None,
+    ) -> None:
+        """
+        Args:
+            max_input_length: Longest document ``redact`` accepts, in characters.
+            allowlist: Values never to redact, for every call on this instance
+                -- an organisation's own name, its own addresses. Merged with
+                the per-call ``allowlist``. Matched whole, case-insensitively.
+        """
         self._engine = RuleEngine()
         self._cache = ResultCache()
         self._referential_mapper = ReferentialMapper()
         self._max_input_length = max_input_length
+        self._allowlist = _normalize_allowlist(allowlist)
 
     def add_custom_pattern(self, name: str, pattern: str) -> None:
         """Register a custom regex pattern detected as *name*."""
@@ -259,6 +326,7 @@ class EuRedact:
         mode: str = "rules",
         referential_integrity: bool = False,
         tokenize: bool = False,
+        allowlist: list[str] | None = None,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -287,6 +355,13 @@ class EuRedact:
                 better handled by the cloud LLM tier. When True, the rule
                 engine applies keyword and structural (JSON/CSV header)
                 checks before emitting a date detection.
+            tokenize: Replace each value with a reversible token
+                (``EMAIL_K7Q2``) and return the token -> value mapping in
+                ``RedactResult.tokens``; see :func:`restore`. Tokens are unique
+                to the call. Cannot be combined with *referential_integrity*.
+            allowlist: Values never to redact, matched whole and
+                case-insensitively against each detection. Merged with the
+                instance's allowlist.
         """
         # Step 0: argument and input-size guards. The country check runs here
         # as well as in the engine so that a bare string is rejected before any
@@ -297,6 +372,7 @@ class EuRedact:
             raise ValueError(
                 "tokenize and referential_integrity are two label schemes for "
                 "the same spans; pass one of them")
+        allowed = self._allowlist | _normalize_allowlist(allowlist)
 
         if mode == "cloud":
             # Routed before any local work: the service runs its own rules
@@ -306,7 +382,7 @@ class EuRedact:
                 text, countries=countries, country_hint=country_hint,
                 context=context, chunk_offset=chunk_offset,
                 referential_integrity=referential_integrity, tokenize=tokenize,
-                coref=coref,
+                allowed=allowed, coref=coref,
             )
         if mode != "rules":
             raise ValueError(
@@ -329,7 +405,10 @@ class EuRedact:
         # referential_integrity changes the labels, not the spans, so a cached
         # bracketed result is the wrong answer for a labelled call on the same
         # text — it has to key the cache too.
-        cache_mode = f"{mode}|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}|tok={tokenize}"
+        # JSON rather than a joined string: an entry may itself contain the
+        # separator, and two different lists must never share a key.
+        allow_key = json.dumps(sorted(allowed)) if allowed else ""
+        cache_mode = f"{mode}|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}|tok={tokenize}|allow={allow_key}"
         # A context makes the result depend on evidence from other chunks, so
         # the text no longer identifies the result. Caching is disabled rather
         # than keyed on the context, whose contents change as chunks arrive.
@@ -367,6 +446,7 @@ class EuRedact:
         # Filter date types unless opted in
         if not detect_dates:
             detections = [d for d in detections if d.entity_type not in _DATE_TYPES]
+        detections = _apply_allowlist(text, detections, allowed)
 
         # Steps 7-13: [CLOUD EXTENSION] — no-ops in rules-only mode
 
@@ -414,6 +494,7 @@ class EuRedact:
         chunk_offset: int,
         referential_integrity: bool,
         tokenize: bool,
+        allowed: frozenset[str],
         coref: bool,
     ) -> RedactResult:
         """Send the document to the cloud tier.
@@ -450,12 +531,12 @@ class EuRedact:
         # detected, never less, so it cannot produce under-redaction.
         with CloudClient() as client:
             result = client.redact(text, country=countries[0].upper())
-        if tokenize:
-            self._remask_cloud_result(result, text, tokenize=tokenize)
+        if tokenize or allowed:
+            self._remask_cloud_result(result, text, tokenize=tokenize, allowed=allowed)
         return result
 
     def _remask_cloud_result(
-        self, result: RedactResult, text: str, *, tokenize: bool
+        self, result: RedactResult, text: str, *, tokenize: bool, allowed: frozenset[str]
     ) -> None:
         """Rebuild the masked text from the service's spans, in place.
 
@@ -471,7 +552,8 @@ class EuRedact:
             if text[det.start : det.end] != det.text:
                 raise CloudError(
                     "span offsets do not match the document; cannot apply "
-                    "tokenize locally")
+                    "tokenize/allowlist locally")
+        result.detections = _apply_allowlist(text, result.detections, allowed)
         token_mapper = TokenMapper(text, result.detections) if tokenize else None
         result.redacted_text = _apply_replacements(
             text, result.detections, self._label_for(False, token_mapper)
@@ -489,6 +571,7 @@ class EuRedact:
         mode: str = "rules",
         referential_integrity: bool = False,
         tokenize: bool = False,
+        allowlist: list[str] | None = None,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -512,6 +595,7 @@ class EuRedact:
                 mode=mode,
                 referential_integrity=referential_integrity,
                 tokenize=tokenize,
+                allowlist=allowlist,
                 detect_dates=detect_dates,
                 coref=coref,
                 coref_model=coref_model,
@@ -528,6 +612,7 @@ class EuRedact:
         mode: str = "rules",
         referential_integrity: bool = False,
         tokenize: bool = False,
+        allowlist: list[str] | None = None,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> list[RedactResult]:
@@ -551,6 +636,7 @@ class EuRedact:
                 mode=mode,
                 referential_integrity=referential_integrity,
                 tokenize=tokenize,
+                allowlist=allowlist,
                 detect_dates=detect_dates,
                 cache=cache,
             )
@@ -566,6 +652,7 @@ class EuRedact:
         mode: str = "rules",
         referential_integrity: bool = False,
         tokenize: bool = False,
+        allowlist: list[str] | None = None,
         detect_dates: bool = False,
         cache: bool = True,
         max_concurrency: int = 4,
@@ -593,6 +680,7 @@ class EuRedact:
                     mode=mode,
                     referential_integrity=referential_integrity,
                     tokenize=tokenize,
+                    allowlist=allowlist,
                     detect_dates=detect_dates,
                     cache=cache,
                 )
@@ -608,6 +696,7 @@ class EuRedact:
         mode: str = "rules",
         referential_integrity: bool = False,
         tokenize: bool = False,
+        allowlist: list[str] | None = None,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> Iterator[RedactResult]:
@@ -628,6 +717,7 @@ class EuRedact:
                 mode=mode,
                 referential_integrity=referential_integrity,
                 tokenize=tokenize,
+                allowlist=allowlist,
                 detect_dates=detect_dates,
                 cache=cache,
             )

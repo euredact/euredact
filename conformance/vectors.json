@@ -6,7 +6,9 @@
     "text": "input passed to redact()",
     "countries": "list of ISO 3166-1 alpha-2 codes, or null for no country hint",
     "mustDetect": "map of entity type -> exact list of detected texts for that type, in document order",
-    "mustNotDetect": "list of entity types that must produce no detection"
+    "mustNotDetect": "list of entity types that must produce no detection",
+    "options": "optional per-call options, camelCase as in the TypeScript RedactOptions; today only `allowlist` (list of values never to redact)",
+    "expectRedactedText": "optional exact redacted output; the default bracketed labels, with no referential or token option"
   },
   "cases": [
     {
@@ -1758,6 +1760,84 @@
         ]
       },
       "notes": "serial part; the trailing check digit is printed separately on the card."
+    },
+    {
+      "id": "allowlist-exact-email-is-kept",
+      "text": "Contact jan@example.com or piet@example.com about the order.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlist": [
+          "jan@example.com"
+        ]
+      },
+      "mustDetect": {
+        "EMAIL": [
+          "piet@example.com"
+        ]
+      },
+      "expectRedactedText": "Contact jan@example.com or [EMAIL] about the order.",
+      "notes": "The allowlisted address is neither detected nor masked; the other address on the same line still is."
+    },
+    {
+      "id": "allowlist-matches-case-insensitively",
+      "text": "Contact Jan@Example.com about the order.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlist": [
+          "JAN@EXAMPLE.COM"
+        ]
+      },
+      "mustNotDetect": [
+        "EMAIL"
+      ],
+      "expectRedactedText": "Contact Jan@Example.com about the order."
+    },
+    {
+      "id": "allowlist-substring-does-not-exempt",
+      "text": "Contact jan@example.com about the order.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlist": [
+          "example.com",
+          "jan"
+        ]
+      },
+      "mustDetect": {
+        "EMAIL": [
+          "jan@example.com"
+        ]
+      },
+      "expectRedactedText": "Contact [EMAIL] about the order.",
+      "notes": "Whole-span only. A domain on the allowlist must not quietly exempt every address at that domain."
+    },
+    {
+      "id": "allowlist-leaves-other-types-alone",
+      "text": "ACME NV, IBAN NL91 ABNA 0417 1643 00, mail jan@example.com.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlist": [
+          "jan@example.com",
+          "ACME NV"
+        ]
+      },
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "NL91 ABNA 0417 1643 00"
+        ]
+      },
+      "mustNotDetect": [
+        "EMAIL"
+      ],
+      "expectRedactedText": "ACME NV, IBAN [BANK_ACCOUNT], mail jan@example.com.",
+      "notes": "An entry that matches nothing the rules tier detects (the org name) is harmless; the IBAN beside the allowlisted address is still masked."
     }
   ]
 }

@@ -14,7 +14,8 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { EuRedact } from "../sdk.js";
+import { EuRedact, type RedactOptions } from "../sdk.js";
+import type { RedactResult } from "../types.js";
 
 interface Case {
   id: string;
@@ -22,6 +23,8 @@ interface Case {
   countries: string[] | null;
   mustDetect?: Record<string, string[]>;
   mustNotDetect?: string[];
+  options?: Pick<RedactOptions, "allowlist">;
+  expectRedactedText?: string;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -47,12 +50,16 @@ function check(name: string, fn: () => void): void {
   }
 }
 
-function detectionsByType(c: Case): Record<string, string[]> {
-  const result = sdk.redact(c.text, {
+function run(c: Case): RedactResult {
+  return sdk.redact(c.text, {
     countries: c.countries,
     detectDates: true,
     cache: false,
+    ...(c.options ?? {}),
   });
+}
+
+function detectionsByType(result: RedactResult): Record<string, string[]> {
   const byType: Record<string, string[]> = {};
   for (const d of result.detections) {
     const t = d.entityType as string;
@@ -63,7 +70,11 @@ function detectionsByType(c: Case): Record<string, string[]> {
 
 for (const c of cases) {
   check(c.id, () => {
-    const got = detectionsByType(c);
+    const result = run(c);
+    const got = detectionsByType(result);
+    if (c.expectRedactedText !== undefined) {
+      assert.equal(result.redactedText, c.expectRedactedText, "redacted text mismatch");
+    }
     for (const etype of c.mustNotDetect ?? []) {
       assert.deepEqual(got[etype] ?? [], [], `expected no ${etype}, got ${JSON.stringify(got[etype])}`);
     }
@@ -80,7 +91,7 @@ check("vector ids are unique", () => {
 
 check("every case asserts something", () => {
   for (const c of cases) {
-    assert.ok(c.mustDetect || c.mustNotDetect, `${c.id} asserts nothing`);
+    assert.ok(c.mustDetect || c.mustNotDetect || c.expectRedactedText !== undefined, `${c.id} asserts nothing`);
   }
 });
 
