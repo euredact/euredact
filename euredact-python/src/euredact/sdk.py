@@ -233,7 +233,10 @@ class EuRedact:
         countries_tuple = tuple(sorted(c.upper() for c in countries)) if countries else ("ALL",)
         # country_hint changes attribution, so it must key the cache too.
         hint_key = ",".join(sorted(c.upper() for c in country_hint)) if country_hint else ""
-        cache_mode = f"{mode}|dates={detect_dates}|hint={hint_key}"
+        # referential_integrity changes the labels, not the spans, so a cached
+        # bracketed result is the wrong answer for a labelled call on the same
+        # text — it has to key the cache too.
+        cache_mode = f"{mode}|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}"
         # A context makes the result depend on evidence from other chunks, so
         # the text no longer identifies the result. Caching is disabled rather
         # than keyed on the context, whose contents change as chunks arrive.

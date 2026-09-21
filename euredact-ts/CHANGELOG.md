@@ -15,6 +15,13 @@
   vectors (`de-idcard-*`), two of them proving real numbers still detect.
   *(rules-engine#1)*
 
+- **`referentialIntegrity: true` no longer returns a cached bracketed result.**
+  The option was not part of the result-cache key, so on the same instance
+  `redact(text)` followed by `redact(text, { referentialIntegrity: true })`
+  returned the first call's `[EMAIL]` output instead of `EMAIL_1`. The option
+  now keys the cache alongside `mode`, `detectDates` and `countryHint`.
+  Mirrors the same fix in `euredact-python`.
+
 ## 0.4.0 (2026-08-31)
 
 The cloud tier, brought in line with the Python SDK. **It ships in private

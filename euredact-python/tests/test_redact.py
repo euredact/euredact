@@ -32,13 +32,26 @@ class TestRedactionOutput:
         assert "jan@example.com" not in result.redacted_text
 
     def test_referential_integrity(self):
-        result = euredact.redact(
+        # Own instance: the module-level mapper is shared with every other
+        # test that labels through euredact.redact(), and its counters carry
+        # over. The result cache used to hide that by serving this call the
+        # bracketed result of an earlier plain call on the same text.
+        result = euredact.EuRedact().redact(
             "Email: jan@example.com en piet@example.com",
             countries=["NL"],
             referential_integrity=True,
         )
         assert "EMAIL_1" in result.redacted_text
         assert "EMAIL_2" in result.redacted_text
+
+    def test_referential_integrity_is_not_served_from_a_plain_cache_hit(self):
+        sdk = euredact.EuRedact()
+        text = "Email: jan@example.com en piet@example.com"
+        plain = sdk.redact(text, countries=["NL"])
+        labelled = sdk.redact(text, countries=["NL"], referential_integrity=True)
+        assert plain.redacted_text == "Email: [EMAIL] en [EMAIL]"
+        assert "EMAIL_1" in labelled.redacted_text
+        assert "EMAIL_2" in labelled.redacted_text
 
     def test_referential_integrity_consistency(self):
         result = euredact.redact(

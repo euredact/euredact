@@ -286,7 +286,10 @@ export class EuRedact {
       : ["ALL"];
     // countryHint changes attribution, so it must key the cache too.
     const hintKey = countryHint ? countryHint.map(c => c.toUpperCase()).sort().join(",") : "";
-    const cacheMode = `${mode}|dates=${detectDates}|hint=${hintKey}`;
+    // referentialIntegrity changes the labels, not the spans, so a cached
+    // bracketed result is the wrong answer for a labelled call on the same
+    // text — it has to key the cache too.
+    const cacheMode = `${mode}|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}`;
 
     let cacheKey: string | undefined;
     if (cache) {

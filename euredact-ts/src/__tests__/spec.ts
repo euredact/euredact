@@ -344,6 +344,24 @@ test("a declined identifier the document labels is masked, not dropped", () => {
 test("an unlabelled checksum failure is still declined", () =>
   assert.deepEqual(sdk.redact("Referentie 85.03.19-284.73", { countries: ["BE"] }).detections, []));
 
+// --- Referential integrity (mirrors tests/test_redact.py::TestRedactionOutput) ---
+
+test("referential integrity numbers each distinct value", () => {
+  const fresh = new EuRedact();
+  const r = fresh.redact("Email: jan@example.com en piet@example.com", { countries: ["NL"], referentialIntegrity: true });
+  assert.ok(r.redactedText.includes("EMAIL_1"));
+  assert.ok(r.redactedText.includes("EMAIL_2"));
+});
+test("referential integrity is not served from a plain cache hit", () => {
+  const fresh = new EuRedact();
+  const text = "Email: jan@example.com en piet@example.com";
+  const plain = fresh.redact(text, { countries: ["NL"] });
+  const labelled = fresh.redact(text, { countries: ["NL"], referentialIntegrity: true });
+  assert.equal(plain.redactedText, "Email: [EMAIL] en [EMAIL]");
+  assert.ok(labelled.redactedText.includes("EMAIL_1"));
+  assert.ok(labelled.redactedText.includes("EMAIL_2"));
+});
+
 // ── Report ─────────────────────────────────────────────────────────────
 
 console.log(`\n${passed} passed, ${failures.length} failed`);

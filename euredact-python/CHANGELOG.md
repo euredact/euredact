@@ -15,6 +15,12 @@
   vectors (`de-idcard-*`), two of them proving real numbers still detect.
   *(rules-engine#1)*
 
+- **`referential_integrity=True` no longer returns a cached bracketed result.**
+  The option was not part of the result-cache key, so on the same instance
+  `redact(text)` followed by `redact(text, referential_integrity=True)`
+  returned the first call's `[EMAIL]` output instead of `EMAIL_1`. The option
+  now keys the cache alongside `mode`, `detect_dates` and `country_hint`.
+
 ## 0.4.0 (2026-08-31)
 
 The cloud tier, which the package has advertised since 0.3.x and never had.
