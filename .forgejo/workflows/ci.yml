@@ -1,0 +1,65 @@
+# CI on Forgejo, the source of truth for this repository.
+#
+# Forgejo reads `.github/workflows/` only when this directory does not exist,
+# and those workflows are written for GitHub: `permissions:` (unsupported here,
+# warned on every run), `actions/setup-*`, digest-pinned actions that do not
+# resolve on code.forgejo.org, and `runs-on: ubuntu-latest`. The existence of
+# this file makes Forgejo ignore them — including `publish.yml`, which must
+# only ever run on GitHub because PyPI and npm trusted publishing issue OIDC
+# tokens to GitHub Actions alone. GitHub receives every push through the
+# Forgejo push mirror and runs the version matrix (Python 3.10-3.13, Node
+# 18/20/22) there; this file runs the same checks once, on whatever the forge
+# box has installed.
+#
+# The runner is the one on the forge box, in host mode: Python, Node and npm
+# come from the host, so there are no setup actions. A venv does not survive
+# a step boundary, hence the explicit `.venv/bin/...` paths.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-python:
+    runs-on: euredact
+    defaults:
+      run:
+        working-directory: euredact-python
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m venv .venv
+      - run: .venv/bin/python -m pip install --quiet -e ".[dev]"
+      - run: .venv/bin/ruff check src/
+      - run: .venv/bin/python -m pytest tests/ -x -q
+
+  # The optional extras swap the scan path underneath the engine. Both the
+  # accelerated and the pure-Python configurations must pass, or installing an
+  # extra could silently change what gets redacted — which is exactly how
+  # `pip install euredact[fast]` once stopped redacting private keys.
+  test-python-no-extras:
+    runs-on: euredact
+    defaults:
+      run:
+        working-directory: euredact-python
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m venv .venv-min
+      - run: .venv-min/bin/python -m pip install --quiet -e . pytest pytest-asyncio
+      - name: Confirm no accelerator is installed
+        run: |
+          .venv-min/bin/python -c "import euredact.rules.matchers as m; assert not m._HAS_AC and not m._HAS_RE2, 'extras leaked into the minimal job'"
+      - run: .venv-min/bin/python -m pytest tests/ -x -q
+
+  test-ts:
+    runs-on: euredact
+    defaults:
+      run:
+        working-directory: euredact-ts
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npm test
