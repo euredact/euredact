@@ -1710,6 +1710,54 @@
         ]
       },
       "notes": "The participle is what disqualifies 2016; the real postal code in the same sentence must survive."
+    },
+    {
+      "id": "de-idcard-curriculum-vitae-heading",
+      "text": "CURRICULUM VITAE\n\nPERSOONLIJKE GEGEVENS\nNaam: Jan Jansen",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "issue rules-engine#1: a 10-letter heading word is not a Personalausweisnummer; the ID-card alphabet has no vowels (CURRICULUM has U and I)."
+    },
+    {
+      "id": "de-idcard-heading-word-personal-details",
+      "text": "CURRICULUM VITAE\n\nPERSONAL DETAILS\nName: Anna Berg",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "same defect with the English heading; 'Perso' is a substring of PERSONAL."
+    },
+    {
+      "id": "de-idcard-real-number-still-detected",
+      "text": "Personalausweisnummer: L01X00T47 (gültig bis 2031)",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "L01X00T47"
+        ]
+      },
+      "notes": "a genuine 9-character number from the restricted alphabet must survive the fix."
+    },
+    {
+      "id": "de-idcard-real-number-with-check-digit",
+      "text": "Ausweis-Nr: T22000129 3",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "T22000129"
+        ]
+      },
+      "notes": "serial part; the trailing check digit is printed separately on the card."
     }
   ]
 }

@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A capitalised heading word was masked as a German ID card.** The
+  Personalausweis pattern accepted any 9–10 upper-case alphanumerics after its
+  first letter, and its context cue `Perso` is a substring of `PERSONAL` and
+  `PERSOONLIJKE`, so `CURRICULUM VITAE` above a *Personal details* heading came
+  back as `[NATIONAL_ID] VITAE` — in every CV of that layout, whatever
+  `countries` the caller passed. The pattern (and the passport pattern, same
+  shape) now uses the card's own alphabet: digits and `CFGHJKLMNPRTVWXYZ`, nine
+  characters, optional check digit. No vowels, so no words. Four conformance
+  vectors (`de-idcard-*`), two of them proving real numbers still detect.
+  *(rules-engine#1)*
+
 ## 0.4.0 (2026-08-31)
 
 The cloud tier, which the package has advertised since 0.3.x and never had.
