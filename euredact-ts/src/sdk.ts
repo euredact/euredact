@@ -1,3 +1,5 @@
+import { randomInt } from "node:crypto";
+
 import { ResultCache } from "./cache.js";
 import { normalize, mapOffsetToOriginal } from "./normalizer.js";
 import { RuleEngine } from "./rules/engine.js";
@@ -53,6 +55,107 @@ export function applyReplacements(text: string, detections: Detection[], labelFo
   }
   parts.push(text.slice(pos));
   return parts.join("");
+}
+
+/**
+ * Characters a token suffix is drawn from. No vowels, so a suffix never spells
+ * a word; no 0/1/I/O, so it survives being read back by a person; no
+ * underscore, so the type prefix stays unambiguous.
+ */
+export const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const TOKEN_SUFFIX_LENGTH = 4;
+const TOKEN_MAX_DRAWS = 100;
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Maps each distinct PII value in one call to a reversible token.
+ *
+ * A token is `TYPE_XXXX`: the entity type, then `TOKEN_SUFFIX_LENGTH` random
+ * characters from `TOKEN_ALPHABET`. The same value gets the same token within
+ * the call, so relationships survive; across calls it gets a different one, so
+ * two tokenized documents never reveal a shared value.
+ *
+ * Nothing is kept beyond the call. The mapping goes to the caller in
+ * `RedactResult.tokens`, and only the caller can turn it back into text with
+ * `restore()`.
+ *
+ * Tokens are also kept clear of any token-shaped string already in the
+ * document. A caller that redacts an LLM's reply to a tokenized prompt has
+ * exactly such a document, and a fresh token colliding with an old one would
+ * make `restore()` put the wrong value back.
+ */
+export class TokenMapper {
+  private byValue = new Map<string, string>();
+  private taken = new Set<string>();
+  /** Token -> original value, for `RedactResult.tokens`. */
+  readonly tokens: Record<string, string> = {};
+
+  constructor(text: string, detections: Detection[]) {
+    const types = [...new Set(detections.map(d => String(d.entityType)))].sort();
+    if (types.length === 0) return;
+    const shaped = new RegExp(
+      `(?:${types.map(escapeRegExp).join("|")})_[${TOKEN_ALPHABET}]{${TOKEN_SUFFIX_LENGTH}}`,
+      "g",
+    );
+    for (const m of text.matchAll(shaped)) this.taken.add(m[0]);
+  }
+
+  /** Return the token for `value`, minting one on first sight. */
+  getToken = (det: Detection, value: string): string => {
+    let token = this.byValue.get(value);
+    if (token === undefined) {
+      const prefix = `${det.entityType}_`;
+      let draws = 0;
+      do {
+        if (draws++ >= TOKEN_MAX_DRAWS) {
+          throw new Error(
+            `could not mint a unique token with prefix ${JSON.stringify(prefix)} after ${TOKEN_MAX_DRAWS} draws`,
+          );
+        }
+        let suffix = "";
+        for (let i = 0; i < TOKEN_SUFFIX_LENGTH; i++) {
+          suffix += TOKEN_ALPHABET[randomInt(TOKEN_ALPHABET.length)];
+        }
+        token = prefix + suffix;
+      } while (this.taken.has(token));
+      this.taken.add(token);
+      this.byValue.set(value, token);
+      this.tokens[token] = value;
+    }
+    return token;
+  };
+}
+
+/**
+ * Put the original values back into `text`.
+ *
+ * `tokens` is `RedactResult.tokens` from the `redact(text, { tokenize: true })`
+ * call that produced the text this one derives from — typically the reply an
+ * LLM wrote to the tokenized prompt. Every occurrence of every token is
+ * replaced; a token an LLM glued to other characters (`EMAIL_K7Q2s`) is still
+ * restored, since leaving a token behind is the worse failure.
+ */
+export function restore(text: string, tokens: Record<string, string>): string {
+  const keys = Object.keys(tokens);
+  if (keys.length === 0) return text;
+  // Longest first so a token that is a prefix of another (custom pattern names
+  // allow it) cannot be matched short. The replacement is a function so `$&`
+  // and friends in the original values are literal.
+  keys.sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(keys.map(escapeRegExp).join("|"), "g");
+  return text.replace(pattern, m => tokens[m]);
+}
+
+/** Two label schemes for the same spans cannot both apply. */
+function checkLabelOptions(options: RedactOptions): void {
+  if (options.tokenize && options.referentialIntegrity) {
+    throw new Error(
+      "tokenize and referentialIntegrity are two label schemes for the same spans; pass one of them",
+    );
+  }
 }
 
 /** Entry count at which a one-time warning is emitted. */
@@ -125,55 +228,17 @@ export interface RedactOptions {
   chunkOffset?: number;
   mode?: string;
   referentialIntegrity?: boolean;
+  /**
+   * Replace each value with a reversible token (`EMAIL_K7Q2`) and return the
+   * token -> value mapping in `RedactResult.tokens`; see `restore()`. Tokens
+   * are unique to the call. Cannot be combined with `referentialIntegrity`.
+   */
+  tokenize?: boolean;
   detectDates?: boolean;
   cache?: boolean;
 }
 
 const DEFAULT_MAX_INPUT_LENGTH = 10_485_760;  // ~10 MB of text
-
-/**
- * Send a document to the cloud tier.
- *
- * Options the service cannot honour throw rather than being ignored. Silently
- * dropping one would mean returning a result that does not match what was
- * asked for — which, for anything that changes which spans come back, is
- * under-redaction wearing a plausible face.
- */
-async function redactViaCloud(
-  text: string,
-  options: RedactOptions,
-): Promise<RedactResult> {
-  const { CloudClient } = await import("./cloud/client.js");
-  const countries = options.countries ?? null;
-
-  if (!countries || countries.length !== 1) {
-    throw new Error(
-      'cloud mode needs exactly one country, e.g. { countries: ["BE"] }. The ' +
-      "model is trained and evaluated per country, so a multi-country request " +
-      "has no defined behaviour.",
-    );
-  }
-  if (options.countryHint) {
-    throw new Error("countryHint is not supported in cloud mode");
-  }
-  if (options.context || options.chunkOffset) {
-    throw new Error(
-      "context/chunkOffset are not supported in cloud mode: the model has never " +
-      "seen a chunk boundary, so the service rejects oversized input rather " +
-      "than splitting it",
-    );
-  }
-  if (options.referentialIntegrity) {
-    throw new Error("referentialIntegrity is not supported in cloud mode");
-  }
-
-  // detectDates is deliberately NOT forwarded. The service always runs its
-  // rules engine with dates on, because that is what the model was trained
-  // against; the caller's value cannot change that. It is the one ignored
-  // option that is safe to ignore — it can only cause MORE to be detected,
-  // never less, so it cannot produce under-redaction.
-  return new CloudClient().redact(text, { country: countries[0] });
-}
 
 /**
  * Reject a bare string where a list of country codes is expected.
@@ -227,7 +292,8 @@ export class EuRedact {
   }
 
   /** The label function for one call, given its output options. */
-  private labelFor(referentialIntegrity: boolean): LabelFor {
+  private labelFor(referentialIntegrity: boolean, tokenMapper: TokenMapper | null): LabelFor {
+    if (tokenMapper !== null) return tokenMapper.getToken;
     if (referentialIntegrity) {
       const mapper = this.referentialMapper;
       return (det) => mapper.getLabel(det.text, det.entityType);
@@ -235,9 +301,84 @@ export class EuRedact {
     return (det) => `[${det.entityType}]`;
   }
 
+  /**
+   * Send a document to the cloud tier.
+   *
+   * Options the service cannot honour throw rather than being ignored. Silently
+   * dropping one would mean returning a result that does not match what was
+   * asked for — which, for anything that changes which spans come back, is
+   * under-redaction wearing a plausible face.
+   */
+  private async redactViaCloud(text: string, options: RedactOptions): Promise<RedactResult> {
+    const { CloudClient } = await import("./cloud/client.js");
+    const countries = options.countries ?? null;
+
+    if (!countries || countries.length !== 1) {
+      throw new Error(
+        'cloud mode needs exactly one country, e.g. { countries: ["BE"] }. The ' +
+        "model is trained and evaluated per country, so a multi-country request " +
+        "has no defined behaviour.",
+      );
+    }
+    if (options.countryHint) {
+      throw new Error("countryHint is not supported in cloud mode");
+    }
+    if (options.context || options.chunkOffset) {
+      throw new Error(
+        "context/chunkOffset are not supported in cloud mode: the model has never " +
+        "seen a chunk boundary, so the service rejects oversized input rather " +
+        "than splitting it",
+      );
+    }
+    if (options.referentialIntegrity) {
+      throw new Error("referentialIntegrity is not supported in cloud mode");
+    }
+
+    // detectDates is deliberately NOT forwarded. The service always runs its
+    // rules engine with dates on, because that is what the model was trained
+    // against; the caller's value cannot change that. It is the one ignored
+    // option that is safe to ignore — it can only cause MORE to be detected,
+    // never less, so it cannot produce under-redaction.
+    const result = await new CloudClient().redact(text, { country: countries[0] });
+    if (options.tokenize) {
+      await this.remaskCloudResult(result, text, { tokenize: true });
+    }
+    return result;
+  }
+
+  /**
+   * Rebuild the masked text from the service's spans, in place.
+   *
+   * The service masks with bracketed labels only. Any other output option is
+   * applied here, from its spans: the service builds its `redacted_text` from
+   * exactly the spans it returns (entities it reports but cannot place are
+   * listed separately and never applied), so nothing it masked is lost by
+   * masking again from the same spans.
+   *
+   * The service reports offsets in code points and this SDK slices UTF-16
+   * units, so the slice check is what stands between an emoji in the document
+   * and a rebuilt text with the wrong characters masked.
+   */
+  private async remaskCloudResult(
+    result: RedactResult,
+    text: string,
+    opts: { tokenize: boolean },
+  ): Promise<void> {
+    const { CloudError } = await import("./cloud/errors.js");
+    for (const det of result.detections) {
+      if (text.slice(det.start, det.end) !== det.text) {
+        throw new CloudError("span offsets do not match the document; cannot apply tokenize locally");
+      }
+    }
+    const tokenMapper = opts.tokenize ? new TokenMapper(text, result.detections) : null;
+    result.redactedText = applyReplacements(text, result.detections, this.labelFor(false, tokenMapper));
+    result.tokens = tokenMapper ? tokenMapper.tokens : {};
+  }
+
   redact(text: string, options: RedactOptions = {}): RedactResult {
     checkCountryArg(options.countries, "countries");
     checkCountryArg(options.countryHint, "countryHint");
+    checkLabelOptions(options);
 
     const requestedMode = options.mode ?? "rules";
     if (requestedMode === "cloud") {
@@ -272,6 +413,7 @@ export class EuRedact {
       chunkOffset = 0,
       mode = "rules",
       referentialIntegrity = false,
+      tokenize = false,
       detectDates = false,
     } = options;
     // A context makes the result depend on evidence from other chunks, so the
@@ -289,7 +431,7 @@ export class EuRedact {
     // referentialIntegrity changes the labels, not the spans, so a cached
     // bracketed result is the wrong answer for a labelled call on the same
     // text — it has to key the cache too.
-    const cacheMode = `${mode}|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}`;
+    const cacheMode = `${mode}|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}|tok=${tokenize}`;
 
     let cacheKey: string | undefined;
     if (cache) {
@@ -323,7 +465,8 @@ export class EuRedact {
 
     detections.sort((a, b) => a.start - b.start || b.end - a.end);
 
-    const redacted = applyReplacements(text, detections, this.labelFor(referentialIntegrity));
+    const tokenMapper = tokenize ? new TokenMapper(text, detections) : null;
+    const redacted = applyReplacements(text, detections, this.labelFor(referentialIntegrity, tokenMapper));
 
     // Report the inference so it can be audited. Spans in `evidence` are
     // offsets into the normalised text, matching `detections`.
@@ -338,6 +481,7 @@ export class EuRedact {
       inferredCountries,
       evidence,
       detectionMode: countries && countries.length ? "declared" : "inferred",
+      tokens: tokenMapper ? tokenMapper.tokens : {},
     };
 
     if (cache && cacheKey) {
@@ -356,7 +500,8 @@ export class EuRedact {
   async redactAsync(text: string, options: RedactOptions = {}): Promise<RedactResult> {
     const mode = options.mode ?? "rules";
     if (mode !== "cloud") return this.redact(text, options);
-    return redactViaCloud(text, options);
+    checkLabelOptions(options);
+    return this.redactViaCloud(text, options);
   }
 
   redactBatch(texts: string[], options: RedactOptions = {}): RedactResult[] {

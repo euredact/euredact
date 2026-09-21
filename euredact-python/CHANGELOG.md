@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Added
+
+- **Reversible tokenization: `redact(text, tokenize=True)` and `restore()`.**
+  Each value is replaced by a token that names its type and nothing else —
+  `EMAIL_K7Q2`, `PERSON_NAME_W3NB` — and the result carries the way back:
+
+  ```python
+  result = euredact.redact(prompt, countries=["BE"], tokenize=True)
+  reply = llm(result.redacted_text)          # sees PERSON_NAME_W3NB (EMAIL_K7Q2)
+  euredact.restore(reply, result.tokens)     # the reply, with the real values back
+  ```
+
+  The same value gets the same token within a call, so a prompt that names
+  someone twice still reads as one person. Across calls it gets a different
+  one: nothing is retained on the instance, and two tokenized documents never
+  reveal a shared value — which is where this differs from
+  `referential_integrity`, and why the two cannot be combined. Tokens are
+  kept clear of any token-shaped string already in the document, so an LLM's
+  reply to a tokenized prompt can itself be redacted without `restore()`
+  putting the wrong value back. `RedactResult` gains `tokens`, a
+  token → value mapping that is empty unless `tokenize=True`.
+
+  Works in cloud mode: the SDK rebuilds the text from the spans the service
+  returns. The service builds its own output from exactly those spans, so
+  nothing it masked is lost; a span whose offsets do not match the document
+  raises `CloudError` rather than masking the wrong characters.
+
 ### Fixed
 
 - **A capitalised heading word was masked as a German ID card.** The

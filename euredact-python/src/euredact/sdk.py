@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import re
+import secrets
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Mapping
 
 from euredact.cache import ResultCache
 from euredact.normalizer import map_offset_to_original, normalize
@@ -124,6 +126,92 @@ class ReferentialMapper:
         self._mapping.clear()
 
 
+#: Characters a token suffix is drawn from. No vowels, so a suffix never spells
+#: a word; no 0/1/I/O, so it survives being read back by a person; no
+#: underscore, so the type prefix stays unambiguous.
+TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+TOKEN_SUFFIX_LENGTH = 4
+_TOKEN_MAX_DRAWS = 100
+
+
+def _type_label(entity_type: EntityType | str) -> str:
+    return entity_type.value if isinstance(entity_type, EntityType) else entity_type
+
+
+class TokenMapper:
+    """Maps each distinct PII value in one call to a reversible token.
+
+    A token is ``TYPE_XXXX``: the entity type, then :data:`TOKEN_SUFFIX_LENGTH`
+    random characters from :data:`TOKEN_ALPHABET`. The same value gets the same
+    token within the call, so relationships survive; across calls it gets a
+    different one, so two tokenized documents never reveal a shared value.
+
+    Nothing is kept beyond the call. The mapping goes to the caller in
+    :attr:`RedactResult.tokens`, and only the caller can turn it back into
+    text with :func:`restore`.
+
+    Tokens are also kept clear of any token-shaped string already in the
+    document. A caller that redacts an LLM's reply to a tokenized prompt has
+    exactly such a document, and a fresh token colliding with an old one would
+    make :func:`restore` put the wrong value back.
+    """
+
+    def __init__(self, text: str, detections: list[Detection]) -> None:
+        self._by_value: dict[str, str] = {}
+        self._tokens: dict[str, str] = {}
+        self._taken: set[str] = set()
+        types = {_type_label(d.entity_type) for d in detections}
+        if types:
+            shaped = re.compile(
+                "(?:" + "|".join(re.escape(t) for t in sorted(types)) + ")"
+                f"_[{TOKEN_ALPHABET}]{{{TOKEN_SUFFIX_LENGTH}}}"
+            )
+            self._taken.update(m.group(0) for m in shaped.finditer(text))
+
+    def get_token(self, det: Detection, value: str) -> str:
+        """Return the token for *value*, minting one on first sight."""
+        token = self._by_value.get(value)
+        if token is None:
+            prefix = _type_label(det.entity_type) + "_"
+            for _ in range(_TOKEN_MAX_DRAWS):
+                suffix = "".join(secrets.choice(TOKEN_ALPHABET) for _ in range(TOKEN_SUFFIX_LENGTH))
+                token = prefix + suffix
+                if token not in self._taken:
+                    break
+            else:
+                raise RuntimeError(
+                    f"could not mint a unique token with prefix {prefix!r} "
+                    f"after {_TOKEN_MAX_DRAWS} draws")
+            self._taken.add(token)
+            self._by_value[value] = token
+            self._tokens[token] = value
+        return token
+
+    @property
+    def tokens(self) -> dict[str, str]:
+        """Token -> original value, for :attr:`RedactResult.tokens`."""
+        return self._tokens
+
+
+def restore(text: str, tokens: Mapping[str, str]) -> str:
+    """Put the original values back into *text*.
+
+    *tokens* is :attr:`RedactResult.tokens` from the ``redact(tokenize=True)``
+    call that produced the text this one derives from -- typically the reply
+    an LLM wrote to the tokenized prompt. Every occurrence of every token is
+    replaced; a token an LLM glued to other characters (``EMAIL_K7Q2s``) is
+    still restored, since leaving a token behind is the worse failure.
+    """
+    if not tokens:
+        return text
+    # Longest first so a token that is a prefix of another (custom pattern
+    # names allow it) cannot be matched short. The replacement is a callable
+    # so backslashes and group references in the original values are literal.
+    pattern = re.compile("|".join(
+        re.escape(t) for t in sorted(tokens, key=len, reverse=True)))
+    return pattern.sub(lambda m: tokens[m.group(0)], text)
+
+
 class EuRedact:
     """Main EuRedact SDK orchestrator."""
 
@@ -149,17 +237,16 @@ class EuRedact:
         self._cache.clear()
         self._referential_mapper.clear()
 
-    def _label_for(self, referential_integrity: bool) -> Callable[[Detection, str], str]:
+    def _label_for(
+        self, referential_integrity: bool, token_mapper: TokenMapper | None
+    ) -> Callable[[Detection, str], str]:
         """The label function for one call, given its output options."""
+        if token_mapper is not None:
+            return token_mapper.get_token
         if referential_integrity:
             mapper = self._referential_mapper
             return lambda det, _slice: mapper.get_label(det.text, det.entity_type)
-
-        def bracketed(det: Detection, _slice: str) -> str:
-            label = det.entity_type.value if isinstance(det.entity_type, EntityType) else det.entity_type
-            return f"[{label}]"
-
-        return bracketed
+        return lambda det, _slice: f"[{_type_label(det.entity_type)}]"
 
     def redact(
         self,
@@ -171,6 +258,7 @@ class EuRedact:
         chunk_offset: int = 0,
         mode: str = "rules",
         referential_integrity: bool = False,
+        tokenize: bool = False,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -205,6 +293,10 @@ class EuRedact:
         # work happens, and on every entry point that funnels through redact().
         check_country_arg(countries, "countries")
         check_country_arg(country_hint, "country_hint")
+        if tokenize and referential_integrity:
+            raise ValueError(
+                "tokenize and referential_integrity are two label schemes for "
+                "the same spans; pass one of them")
 
         if mode == "cloud":
             # Routed before any local work: the service runs its own rules
@@ -213,7 +305,8 @@ class EuRedact:
             return self._redact_cloud(
                 text, countries=countries, country_hint=country_hint,
                 context=context, chunk_offset=chunk_offset,
-                referential_integrity=referential_integrity, coref=coref,
+                referential_integrity=referential_integrity, tokenize=tokenize,
+                coref=coref,
             )
         if mode != "rules":
             raise ValueError(
@@ -236,7 +329,7 @@ class EuRedact:
         # referential_integrity changes the labels, not the spans, so a cached
         # bracketed result is the wrong answer for a labelled call on the same
         # text — it has to key the cache too.
-        cache_mode = f"{mode}|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}"
+        cache_mode = f"{mode}|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}|tok={tokenize}"
         # A context makes the result depend on evidence from other chunks, so
         # the text no longer identifies the result. Caching is disabled rather
         # than keyed on the context, whose contents change as chunks arrive.
@@ -281,8 +374,9 @@ class EuRedact:
         detections.sort(key=lambda d: (d.start, -d.end))
 
         # Step 15: Apply replacements.
+        token_mapper = TokenMapper(text, detections) if tokenize else None
         redacted = _apply_replacements(
-            text, detections, self._label_for(referential_integrity)
+            text, detections, self._label_for(referential_integrity, token_mapper)
         )
 
         # Step 16: [COREF EXTENSION] — no-op
@@ -301,6 +395,7 @@ class EuRedact:
             inferred_countries=tuple(ranked),
             evidence=tuple(evidence),
             detection_mode="declared" if countries else "inferred",
+            tokens=token_mapper.tokens if token_mapper is not None else {},
         )
 
         # Step 17: Cache
@@ -318,6 +413,7 @@ class EuRedact:
         context: "DocumentContext | None",
         chunk_offset: int,
         referential_integrity: bool,
+        tokenize: bool,
         coref: bool,
     ) -> RedactResult:
         """Send the document to the cloud tier.
@@ -353,7 +449,34 @@ class EuRedact:
         # ignored option that is safe to ignore -- it can only cause MORE to be
         # detected, never less, so it cannot produce under-redaction.
         with CloudClient() as client:
-            return client.redact(text, country=countries[0].upper())
+            result = client.redact(text, country=countries[0].upper())
+        if tokenize:
+            self._remask_cloud_result(result, text, tokenize=tokenize)
+        return result
+
+    def _remask_cloud_result(
+        self, result: RedactResult, text: str, *, tokenize: bool
+    ) -> None:
+        """Rebuild the masked text from the service's spans, in place.
+
+        The service masks with bracketed labels only. Any other output
+        option is applied here, from its spans: the service builds its
+        ``redacted_text`` from exactly the spans it returns (entities it
+        reports but cannot place are listed separately and never applied),
+        so nothing it masked is lost by masking again from the same spans.
+        """
+        from euredact.cloud.client import CloudError
+
+        for det in result.detections:
+            if text[det.start : det.end] != det.text:
+                raise CloudError(
+                    "span offsets do not match the document; cannot apply "
+                    "tokenize locally")
+        token_mapper = TokenMapper(text, result.detections) if tokenize else None
+        result.redacted_text = _apply_replacements(
+            text, result.detections, self._label_for(False, token_mapper)
+        )
+        result.tokens = token_mapper.tokens if token_mapper is not None else {}
 
     async def aredact(
         self,
@@ -365,6 +488,7 @@ class EuRedact:
         chunk_offset: int = 0,
         mode: str = "rules",
         referential_integrity: bool = False,
+        tokenize: bool = False,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -387,6 +511,7 @@ class EuRedact:
                 chunk_offset=chunk_offset,
                 mode=mode,
                 referential_integrity=referential_integrity,
+                tokenize=tokenize,
                 detect_dates=detect_dates,
                 coref=coref,
                 coref_model=coref_model,
@@ -402,6 +527,7 @@ class EuRedact:
         country_hint: list[str] | None = None,
         mode: str = "rules",
         referential_integrity: bool = False,
+        tokenize: bool = False,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> list[RedactResult]:
@@ -424,6 +550,7 @@ class EuRedact:
                 country_hint=country_hint,
                 mode=mode,
                 referential_integrity=referential_integrity,
+                tokenize=tokenize,
                 detect_dates=detect_dates,
                 cache=cache,
             )
@@ -438,6 +565,7 @@ class EuRedact:
         country_hint: list[str] | None = None,
         mode: str = "rules",
         referential_integrity: bool = False,
+        tokenize: bool = False,
         detect_dates: bool = False,
         cache: bool = True,
         max_concurrency: int = 4,
@@ -464,6 +592,7 @@ class EuRedact:
                     country_hint=country_hint,
                     mode=mode,
                     referential_integrity=referential_integrity,
+                    tokenize=tokenize,
                     detect_dates=detect_dates,
                     cache=cache,
                 )
@@ -478,6 +607,7 @@ class EuRedact:
         country_hint: list[str] | None = None,
         mode: str = "rules",
         referential_integrity: bool = False,
+        tokenize: bool = False,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> Iterator[RedactResult]:
@@ -497,6 +627,7 @@ class EuRedact:
                 country_hint=country_hint,
                 mode=mode,
                 referential_integrity=referential_integrity,
+                tokenize=tokenize,
                 detect_dates=detect_dates,
                 cache=cache,
             )

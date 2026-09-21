@@ -54,7 +54,7 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "postbuild:cjs": "echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
-    "test": "npm run test:spec && npm run test:inference && npm run test:cloud && npm run test:conformance",
+    "test": "npm run test:spec && npm run test:inference && npm run test:cloud && npm run test:tokenize && npm run test:conformance",
     "benchmark": "node --import tsx src/__tests__/benchmark.ts",
     "prepublishOnly": "npm run build",
     "test:spec": "node --import tsx src/__tests__/spec.ts",
@@ -63,7 +63,8 @@
     "test:conformance": "node --import tsx src/__tests__/conformance.ts",
     "test:inference": "node --import tsx src/__tests__/inference.ts",
     "dump": "node --import tsx src/__tests__/dump.ts",
-    "test:cloud": "node --import tsx src/__tests__/cloud.ts"
+    "test:cloud": "node --import tsx src/__tests__/cloud.ts",
+    "test:tokenize": "node --import tsx src/__tests__/tokenize.ts"
   },
   "devDependencies": {
     "@types/node": "22.10.2",

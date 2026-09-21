@@ -146,6 +146,7 @@ function toResult(payload: WireResult, text: string): RedactResult {
     inferredCountries: [],
     evidence: [],
     detectionMode: "declared",
+    tokens: {},
   };
 }
 

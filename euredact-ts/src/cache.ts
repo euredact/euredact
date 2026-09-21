@@ -7,9 +7,10 @@ import type { RedactResult } from "./types.js";
 const DEFAULT_MAX_CHARS = 16_000_000;
 
 /** Approximate retained size of a cached result, in characters. */
-function resultChars(result: RedactResult): number {
+export function resultChars(result: RedactResult): number {
   let chars = result.redactedText.length;
   for (const d of result.detections) chars += d.text.length;
+  for (const [token, value] of Object.entries(result.tokens)) chars += token.length + value.length;
   return chars;
 }
 

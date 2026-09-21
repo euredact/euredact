@@ -179,6 +179,15 @@ export interface RedactResult {
    * already means the tier selector, which {@link RedactResult.source} reports.
    */
   detectionMode: string;
+  /**
+   * Token -> original text, populated by `redact(text, { tokenize: true })`.
+   *
+   * Hand it to `restore()` with the text that came back from wherever the
+   * redacted text went. Every token is unique to this call: the same value in
+   * another document gets a different token. Treat the mapping as read-only —
+   * a cached result shares it with every caller.
+   */
+  tokens: Record<string, string>;
 }
 
 export interface PatternDef {

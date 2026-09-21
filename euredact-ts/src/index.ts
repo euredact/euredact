@@ -1,7 +1,7 @@
 export { EntityType, DetectionSource, LEGACY_TYPE_ALIASES, canonicalType } from "./types.js";
 export type { Detection, RedactResult, PatternDef, CountryConfig, CountryEvidence } from "./types.js";
 export { DocumentContext } from "./rules/context.js";
-export { EuRedact, type RedactOptions } from "./sdk.js";
+export { EuRedact, restore, type RedactOptions } from "./sdk.js";
 export { COUNTRY_CONFIGS } from "./rules/countries/index.js";
 export { setBicRegistry, getBicRegistry, SEED_BIC6_PREFIXES, type BicRegistryProvider } from "./rules/bicRegistry.js";
 export {

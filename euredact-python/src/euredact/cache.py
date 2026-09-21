@@ -16,7 +16,11 @@ DEFAULT_MAX_CHARS = 16_000_000
 
 def _result_chars(result: RedactResult) -> int:
     """Approximate retained size of a cached result, in characters."""
-    return len(result.redacted_text) + sum(len(d.text) for d in result.detections)
+    return (
+        len(result.redacted_text)
+        + sum(len(d.text) for d in result.detections)
+        + sum(len(k) + len(v) for k, v in result.tokens.items())
+    )
 
 
 class ResultCache:

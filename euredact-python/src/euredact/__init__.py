@@ -27,7 +27,7 @@ __version__ = "0.4.0"
 from euredact.cloud.config import configure
 from euredact.rules.bic_registry import set_bic_registry
 from euredact.rules.context import DocumentContext
-from euredact.sdk import EuRedact
+from euredact.sdk import EuRedact, restore
 from euredact.types import Detection, DetectionSource, EntityType, RedactResult
 
 __all__ = [
@@ -48,6 +48,7 @@ __all__ = [
     "redact_batch",
     "redact_iter",
     "RedactResult",
+    "restore",
 ]
 
 # ---------------------------------------------------------------------------
@@ -97,6 +98,7 @@ def redact(
     chunk_offset: int = 0,
     mode: str = "rules",
     referential_integrity: bool = False,
+    tokenize: bool = False,
     detect_dates: bool = False,
     coref: bool = False,
     coref_model: str = "default",
@@ -118,6 +120,7 @@ def redact(
         chunk_offset=chunk_offset,
         mode=mode,
         referential_integrity=referential_integrity,
+        tokenize=tokenize,
         detect_dates=detect_dates,
         coref=coref,
         coref_model=coref_model,
@@ -134,6 +137,7 @@ async def aredact(
     chunk_offset: int = 0,
     mode: str = "rules",
     referential_integrity: bool = False,
+    tokenize: bool = False,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> RedactResult:
@@ -150,6 +154,7 @@ async def aredact(
         chunk_offset=chunk_offset,
         mode=mode,
         referential_integrity=referential_integrity,
+        tokenize=tokenize,
         detect_dates=detect_dates,
         cache=cache,
     )
@@ -162,6 +167,7 @@ def redact_batch(
     country_hint: list[str] | None = None,
     mode: str = "rules",
     referential_integrity: bool = False,
+    tokenize: bool = False,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> list[RedactResult]:
@@ -176,6 +182,7 @@ def redact_batch(
         country_hint=country_hint,
         mode=mode,
         referential_integrity=referential_integrity,
+        tokenize=tokenize,
         detect_dates=detect_dates,
         cache=cache,
     )
@@ -188,6 +195,7 @@ async def aredact_batch(
     country_hint: list[str] | None = None,
     mode: str = "rules",
     referential_integrity: bool = False,
+    tokenize: bool = False,
     detect_dates: bool = False,
     cache: bool = True,
     max_concurrency: int = 4,
@@ -203,6 +211,7 @@ async def aredact_batch(
         country_hint=country_hint,
         mode=mode,
         referential_integrity=referential_integrity,
+        tokenize=tokenize,
         detect_dates=detect_dates,
         cache=cache,
         max_concurrency=max_concurrency,
@@ -216,6 +225,7 @@ def redact_iter(
     country_hint: list[str] | None = None,
     mode: str = "rules",
     referential_integrity: bool = False,
+    tokenize: bool = False,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> Iterator[RedactResult]:
@@ -230,6 +240,7 @@ def redact_iter(
         country_hint=country_hint,
         mode=mode,
         referential_integrity=referential_integrity,
+        tokenize=tokenize,
         detect_dates=detect_dates,
         cache=cache,
     )

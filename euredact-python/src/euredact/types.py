@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -184,4 +184,13 @@ class RedactResult:
     Named ``detection_mode`` rather than ``mode`` because ``redact(mode=...)``
     already means the tier selector (``"rules"`` / ``"cloud"``), which
     :attr:`source` reports.
+    """
+
+    tokens: dict[str, str] = field(default_factory=dict)
+    """Token -> original text, populated by ``redact(tokenize=True)``.
+
+    Hand it to :func:`euredact.restore` with the text that came back from
+    wherever the redacted text went. Every token is unique to this call:
+    the same value in another document gets a different token. Treat the
+    mapping as read-only -- a cached result shares it with every caller.
     """
