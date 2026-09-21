@@ -127,11 +127,33 @@ function toEntityType(raw: string): EntityType | string {
   return known ? (canonical as EntityType) : canonical;
 }
 
+/**
+ * Map the service's offsets, which count code points, onto this SDK's, which
+ * count UTF-16 units.
+ *
+ * The two agree until the first character outside the BMP — an emoji, say —
+ * after which every service offset is short by one unit per such character.
+ * Returns the identity when the text has none, which is the common case and
+ * costs one regex test.
+ */
+function codePointOffsets(text: string): (cp: number) => number {
+  if (!/[\uD800-\uDBFF]/.test(text)) return cp => cp;
+  const units: number[] = [];
+  let i = 0;
+  for (const ch of text) {
+    units.push(i);
+    i += ch.length;
+  }
+  units.push(i);
+  return cp => units[Math.min(cp, units.length - 1)];
+}
+
 function toResult(payload: WireResult, text: string): RedactResult {
+  const offset = codePointOffsets(text);
   const detections: Detection[] = (payload.entities ?? []).map(span => ({
     entityType: toEntityType(span.type),
-    start: span.start,
-    end: span.end,
+    start: offset(span.start),
+    end: offset(span.end),
     text: span.text,
     source: span.source === "model" ? DetectionSource.CLOUD : DetectionSource.RULES,
     country: null,

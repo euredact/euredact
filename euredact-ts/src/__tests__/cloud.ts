@@ -195,6 +195,23 @@ testAsync("detections come back sorted by position", async () => {
   assert.deepEqual(starts, [...starts].sort((a, b) => a - b));
 });
 
+testAsync("service offsets are code points and land on the right UTF-16 units", async () => {
+  // The service counts code points; one emoji before a span shifts every
+  // later offset by one UTF-16 unit unless the client converts.
+  configure({ apiKey: "erk_test", baseUrl: "https://api.test" });
+  const doc = "🎉 Patiënt Bas Verhoeven, mail bas@example.be";
+  const { impl } = scripted([{ status: 200, body: {
+    ...SUCCESS,
+    redacted_text: "🎉 Patiënt [PERSON_NAME], mail [EMAIL]",
+    entities: [
+      { start: 10, end: 23, text: "Bas Verhoeven", type: "PERSON_NAME", source: "model" },
+      { start: 30, end: 44, text: "bas@example.be", type: "EMAIL", source: "rules" },
+    ],
+  } }]);
+  const r = await new CloudClient().redact(doc, { country: "BE", fetchImpl: impl });
+  for (const d of r.detections) assert.equal(doc.slice(d.start, d.end), d.text);
+});
+
 testAsync("an unknown type survives as a string", async () => {
   configure({ apiKey: "erk_test", baseUrl: "https://api.test" });
   const { impl } = scripted([{ status: 200, body: {

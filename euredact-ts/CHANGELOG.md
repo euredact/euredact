@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Cloud detections landed on the wrong characters after an emoji.** The
+  service counts offsets in code points; this SDK slices UTF-16 units. They
+  agree until the first character outside the Basic Multilingual Plane, after
+  which every span the service returned was short by one unit per such
+  character — `detections[].start/end` no longer pointed at
+  `detections[].text`. The client now converts offsets on the way in. Found
+  by the `tokenize` offset check, which refused to rebuild a document rather
+  than mask the wrong characters. Python indexes code points and was never
+  affected.
+
 ### Added
 
 - **Reversible tokenization: `redact(text, { tokenize: true })` and `restore()`.**
