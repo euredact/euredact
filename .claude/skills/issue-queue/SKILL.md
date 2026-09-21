@@ -8,7 +8,10 @@ description: Work the Forgejo issue queue from the repo this session is in — t
 One queue (the Forgejo tracker, routed by component label), one worker per repo: this skill acts only
 on the repo whose checkout it runs in, detected from `git remote get-url origin`. The script:
 `.claude/skills/product-issues/forgejo_issues.py` (`python3`, stdlib). Token: `FORGEJO_TOKEN` or
-`~/.config/euredact/forgejo_token` with `write:issue` + `write:repository`; if missing, stop and say so.
+`~/.config/euredact/forgejo_token` — the **bot account's** token (`write:issue`, `write:repository`,
+`read:user`); everything the worker files, comments, claims (it becomes assignee), pushes and opens
+is attributed to the bot, not to the person running the session. If the token is missing, stop and
+say so.
 Filing and format rules live in the `product-issues` skill; this skill is about working what is filed.
 
 ```bash
@@ -52,9 +55,11 @@ python3 $S pr --head issue/N-slug --title "..." --body-file F --issue N
    or skip a test.
 7. **Repo check** (below) must be green. Red → nothing pushed; comment with the failing tests and
    what the diff does, `release N --status needs-human`.
-8. Commit only the intended files: subject `issue-<N>: <symptom>`, body with the cause and the check
-   run, last line `Closes euredact/<repo>#<N>`. `git push -u origin issue/<N>-<slug>` — only that
-   branch, never `main`.
+8. Commit only the intended files, **as the bot account** — `python3 $S whoami` gives its login and
+   mail; commit with `git -c user.name=<login> -c user.email=<mail> commit ...` so branch history says
+   the bot proposed and a human merged. Subject `issue-<N>: <symptom>`, body with the cause and the
+   check run, the usual `Co-Authored-By` trailer, last line `Closes euredact/<repo>#<N>`.
+   `git push -u origin issue/<N>-<slug>` — only that branch, never `main`.
 9. `pr --head issue/<N>-<slug> --title "issue-<N>: ..." --body-file <f> --issue N`. Body: reproduction,
    what changed, the check output summary, what was **not** run (deploys, retrains), and the closing
    line. A 403 here means the token lacks `write:repository`: comment with the branch name and

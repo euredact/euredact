@@ -27,6 +27,8 @@ Working the queue (the issue-queue skill):
   release [--repo A] N --status triaged|blocked|needs-human|proposed [--body-file F]
   pr [--repo A] --head issue/N-slug --base main --title T --body-file F [--issue N]
   board [--state open|all] [--json]                  every repo: sev, status, age, claimant, PR
+  whoami                                             the account behind the token (login, email) — the
+                                                     issue-queue skill commits issue branches as it
 Global: --dry-run (or FORGEJO_DRY_RUN=1) prints every non-GET call instead of sending it.
 Output is JSON on stdout (tables for next/board unless --json); errors on stderr, non-zero exit.
 """
@@ -120,6 +122,12 @@ def repo_for(alias: str | None, labels: list[str] | None = None) -> str:
     if not here:
         sys.exit("no --repo and the current checkout's origin is not one of the euRedact repos; pass --repo " + "|".join(REPOS))
     return REPOS[here]
+
+
+def whoami() -> dict | None:
+    """The account behind the token (needs read:user); None when the scope is missing."""
+    u = api("GET", "/user", tolerate=(403,), quiet=True)
+    return {"login": u["login"], "email": u.get("email") or ""} if u else None
 
 
 def token() -> str:
@@ -282,11 +290,17 @@ def main(argv=None) -> int:
     p.add_argument("--base", default="main"); p.add_argument("--title", required=True); p.add_argument("--body-file", required=True)
     p.add_argument("--issue", type=int)
     p = sub.add_parser("board"); p.add_argument("--state", default="open", choices=["open", "all"]); p.add_argument("--json", action="store_true")
+    sub.add_parser("whoami")
     a = ap.parse_args(argv)
     DRY_RUN = a.dry_run or os.environ.get("FORGEJO_DRY_RUN") == "1"
     host = socket.gethostname().split(".")[0]
 
-    if a.cmd == "labels":
+    if a.cmd == "whoami":
+        me = whoami()
+        if not me:
+            sys.exit("token has no read:user scope; cannot resolve the account")
+        print(json.dumps(me))
+    elif a.cmd == "labels":
         repos = [repo_for(a.repo)] if (a.repo or os.environ.get("FORGEJO_REPO")) else list(REPOS.values())
         print(json.dumps({r: ensure_labels(r) for r in repos}, indent=1))
     elif a.cmd == "list":
@@ -355,6 +369,9 @@ def main(argv=None) -> int:
         at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         alias = next(k for k, v in REPOS.items() if v == r) if r in REPOS.values() else r
         set_status(r, i, "in-progress")
+        me = whoami()
+        if me:                                     # the bot account holds the issue while it works it
+            api("PATCH", f"/repos/{r}/issues/{a.number}", {"assignees": [me["login"]]}, tolerate=(403, 422), quiet=True)
         note = (f"<!-- euredact-queue claim host={host} repo={alias} at={at} -->\n"
                 f"Claimed by the {alias} worker session on {host}. Reproducing."
                 + (f"\n\nTook over a stale claim by {cs.get('claimant')} (from {cs.get('at')})." if a.steal else ""))
@@ -373,6 +390,10 @@ def main(argv=None) -> int:
         if a.body_file:
             api("POST", f"/repos/{r}/issues/{a.number}/comments", {"body": Path(a.body_file).read_text(encoding="utf-8")})
         new = set_status(r, i, a.status)
+        if a.status in ("blocked", "needs-human"):   # handed back: the bot no longer holds it
+            me = whoami()
+            if me and any(x.get("login") == me["login"] for x in (i.get("assignees") or [])):
+                api("PATCH", f"/repos/{r}/issues/{a.number}", {"assignees": []}, tolerate=(403, 422), quiet=True)
         print(json.dumps({"repo": r, "number": a.number, "labels": new}, indent=1))
     elif a.cmd == "pr":
         r = repo_for(a.repo)
