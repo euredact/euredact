@@ -10,7 +10,7 @@
 
   ```python
   result = euredact.redact(prompt, countries=["BE"], tokenize=True)
-  reply = llm(result.redacted_text)          # sees PERSON_NAME_W3NB (EMAIL_K7Q2)
+  reply = llm(result.redacted_text)          # sees EMAIL_K7Q2, never the address
   euredact.restore(reply, result.tokens)     # the reply, with the real values back
   ```
 

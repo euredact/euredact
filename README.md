@@ -48,6 +48,8 @@ console.log(result.redactedText);
 - **Priority-aware deduplication:** validated matches (checksum, corroborated by the document's country) > custom patterns > regex-only; a failed checksum demotes same-type matches rather than deleting them, so it can never silence a detection
 - **Country self-detection:** infers a document's countries from the entities that carry one — IBAN prefixes, `+CC` dialling codes, VAT prefixes, BIC, email ccTLDs — so an ambiguous value resolves without the caller naming a country. `countries` never gates what is looked for; it scores and flags
 - **Referential integrity:** consistent label mapping within a session (same PII value always gets the same label)
+- **Reversible tokenization:** `tokenize=True` swaps values for `EMAIL_K7Q2`-style tokens and `restore()` puts them back — for prompts that go to an LLM and come back with the tokens in them
+- **Allowlist:** values that are never redacted — your own organisation's name and addresses — per call or per instance
 - **Fast:** see [Performance](#performance)
 - **Zero required dependencies** in both Python and Node.js
 - **Thread-safe** (Python), immutable detection objects
@@ -157,7 +159,9 @@ It does not quietly return rules-only output: a caller who believes names and
 diagnoses were checked, and ships a document that only had its phone numbers
 masked, is the one failure this library must not have. Options the service
 cannot honour — multiple `countries`, `country_hint`, `context`/`chunk_offset`,
-`referential_integrity` — raise rather than being silently dropped.
+`referential_integrity` — raise rather than being silently dropped. `tokenize`
+and `allowlist` are honoured: the SDK applies them to the spans the service
+returns and rebuilds the text from those.
 
 Retries carry an `Idempotency-Key`, so a retry after a timeout cannot bill
 twice; `Retry-After` is obeyed; a document that outlives the service's sync
@@ -249,8 +253,8 @@ RedactResult
 
 See the package-specific READMEs for full API documentation:
 
-- **Python:** [`euredact-python/README.md`](euredact-python/README.md) -- `redact()`, `aredact()`, `redact_batch()`, `aredact_batch()`, `redact_iter()`, `add_custom_pattern()`, `available_countries()`, `configure()`
-- **TypeScript:** [`euredact-ts/README.md`](euredact-ts/README.md) -- `redact()`, `redactAsync()`, `redactBatch()`, `addCustomPattern()`, `availableCountries()`, `configure()`
+- **Python:** [`euredact-python/README.md`](euredact-python/README.md) -- `redact()`, `aredact()`, `redact_batch()`, `aredact_batch()`, `redact_iter()`, `restore()`, `add_custom_pattern()`, `available_countries()`, `configure()`
+- **TypeScript:** [`euredact-ts/README.md`](euredact-ts/README.md) -- `redact()`, `redactAsync()`, `redactBatch()`, `restore()`, `addCustomPattern()`, `availableCountries()`, `configure()`
 
 Both SDKs take `mode="rules"` (default) or `mode="cloud"` — see
 [Cloud tier](#cloud-tier). In TypeScript the cloud path is `redactAsync()`,

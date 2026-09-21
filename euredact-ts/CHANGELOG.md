@@ -22,7 +22,7 @@
 
   ```ts
   const result = redact(prompt, { countries: ["BE"], tokenize: true });
-  const reply = await llm(result.redactedText);   // sees PERSON_NAME_W3NB (EMAIL_K7Q2)
+  const reply = await llm(result.redactedText);   // sees EMAIL_K7Q2, never the address
   restore(reply, result.tokens);                  // the reply, with the real values back
   ```
 

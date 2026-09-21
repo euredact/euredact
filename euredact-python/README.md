@@ -40,6 +40,11 @@ print(result.detections)
   high-entropy tokens near context keywords
 - **Custom patterns:** register your own regex patterns for domain-specific PII
   types at runtime via `add_custom_pattern()`
+- **Reversible tokenization:** `tokenize=True` swaps values for `EMAIL_K7Q2`-style
+  tokens and `restore()` puts them back — for prompts that go to an LLM and
+  come back
+- **Allowlist:** values that are never redacted, such as your own organisation's
+  name and addresses, per call or per instance
 - **Checksum validation:** IBAN mod-97, Luhn (credit cards), and 30+ country-specific
   national ID checksums (e.g., Dutch BSN 11-proof, Belgian national number modulo)
 - **Priority-aware deduplication:** when matches overlap, validated patterns
@@ -88,6 +93,8 @@ euredact.redact(
     countries: list[str] | None = None,
     mode: str = "rules",
     referential_integrity: bool = False,
+    tokenize: bool = False,
+    allowlist: list[str] | None = None,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> RedactResult
@@ -101,6 +108,8 @@ Main entry point. Detects and redacts PII in the given text.
 | `countries` | `None` | ISO 3166-1 alpha-2 codes to restrict detection (e.g. `["NL", "BE"]`). `None` loads all 31 countries. |
 | `mode` | `"rules"` | Detection mode. Currently only `"rules"` is supported. |
 | `referential_integrity` | `False` | Replace PII with consistent labels instead of entity-type labels. |
+| `tokenize` | `False` | Replace each value with a reversible token (`EMAIL_K7Q2`) and return the token → value mapping in `result.tokens`. Tokens are unique to the call. See [Reversible tokenization](#reversible-tokenization). Cannot be combined with `referential_integrity`. |
+| `allowlist` | `None` | Values never to redact, matched whole and case-insensitively. Merged with the instance's allowlist. See [Allowlist](#allowlist). |
 | `detect_dates` | `False` | Include date-of-birth and date-of-death detections. Off by default because bare dates without strong context are better handled by an LLM tier. When enabled, the engine applies keyword and structural (JSON/CSV) checks. |
 | `cache` | `True` | Cache results for identical inputs. |
 
@@ -113,6 +122,8 @@ euredact.redact_batch(
     countries: list[str] | None = None,
     mode: str = "rules",
     referential_integrity: bool = False,
+    tokenize: bool = False,
+    allowlist: list[str] | None = None,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> list[RedactResult]
@@ -171,6 +182,16 @@ euredact.add_custom_pattern(name: str, pattern: str) -> None
 Register a custom regex pattern. Matches are reported with `name` as the entity
 type. See [Custom Patterns](#custom-patterns) below for details and examples.
 
+#### `euredact.restore()`
+
+```python
+euredact.restore(text: str, tokens: Mapping[str, str]) -> str
+```
+
+Put the original values back into text that derives from a `tokenize=True`
+result — typically an LLM's reply to the tokenized prompt. `tokens` is
+`result.tokens`. See [Reversible tokenization](#reversible-tokenization).
+
 #### `euredact.available_countries()`
 
 ```python
@@ -200,7 +221,8 @@ print(result.redacted_text)
 
 The `EuRedact` class exposes the same methods as the module-level API: `redact()`,
 `redact_batch()`, `aredact()`, `aredact_batch()`, `redact_iter()`, and
-`add_custom_pattern()`.
+`add_custom_pattern()`. Its constructor takes `max_input_length` and an
+`allowlist` that applies to every call on the instance — see [Allowlist](#allowlist).
 
 ### Return Types
 
@@ -221,6 +243,7 @@ class RedactResult:
     evidence: tuple[CountryEvidence, ...] = ()              # every signal, with the span behind it
     detection_mode: str = "declared"                        # "declared" if countries= was passed,
                                                             # "inferred" otherwise
+    tokens: dict[str, str] = {}                             # token -> original value; only with tokenize=True
 ```
 
 #### `Detection`
@@ -376,7 +399,8 @@ chunking, because the model has never seen a chunk boundary.
 
 Options the service cannot honour raise rather than being ignored: multiple
 `countries`, `country_hint`, `context`/`chunk_offset`, `referential_integrity`
-and `coref`.
+and `coref`. `tokenize` and `allowlist` are honoured: the SDK applies them to
+the spans the service returns and rebuilds the text from those.
 
 ## `NAME` is now `PERSON_NAME`
 
@@ -752,6 +776,73 @@ print(result.redacted_text)
 The mapping is scoped to the `EuRedact` instance. The module-level `redact()`
 function uses a shared singleton, so labels are consistent across calls within
 the same process.
+
+## Reversible tokenization
+
+`tokenize=True` is for text that has to come back. Each value is replaced by a
+token that names its type and nothing else, and the result carries the mapping
+that turns tokens back into values:
+
+```python
+import euredact
+
+prompt = "Write an email to Joren at joren.janssens@euredact.be or call +32 475 12 34 56 about the invoice."
+result = euredact.redact(prompt, countries=["BE"], tokenize=True)
+print(result.redacted_text)
+# "Write an email to Joren at EMAIL_K7Q2 or call PHONE_P4RT about the invoice."
+print(result.tokens)
+# {'EMAIL_K7Q2': 'joren.janssens@euredact.be', 'PHONE_P4RT': '+32 475 12 34 56'}
+
+reply = call_your_llm(result.redacted_text)   # sees tokens, never the values
+print(euredact.restore(reply, result.tokens))
+# the reply, with the real address and number back in it
+```
+
+The suffixes are random; yours will differ. With the [cloud tier](#cloud-tier)
+the name is tokenized too (`PERSON_NAME_W3NB`), since person names have no
+shape for the rules tier to match on.
+
+Within one call the same value gets the same token, so a prompt that names
+someone twice still reads as one person. Across calls it gets a different
+token: nothing is retained on the instance, `result.tokens` is the only copy,
+and two tokenized documents never reveal that they share a value. That is the
+opposite retention model from `referential_integrity`, which is why the two
+cannot be combined. Batch and iterator variants tokenize each text on its own.
+
+A token is `TYPE_` plus four characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`
+(no vowels, no `0`/`1`/`I`/`O`). Tokens are kept clear of any token-shaped
+string already in the document, so an LLM's reply to a tokenized prompt can
+itself be redacted without `restore()` putting the wrong value back.
+`restore()` replaces every occurrence, including a token an LLM glued to other
+characters (`EMAIL_P4RTs`) — leaving a token behind is the worse failure.
+
+Works in cloud mode: the SDK rebuilds the text from the spans the service
+returns, which is exactly what the service built its own output from.
+
+## Allowlist
+
+Values a caller declares are not PII to them — their own organisation's name,
+their own addresses. Set it per call, on the instance, or both; the two merge:
+
+```python
+import euredact
+
+sdk = euredact.EuRedact(allowlist=["ACME NV", "info@acme.be"])
+
+text = "ACME NV: mail info@acme.be or jan@acme.be about IBAN NL91 ABNA 0417 1643 00."
+print(sdk.redact(text, countries=["NL"]).redacted_text)
+# "ACME NV: mail info@acme.be or [EMAIL] about IBAN [BANK_ACCOUNT]."
+
+print(sdk.redact(text, countries=["NL"], allowlist=["jan@acme.be"]).redacted_text)
+# "ACME NV: mail info@acme.be or jan@acme.be about IBAN [BANK_ACCOUNT]."
+```
+
+Matching is whole-span and case-insensitive, and nothing more. `acme.be` does
+not exempt every address at that domain: a broader match is how "our domain"
+turns into "everyone who ever mailed us". A bare string (`allowlist="ACME NV"`)
+raises `TypeError` rather than being iterated into single letters that exempt
+nothing. An allowlisted value is removed from `detections` as well as from the
+text. Works in cloud mode and together with `tokenize`.
 
 ## Architecture
 

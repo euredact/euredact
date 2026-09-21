@@ -42,6 +42,11 @@ console.log(result.detections);
   OpenAI, Slack, JWT, SendGrid, plus Shannon entropy-based detection for generic
   high-entropy tokens near context keywords
 - **Custom patterns:** register your own regex patterns for domain-specific PII
+- **Reversible tokenization:** `tokenize: true` swaps values for `EMAIL_K7Q2`-style
+  tokens and `restore()` puts them back — for prompts that go to an LLM and
+  come back
+- **Allowlist:** values that are never redacted, such as your own organisation's
+  name and addresses, per call or per instance
 - **Checksum validation:** IBAN mod-97, Luhn (credit cards/IMEI), and 30+
   country-specific validators
 - **Priority-aware deduplication:** validated (checksum, corroborated by the
@@ -86,6 +91,9 @@ interface RedactOptions {
                                   // of one document (see "Chunked documents")
   chunkOffset?: number;           // Where this chunk starts in the document
   referentialIntegrity?: boolean; // Replace with consistent labels (default: false)
+  tokenize?: boolean;             // Reversible EMAIL_K7Q2-style tokens; mapping in
+                                  // result.tokens (see "Reversible tokenization")
+  allowlist?: string[] | null;    // Values never to redact (see "Allowlist")
   detectDates?: boolean;          // Include DOB/date-of-death detections (default: false)
   cache?: boolean;                // Enable result caching (default: true)
 }
@@ -95,6 +103,8 @@ interface RedactOptions {
 |---|---|---|
 | `countries` | `null` | ISO 3166-1 alpha-2 codes to restrict detection. `null` loads all 31 countries. |
 | `referentialIntegrity` | `false` | Replace PII with consistent labels instead of entity-type labels. |
+| `tokenize` | `false` | Replace each value with a reversible token (`EMAIL_K7Q2`) and return the token → value mapping in `result.tokens`. Tokens are unique to the call. See [Reversible tokenization](#reversible-tokenization). Cannot be combined with `referentialIntegrity`. |
+| `allowlist` | `null` | Values never to redact, matched whole and case-insensitively. Merged with the instance's allowlist. See [Allowlist](#allowlist). |
 | `detectDates` | `false` | Include date-of-birth and date-of-death detections. Off by default. |
 | `cache` | `true` | Cache results for identical inputs. |
 
@@ -115,6 +125,16 @@ function addCustomPattern(name: string, pattern: string): void;
 
 Register a custom regex pattern. Matches are reported with `name` as the entity
 type. See [Custom Patterns](#custom-patterns) below.
+
+#### `restore(text, tokens)`
+
+```ts
+function restore(text: string, tokens: Record<string, string>): string;
+```
+
+Put the original values back into text that derives from a `tokenize: true`
+result — typically an LLM's reply to the tokenized prompt. `tokens` is
+`result.tokens`. See [Reversible tokenization](#reversible-tokenization).
 
 #### `availableCountries()`
 
@@ -142,8 +162,9 @@ console.log(result.redactedText);
 // "See [CASE_REF] for details"
 ```
 
-The `EuRedact` class exposes: `redact()`, `redactBatch()`, and
-`addCustomPattern()`.
+The `EuRedact` class exposes: `redact()`, `redactAsync()`, `redactBatch()`, and
+`addCustomPattern()`. Its constructor takes `maxInputLength` and an `allowlist`
+that applies to every call on the instance — see [Allowlist](#allowlist).
 
 ### Return Types
 
@@ -155,6 +176,7 @@ interface RedactResult {
   detections: Detection[];    // All PII spans found
   source: string;             // Detection backend ("rules")
   degraded: boolean;          // True if the engine fell back to a simpler mode
+  tokens: Record<string, string>; // token -> original value; only with tokenize: true
 }
 ```
 
@@ -211,6 +233,7 @@ interface RedactResult {
   evidence: CountryEvidence[];                // every signal, with the span behind it
   detectionMode: string;                      // "declared" if countries was passed,
                                               // "inferred" otherwise
+  tokens: Record<string, string>;             // token -> original value; only with tokenize: true
 }
 ```
 
@@ -314,6 +337,8 @@ seen a chunk boundary.
 
 Options the service cannot honour reject rather than being ignored: multiple
 `countries`, `countryHint`, `context`/`chunkOffset` and `referentialIntegrity`.
+`tokenize` and `allowlist` are honoured: the SDK applies them to the spans the
+service returns and rebuilds the text from those.
 
 The package stays **zero-dependency** — the client uses the platform's own
 `fetch`. Node 18+ provides one; on Node 16 the rules engine is unaffected and a
@@ -616,6 +641,74 @@ const result = redact(
 console.log(result.redactedText);
 // "BSN NATIONAL_ID_1 en later weer NATIONAL_ID_1"
 ```
+
+## Reversible tokenization
+
+`tokenize: true` is for text that has to come back. Each value is replaced by a
+token that names its type and nothing else, and the result carries the mapping
+that turns tokens back into values:
+
+```ts
+import { redact, restore } from "euredact";
+
+const prompt = "Write an email to Joren at joren.janssens@euredact.be or call +32 475 12 34 56 about the invoice.";
+const result = redact(prompt, { countries: ["BE"], tokenize: true });
+console.log(result.redactedText);
+// "Write an email to Joren at EMAIL_K7Q2 or call PHONE_P4RT about the invoice."
+console.log(result.tokens);
+// { EMAIL_K7Q2: "joren.janssens@euredact.be", PHONE_P4RT: "+32 475 12 34 56" }
+
+const reply = await callYourLlm(result.redactedText);  // sees tokens, never the values
+console.log(restore(reply, result.tokens));
+// the reply, with the real address and number back in it
+```
+
+The suffixes are random; yours will differ. With the [cloud tier](#cloud-tier)
+the name is tokenized too (`PERSON_NAME_W3NB`), since person names have no
+shape for the rules tier to match on.
+
+Within one call the same value gets the same token, so a prompt that names
+someone twice still reads as one person. Across calls it gets a different
+token: nothing is retained on the instance, `result.tokens` is the only copy,
+and two tokenized documents never reveal that they share a value. That is the
+opposite retention model from `referentialIntegrity`, which is why the two
+cannot be combined. `redactBatch` tokenizes each text on its own.
+
+A token is `TYPE_` plus four characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`
+(no vowels, no `0`/`1`/`I`/`O`). Tokens are kept clear of any token-shaped
+string already in the document, so an LLM's reply to a tokenized prompt can
+itself be redacted without `restore()` putting the wrong value back.
+`restore()` replaces every occurrence, including a token an LLM glued to other
+characters (`EMAIL_P4RTs`) — leaving a token behind is the worse failure.
+
+Works in cloud mode via `redactAsync`: the SDK rebuilds the text from the spans
+the service returns, which is exactly what the service built its own output
+from.
+
+## Allowlist
+
+Values a caller declares are not PII to them — their own organisation's name,
+their own addresses. Set it per call, on the instance, or both; the two merge:
+
+```ts
+import { EuRedact } from "euredact";
+
+const sdk = new EuRedact({ allowlist: ["ACME NV", "info@acme.be"] });
+
+const text = "ACME NV: mail info@acme.be or jan@acme.be about IBAN NL91 ABNA 0417 1643 00.";
+console.log(sdk.redact(text, { countries: ["NL"] }).redactedText);
+// "ACME NV: mail info@acme.be or [EMAIL] about IBAN [BANK_ACCOUNT]."
+
+console.log(sdk.redact(text, { countries: ["NL"], allowlist: ["jan@acme.be"] }).redactedText);
+// "ACME NV: mail info@acme.be or jan@acme.be about IBAN [BANK_ACCOUNT]."
+```
+
+Matching is whole-span and case-insensitive, and nothing more. `acme.be` does
+not exempt every address at that domain: a broader match is how "our domain"
+turns into "everyone who ever mailed us". A bare string (`allowlist: "ACME NV"`)
+throws `TypeError` rather than being iterated into single letters that exempt
+nothing. An allowlisted value is removed from `detections` as well as from the
+text. Works in cloud mode and together with `tokenize`.
 
 ## Architecture
 
