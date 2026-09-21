@@ -9,8 +9,11 @@ Tool: `.claude/skills/product-issues/forgejo_issues.py` (stdlib only, Python 3.1
 skill is checked into every euRedact repo; the copy you run does not decide where an issue goes —
 the component does.
 Token: `FORGEJO_TOKEN` in the environment or `~/.config/euredact/forgejo_token` — a Forgejo personal
-access token with issue write scope. Never print it, never write it into a repo, never pass it on
-the command line. If it is missing, say so and stop; do not ask the user to paste it into chat.
+access token with `write:issue` (and `write:repository` for the `pr` command of the issue-queue
+skill). Never print it, never write it into a repo, never pass it on the command line. If it is
+missing, say so and stop; do not ask the user to paste it into chat.
+Working an issue (claim, reproduce, branch, PR) is the `issue-queue` skill; this one is for filing,
+reading and updating.
 
 ## Which repo
 
@@ -79,7 +82,9 @@ Only if verified or strongly indicated; otherwise "unknown".
 Labels: `product` is added automatically; pass one component and one severity — `sev:leak` (PII
 unredacted in the output), `sev:mislabel` (redacted under the wrong type), `sev:over-redaction`
 (non-PII redacted), `sev:availability` (errors, truncations, timeouts, outages), `sev:ux` (wrong or
-confusing, no data impact). `labels` creates the set in a repo on first use.
+confusing, no data impact). `status:*` labels (`triaged`, `in-progress`, `proposed`, `blocked`,
+`needs-human`, at most one) are set by the issue-queue skill, not at filing time. `labels` creates
+the whole set in a repo on first use.
 
 Rules: synthetic corpus values only — never customer data, never secrets, never live hostnames or
 tokens. Numbers come from a run, a log or a count, not from memory. One defect per issue; a pattern
@@ -90,9 +95,9 @@ with several examples is one issue with a list.
 - New evidence, a retrain, a bundle, a deploy: `comment` with the version and the number.
 - Fixed and verified (a run, a conformance test, a deploy): closing comment naming the fix (engine
   version, adapter, bundle prefix, commit), then `update --state closed`.
-- Wrong severity/component: `update --label product --label <component> --label <sev>` — the label
-  set is replaced, list all of them. Changing the component does not move the issue; close it with a
-  pointer and file it in the right repo.
+- Wrong severity/component: `update --label product --label <component> --label <sev>` (plus the
+  current `status:*` label if any) — the label set is replaced, list all of them. Changing the
+  component does not move the issue; close it with a pointer and file it in the right repo.
 - Reopen with `--state open` plus a comment when a fixed issue comes back.
 
 ## Commands
@@ -102,7 +107,7 @@ P=python3; S=.claude/skills/product-issues/forgejo_issues.py
 $P $S labels                              # every repo
 $P $S list --state all --q "POSTAL_CODE"  # every repo
 $P $S list --repo inference --label gateway
-$P $S get --repo pipeline 1
+$P $S get --repo pipeline 1             # --repo defaults to this checkout's repo
 $P $S create --title "gateway: ..." --body-file /tmp/issue.md --label gateway --label sev:availability
 $P $S comment --repo rules 4 --body-file /tmp/note.md
 $P $S update --repo rules 4 --state closed
