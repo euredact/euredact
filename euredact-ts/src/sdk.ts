@@ -7,6 +7,54 @@ import { EntityType, type Detection, type RedactResult } from "./types.js";
 
 const DATE_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
 
+/** Returns the label that replaces `det`; `slice` is the exact text it covers. */
+type LabelFor = (det: Detection, slice: string) => string;
+
+/**
+ * Splice a label over every detection and return the masked text.
+ *
+ * `detections` must be sorted by `(start, -end)`.
+ *
+ * Labels are resolved right-to-left because the referential mapper numbers
+ * each entity type in call order, and that order is part of the output
+ * contract. The string itself is then assembled in a single forward pass:
+ * rebuilding it per detection copied the whole document each time, which is
+ * O(document x detections) — 1.68 s of pure copying on a 1 MB document with
+ * 15,000 detections, versus 2 ms here.
+ *
+ * Spans from the rule engine are deduplicated and non-overlapping. Spans from
+ * elsewhere (the cloud service) are only sorted, so a span may start behind
+ * the cursor. Its uncovered tail is still masked rather than dropped: dropping
+ * the span would leave those characters in the clear, and splicing it whole
+ * would corrupt the label already emitted over its head.
+ */
+export function applyReplacements(text: string, detections: Detection[], labelFor: LabelFor): string {
+  const kept: Array<[Detection, number, number]> = [];
+  let pos = 0;
+  for (const det of detections) {
+    const start = Math.max(det.start, pos);
+    if (det.end <= start) continue;
+    kept.push([det, start, det.end]);
+    pos = det.end;
+  }
+
+  const labels: string[] = new Array(kept.length);
+  for (let i = kept.length - 1; i >= 0; i--) {
+    const [det, start, end] = kept[i];
+    labels[i] = labelFor(det, text.slice(start, end));
+  }
+
+  const parts: string[] = [];
+  pos = 0;
+  for (let i = 0; i < kept.length; i++) {
+    const [, start, end] = kept[i];
+    parts.push(text.slice(pos, start), labels[i]);
+    pos = end;
+  }
+  parts.push(text.slice(pos));
+  return parts.join("");
+}
+
 /** Entry count at which a one-time warning is emitted. */
 const MAPPING_WARN_THRESHOLD = 100_000;
 
@@ -178,6 +226,15 @@ export class EuRedact {
     this.referentialMapper.clear();
   }
 
+  /** The label function for one call, given its output options. */
+  private labelFor(referentialIntegrity: boolean): LabelFor {
+    if (referentialIntegrity) {
+      const mapper = this.referentialMapper;
+      return (det) => mapper.getLabel(det.text, det.entityType);
+    }
+    return (det) => `[${det.entityType}]`;
+  }
+
   redact(text: string, options: RedactOptions = {}): RedactResult {
     checkCountryArg(options.countries, "countries");
     checkCountryArg(options.countryHint, "countryHint");
@@ -263,32 +320,7 @@ export class EuRedact {
 
     detections.sort((a, b) => a.start - b.start || b.end - a.end);
 
-    // Labels are resolved right-to-left because the referential mapper numbers
-    // each entity type in call order, and that order is part of the output
-    // contract. The string itself is then assembled in a single forward pass:
-    // rebuilding it per detection copied the whole document each time, which is
-    // O(document x detections) — 1.68 s of pure copying on a 1 MB document with
-    // 15,000 detections, versus 2 ms here.
-    const replacements: string[] = new Array(detections.length);
-    for (let i = detections.length - 1; i >= 0; i--) {
-      const det = detections[i];
-      replacements[i] = referentialIntegrity
-        ? this.referentialMapper.getLabel(det.text, det.entityType)
-        : `[${det.entityType}]`;
-    }
-
-    const parts: string[] = [];
-    let pos = 0;
-    for (let i = 0; i < detections.length; i++) {
-      const det = detections[i];
-      // Spans reach here deduplicated and non-overlapping; one starting behind
-      // the cursor would splice into the middle of a label, so drop it.
-      if (det.start < pos) continue;
-      parts.push(text.slice(pos, det.start), replacements[i]);
-      pos = det.end;
-    }
-    parts.push(text.slice(pos));
-    const redacted = parts.join("");
+    const redacted = applyReplacements(text, detections, this.labelFor(referentialIntegrity));
 
     // Report the inference so it can be audited. Spans in `evidence` are
     // offsets into the normalised text, matching `detections`.

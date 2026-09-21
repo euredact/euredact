@@ -6,20 +6,68 @@ import asyncio
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from typing import Iterator
+from typing import Callable, Iterator
 
 from euredact.cache import ResultCache
 from euredact.normalizer import map_offset_to_original, normalize
 from euredact.rules.context import DocumentContext
 from euredact.rules.engine import RuleEngine, check_country_arg
 from euredact.rules.evidence import weights_to_ranking
-from euredact.types import EntityType, RedactResult
+from euredact.types import Detection, EntityType, RedactResult
 
 # Date entity types — opt-in via detect_dates=True
 _DATE_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
 
 # Default thread pool for async offloading
 _DEFAULT_POOL = ThreadPoolExecutor()
+
+
+def _apply_replacements(
+    text: str,
+    detections: list[Detection],
+    label_for: Callable[[Detection, str], str],
+) -> str:
+    """Splice a label over every detection and return the masked text.
+
+    *detections* must be sorted by ``(start, -end)``. *label_for* receives the
+    detection and the exact slice of *text* the label replaces, and returns the
+    label.
+
+    Labels are resolved right-to-left because the referential mapper numbers
+    each entity type in call order, and that order is part of the output
+    contract. The string itself is then assembled in a single forward pass:
+    rebuilding it per detection copied the whole document each time, which is
+    O(document x detections) -- 268 ms of pure copying on a 1 MB document with
+    8,000 detections, versus 0.7 ms here.
+
+    Spans from the rule engine are deduplicated and non-overlapping. Spans
+    from elsewhere (the cloud service) are only sorted, so a span may start
+    behind the cursor. Its uncovered tail is still masked rather than dropped:
+    dropping the span would leave those characters in the clear, and splicing
+    it whole would corrupt the label already emitted over its head.
+    """
+    kept: list[tuple[Detection, int, int]] = []
+    pos = 0
+    for det in detections:
+        start = max(det.start, pos)
+        if det.end <= start:
+            continue
+        kept.append((det, start, det.end))
+        pos = det.end
+
+    labels: list[str] = [""] * len(kept)
+    for idx in range(len(kept) - 1, -1, -1):
+        det, start, end = kept[idx]
+        labels[idx] = label_for(det, text[start:end])
+
+    parts: list[str] = []
+    pos = 0
+    for (_det, start, end), label in zip(kept, labels):
+        parts.append(text[pos:start])
+        parts.append(label)
+        pos = end
+    parts.append(text[pos:])
+    return "".join(parts)
 
 
 class ReferentialMapper:
@@ -100,6 +148,18 @@ class EuRedact:
         """
         self._cache.clear()
         self._referential_mapper.clear()
+
+    def _label_for(self, referential_integrity: bool) -> Callable[[Detection, str], str]:
+        """The label function for one call, given its output options."""
+        if referential_integrity:
+            mapper = self._referential_mapper
+            return lambda det, _slice: mapper.get_label(det.text, det.entity_type)
+
+        def bracketed(det: Detection, _slice: str) -> str:
+            label = det.entity_type.value if isinstance(det.entity_type, EntityType) else det.entity_type
+            return f"[{label}]"
+
+        return bracketed
 
     def redact(
         self,
@@ -218,37 +278,9 @@ class EuRedact:
         detections.sort(key=lambda d: (d.start, -d.end))
 
         # Step 15: Apply replacements.
-        #
-        # Labels are resolved right-to-left because the referential mapper
-        # numbers each entity type in call order, and that order is part of the
-        # output contract. The string itself is then assembled in a single
-        # forward pass: rebuilding it per detection copied the whole document
-        # each time, which is O(document x detections) — 268 ms of pure copying
-        # on a 1 MB document with 8,000 detections, versus 0.7 ms here.
-        replacements: list[str] = [""] * len(detections)
-        for idx in range(len(detections) - 1, -1, -1):
-            det = detections[idx]
-            if referential_integrity:
-                replacements[idx] = self._referential_mapper.get_label(
-                    det.text, det.entity_type
-                )
-            else:
-                label = det.entity_type.value if isinstance(det.entity_type, EntityType) else det.entity_type
-                replacements[idx] = f"[{label}]"
-
-        parts: list[str] = []
-        pos = 0
-        for det, replacement in zip(detections, replacements):
-            # Spans reach here deduplicated and non-overlapping; a span that
-            # starts behind the cursor would silently corrupt the output, so
-            # drop it rather than splice it into the middle of a label.
-            if det.start < pos:
-                continue
-            parts.append(text[pos : det.start])
-            parts.append(replacement)
-            pos = det.end
-        parts.append(text[pos:])
-        redacted = "".join(parts)
+        redacted = _apply_replacements(
+            text, detections, self._label_for(referential_integrity)
+        )
 
         # Step 16: [COREF EXTENSION] — no-op
 
