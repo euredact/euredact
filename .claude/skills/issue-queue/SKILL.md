@@ -59,8 +59,38 @@ python3 $S pr --head issue/N-slug --title "..." --body-file F --issue N
    what changed, the check output summary, what was **not** run (deploys, retrains), and the closing
    line. A 403 here means the token lacks `write:repository`: comment with the branch name and
    `release N --status needs-human` so a human opens the PR.
-10. `comment N` with the PR URL, `release N --status proposed`, `git worktree remove` (the branch stays
-    on origin). Report: repo, issue, PR URL, one line.
+10. **Write the issue comment** (below), `release N --status proposed`, `git worktree remove` (the
+    branch stays on origin). Report: repo, issue, PR URL, one line.
+
+## The issue comment is the record
+
+The issue is what a reader opens first; the PR is where the diff lives. Every worked issue gets one
+comment, written for someone who has not seen the PR, with these headings, each a short paragraph
+with the actual numbers, file paths, commands and versions — never a one-liner pointing at the PR:
+
+```
+## Root cause
+What produces the symptom, traced to the file / pattern / ruling / data, and why it does so. Quote the
+offending line or rule. Say what was ruled out if that mattered.
+
+## Reproduction
+The exact command or test that shows it, with its output before the fix, and the count (n of N).
+
+## What was done
+Each change and the reason for it: file, what moved, why that and not the alternative. Regression
+test or conformance vector by name. Anything deliberately left unchanged, and why.
+
+## Verification
+The check commands and their results (numbers), what the regression test asserts, what was not run.
+
+## Left for a human
+Merge, release, retrain, deploy, decisions — with the cost or risk of each.
+
+PR: <url>
+```
+
+The same structure, with "What was tried" instead of "What was done", is the comment for
+`needs-human` and not-reproducible outcomes. A `blocked` comment names exactly what is missing.
 
 Work one issue at a time. Do not close issues; do not merge; do not deploy; do not start training or
 publish a bundle — those are the human's steps and they cost money or reach customers.
