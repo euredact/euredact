@@ -20,6 +20,16 @@
   Mirrors `euredact-python`; the two patterns are character-for-character
   identical.
   *(rules-engine#5)*
+- **A parenthesised international phone number swallowed the closing bracket.**
+  `Call (+32 475 12 34 56) today.` masked as `Call ([PHONE] today.` — the
+  punctuation vanished from the output and `detections[].text` carried a `)`
+  that is not part of the number, which any consumer of that field (parity,
+  eval, referential labels keyed on the text) then saw as the value. The
+  pattern wrote its parentheses as two independent optionals, `\(?` and `\)?`,
+  so nothing required them to pair; they are now matched as a pair inside one
+  group. The trunk prefix the optionals were written for, `+32 (0)475 12 34
+  56`, still matches. Three conformance vectors. Mirrors `euredact-python`.
+  *(rules-engine#3)*
 
 - **Cloud detections landed on the wrong characters after an emoji.** The
   service counts offsets in code points; this SDK slices UTF-16 units. They

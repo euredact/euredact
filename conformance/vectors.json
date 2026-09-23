@@ -1958,6 +1958,50 @@
         ]
       },
       "notes": "Colon-separated hex that is not an IPv6 address must stay with its own type."
+    },
+    {
+      "id": "phone-e164-parenthesised-keeps-the-bracket",
+      "text": "Call (+32 475 12 34 56) today.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "+32 475 12 34 56"
+        ]
+      },
+      "expectRedactedText": "Call ([PHONE]) today.",
+      "notes": "issue rules-engine#3: the closing parenthesis of the surrounding text used to join the span, giving 'Call ([PHONE] today.'"
+    },
+    {
+      "id": "phone-e164-trunk-prefix-still-matches",
+      "text": "Tel: +32 (0)475 12 34 56 thanks",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "+32 (0)475 12 34 56"
+        ]
+      },
+      "expectRedactedText": "Tel: [PHONE] thanks",
+      "notes": "The parenthesised trunk prefix is what the optional parentheses were written for; pairing them must not lose it."
+    },
+    {
+      "id": "phone-e164-inside-a-parenthesised-list",
+      "text": "Contact Joren (joren@example.be, +32 475 12 34 56) morgen.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "EMAIL": [
+          "joren@example.be"
+        ],
+        "PHONE": [
+          "+32 475 12 34 56"
+        ]
+      },
+      "expectRedactedText": "Contact Joren ([EMAIL], [PHONE]) morgen."
     }
   ]
 }

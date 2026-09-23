@@ -68,6 +68,15 @@
   unspecified address, not an identifier, and matching it would redact the
   scope operator in `MyClass::method`. Ten conformance vectors (`ipv6-*`).
   *(rules-engine#5)*
+- **A parenthesised international phone number swallowed the closing bracket.**
+  `Call (+32 475 12 34 56) today.` masked as `Call ([PHONE] today.` — the
+  punctuation vanished from the output and `detections[].text` carried a `)`
+  that is not part of the number, which any consumer of that field (parity,
+  eval, referential labels keyed on the text) then saw as the value. The
+  pattern wrote its parentheses as two independent optionals, `\(?` and `\)?`,
+  so nothing required them to pair; they are now matched as a pair inside one
+  group. The trunk prefix the optionals were written for, `+32 (0)475 12 34
+  56`, still matches. Three conformance vectors. *(rules-engine#3)*
 
 - **A capitalised heading word was masked as a German ID card.** The
   Personalausweis pattern accepted any 9–10 upper-case alphanumerics after its

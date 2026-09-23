@@ -105,9 +105,17 @@ class SharedConfig(CountryConfig):
             # invisible to the Austrian pattern, which expects an unbroken
             # subscriber number. A leading "+" is self-identifying, so this is
             # deliberately not country-gated.
+            # Parentheses are matched as a pair inside one group rather than
+            # as two independent optionals. `\\(?...\\)?` let the closing
+            # parenthesis of the *surrounding* text join the number, so
+            # "Call (+32 475 12 34 56) today." masked the ")" too and left
+            # "Call ([PHONE] today." -- the punctuation vanished and
+            # `detections[].text` carried a character that is not part of the
+            # number (issue rules-engine#3). The pair form still accepts the
+            # trunk prefix it was written for: "+32 (0)475 12 34 56".
             PatternDef(
                 entity_type=EntityType.PHONE,
-                pattern=r"\+\d{1,3}(?:[\s\-/]?\(?\d{1,4}\)?){2,7}",
+                pattern=r"\+\d{1,3}(?:[\s\-/]?(?:\(\d{1,4}\)|\d{1,4})){2,7}",
                 validator="e164",
                 description="International phone number (E.164) — any country",
             ),

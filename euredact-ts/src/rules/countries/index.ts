@@ -124,7 +124,11 @@ const SHARED: CountryConfig = {
     // "+43 664 8213 907" was invisible to the Austrian pattern, which expects
     // an unbroken subscriber number. A leading "+" is self-identifying, so
     // this is deliberately not country-gated.
-    p(EntityType.PHONE, String.raw`\+\d{1,3}(?:[\s\-/]?\(?\d{1,4}\)?){2,7}`, "e164", "International phone number (E.164) — any country"),
+    // Parentheses are matched as a pair inside one group: `\(?...\)?` let the
+    // closing parenthesis of the surrounding text join the number, so
+    // "Call (+32 475 12 34 56) today." also masked the ")" (issue
+    // rules-engine#3). Mirrors the Python pattern character for character.
+    p(EntityType.PHONE, String.raw`\+\d{1,3}(?:[\s\-/]?(?:\(\d{1,4}\)|\d{1,4})){2,7}`, "e164", "International phone number (E.164) — any country"),
     p(EntityType.BIC, String.raw`\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b`, "bic"),
     // Space-separated form: "RZBA AT WW", "NICA BE BB". Written as a separate
     // pattern requiring a space between *every* group, rather than making the
