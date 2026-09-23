@@ -85,7 +85,29 @@ class SharedConfig(CountryConfig):
                 # a 1 MB manifest or stack trace took hours. The lookbehind
                 # pins the match to the true start of the run. Matches the
                 # TypeScript pattern, which was already written this way.
-                pattern=r"(?<![\w._%+\-])[\w._%+\-]+@(?:[\w\-]+\.)+[a-zA-Z]{2,}\b",
+                #
+                # The apostrophe is allowed only *between* word characters.
+                # It belongs in a local part -- RFC 5322 `atext` includes it,
+                # and Irish and Italian surnames use it -- but putting it in
+                # the class itself would let the match absorb a quote that
+                # belongs to the surrounding text, turning `'john@x.ie'` into
+                # a span that starts at the quote. Leaving it out entirely was
+                # the leak this replaces: the match began after the
+                # apostrophe, so `johno'neill@outlook.ie` masked as
+                # `johno'[EMAIL]` and the surname stayed in the clear
+                # (issue rules-engine#10).
+                #
+                # The second lookbehind is what keeps that affordable. With
+                # only the first one, every apostrophe became a fresh start
+                # offset -- `'` is not in the class, so the guard passed right
+                # after it -- and each attempt then scanned the rest of the
+                # run before failing: 64 KB of `x'x'x'...` took 12.8 s, the
+                # same quadratic blowup the guard above exists to prevent.
+                # Refusing to start after `<word-char>'` leaves one start per
+                # run and takes that to 9 ms at 256 KB, while still allowing a
+                # quoted address (`'john@x.ie'`), where the apostrophe follows
+                # a non-word character.
+                pattern=r"(?<![\w._%+\-])(?<![\w._%+\-]')[\w._%+\-]+(?:'[\w._%+\-]+)*@(?:[\w\-]+\.)+[a-zA-Z]{2,}\b",
                 validator=None,
                 description="Email address (RFC 5322 simplified)",
             ),
