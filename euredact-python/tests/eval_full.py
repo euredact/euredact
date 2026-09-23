@@ -86,6 +86,60 @@ def f1(recall, precision):
     return 2 * recall * precision / (recall + precision) if (recall + precision) > 0 else 0.0
 
 
+def _covered_chars(detections, start, end, acceptable=None):
+    """Characters of ``[start, end)`` masked by *detections*, as a count.
+
+    *acceptable* limits the count to detections of those entity types; None
+    counts any type. Overlapping detections are merged, so a span covered by
+    two detections is not counted twice.
+    """
+    spans = sorted(
+        (max(d.start, start), min(d.end, end))
+        for d in detections
+        if d.start < end and d.end > start
+        and (acceptable is None or d.entity_type.value in acceptable)
+    )
+    covered = 0
+    cursor = start
+    for a, b in spans:
+        if b <= cursor:
+            continue
+        covered += b - max(a, cursor)
+        cursor = max(cursor, b)
+    return covered
+
+
+def _recall_outcome(text, detections, pii_text, acceptable):
+    """Classify one gold identifier. See `## Recall` in the report header.
+
+    A redaction library is judged on whether the whole identifier is gone, so
+    "hit" means every character of the span is masked. The old test --
+    ``pii_text not in redacted_text`` with an any-overlap fallback -- was
+    satisfied by masking a single character, because that already destroys the
+    literal. It scored `[IPV6_ADDRESS]ff00:42:8329` and `sean_o'[EMAIL]` as
+    complete detections (issue rules-engine#8).
+
+    Returns one of: "hit", "mistyped", "partial", "miss", "unlocatable".
+    """
+    idx = text.find(pii_text)
+    if idx < 0:
+        # Nothing to redact: the gold identifier does not appear in the
+        # document as written. Counting it as a hit, which the old test did
+        # implicitly, credits the engine for text it never saw.
+        return "unlocatable"
+    end = idx + len(pii_text)
+    width = end - idx
+    typed = _covered_chars(detections, idx, end, acceptable)
+    if typed == width:
+        return "hit"
+    any_type = _covered_chars(detections, idx, end, None)
+    if any_type == width:
+        # Fully masked, but claimed by a type this category does not accept:
+        # the data is protected, the label is wrong. A mislabel, not a leak.
+        return "mistyped"
+    return "partial" if any_type > 0 else "miss"
+
+
 def _detection_matches_any(det, expected_spans):
     for es, ee, ecat in expected_spans:
         if det.start < ee and det.end > es:
@@ -99,6 +153,7 @@ def _detection_matches_any(det, expected_spans):
 
 def evaluate(data, use_country_hints: bool):
     cat_tp = Counter(); cat_total = Counter()
+    cat_partial = Counter(); cat_mistyped = Counter(); cat_unlocatable = Counter()
     country_tp = Counter(); country_total = Counter()
     cc_tp = Counter(); cc_total = Counter()
     combo_tp = Counter(); combo_total = Counter()
@@ -146,15 +201,14 @@ def evaluate(data, use_country_hints: bool):
             else:
                 single_total += 1
 
-            found = pii_text not in result.redacted_text
-            if not found:
-                idx = text.find(pii_text)
-                if idx >= 0:
-                    end = idx + len(pii_text)
-                    for det in result.detections:
-                        if det.start < end and det.end > idx and det.entity_type.value in acceptable:
-                            found = True
-                            break
+            outcome = _recall_outcome(text, result.detections, pii_text, acceptable)
+            if outcome == "partial":
+                cat_partial[pii_cat] += 1
+            elif outcome == "mistyped":
+                cat_mistyped[pii_cat] += 1
+            elif outcome == "unlocatable":
+                cat_unlocatable[pii_cat] += 1
+            found = outcome == "hit"
 
             if found:
                 cat_tp[pii_cat] += 1
@@ -215,6 +269,8 @@ def evaluate(data, use_country_hints: bool):
     return dict(
         elapsed=elapsed, num_records=len(data),
         cat_tp=cat_tp, cat_total=cat_total,
+        cat_partial=cat_partial, cat_mistyped=cat_mistyped,
+        cat_unlocatable=cat_unlocatable,
         country_tp=country_tp, country_total=country_total,
         cc_tp=cc_tp, cc_total=cc_total,
         combo_tp=combo_tp, combo_total=combo_total,
@@ -272,6 +328,10 @@ def _core_precision(s):
 def render_summary(s):
     rec_n, rec_d = _core_recall(s)
     rec = pct(rec_n, rec_d)
+    core = _core_cats(s)
+    part_n = sum(s["cat_partial"].get(c, 0) for c in core)
+    mist_n = sum(s["cat_mistyped"].get(c, 0) for c in core)
+    unloc_n = sum(s["cat_unlocatable"].get(c, 0) for c in core)
     prec_tp, prec_tot = _core_precision(s)
     prec = pct(prec_tp, prec_tot)
     f1v = f1(rec / 100, prec / 100)
@@ -293,7 +353,8 @@ def render_summary(s):
       <div class="card">
         <div class="card-title">Recall</div>
         <div class="big-number {_cls(rec)}">{rec:.1f}%</div>
-        <div class="card-detail">{rec_n:,} / {rec_d:,} PII detected (excl. DOB)</div>
+        <div class="card-detail">{rec_n:,} / {rec_d:,} fully masked (excl. DOB)</div>
+        <div class="card-detail">{part_n:,} partially masked &middot; {mist_n:,} masked under another type &middot; {unloc_n:,} not in document</div>
       </div>
       <div class="card">
         <div class="card-title">Precision</div>
@@ -315,6 +376,7 @@ def render_summary(s):
 def _cat_row(s, cat):
     t = s["cat_total"][cat]
     tp = s["cat_tp"][cat]
+    part = s["cat_partial"][cat]
     miss = t - tp
     rec = pct(tp, t)
     etypes = CATEGORY_MAP.get(cat, {cat})
@@ -328,6 +390,7 @@ def _cat_row(s, cat):
     return f"""<tr>
       <td class="label">{escape(cat)}</td>
       <td class="num">{t:,}</td><td class="num">{tp:,}</td><td class="num">{miss}</td>
+      <td class="num fp-num">{part}</td>
       <td class="{rc}">{rec:.1f}%</td>
       <td class="num">{det_total:,}</td><td class="num">{det_tp:,}</td><td class="num fp-num">{det_fp}</td>
       <td class="{pc}">{prec:.1f}%</td>
@@ -343,11 +406,11 @@ def render_category_table(s):
 
     thead = """<thead><tr>
         <th rowspan=2>PII Category</th>
-        <th colspan=4 class="group-recall">Recall</th>
+        <th colspan=5 class="group-recall">Recall</th>
         <th colspan=4 class="group-precision">Precision</th>
         <th rowspan=2>F1</th>
       </tr><tr>
-        <th class="group-recall">Expected</th><th class="group-recall">Hit</th><th class="group-recall">Miss</th><th class="group-recall">Rate</th>
+        <th class="group-recall">Expected</th><th class="group-recall">Hit</th><th class="group-recall">Miss</th><th class="group-recall">Partial</th><th class="group-recall">Rate</th>
         <th class="group-precision">Detected</th><th class="group-precision">TP</th><th class="group-precision">FP</th><th class="group-precision">Rate</th>
       </tr></thead>"""
 

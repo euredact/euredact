@@ -54,6 +54,23 @@
 
 ### Fixed
 
+- **`make eval` no longer scores a partial redaction as a hit.** A gold
+  identifier counted as recalled when its literal text was absent from the
+  output — which masking a *single character* already achieves — with a
+  fallback that accepted one character of span overlap. IPv6 therefore scored
+  100% recall and 100% precision over 636 corpus entities while the engine
+  left the tail of every compressed address in the clear; the check that
+  exists to catch under-redaction reported perfection on a leak. Recall now
+  requires every character of the span to be masked, and the report
+  distinguishes four outcomes: fully masked, **partially masked** (a new
+  column), masked under another type, and not present in the document (no
+  longer silently credited). Re-measured on the 152,300-document corpus:
+  **99.4% recall / 99.8% precision with country hints, 99.2% / 99.6% blind**,
+  against 99.7%/99.8% and 99.7%/99.6% under the old rule. Precision is
+  unchanged; the recall figures are lower because they are now counting what
+  they always claimed to. Harness only — no engine behaviour changes.
+  *(rules-engine#8)*
+
 - **Compressed IPv6 addresses were only half masked.** `2001:db8::ff00:42:8329`
   came back as `[IPV6_ADDRESS]ff00:42:8329` — the interface identifier, the
   most identifying half, survived into output that looked redacted. `::1` and
