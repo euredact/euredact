@@ -135,7 +135,15 @@ const SHARED: CountryConfig = {
     p(EntityType.CREDIT_CARD, String.raw`\b(?:4[0-9]{3}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}|5[1-5][0-9]{2}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}|3[47][0-9]{2}[\s\-]?[0-9]{6}[\s\-]?[0-9]{5})\b`, "luhn"),
     p(EntityType.VIN, String.raw`\b[A-HJ-NPR-Z0-9]{17}\b`, "vin"),
     p(EntityType.IP_ADDRESS, String.raw`\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b`),
-    p(EntityType.IPV6_ADDRESS, String.raw`\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b|\b(?:[0-9a-fA-F]{1,4}:){1,7}:\b|\b(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}\b|\b::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}\b`),
+    // Branch order is load-bearing: alternation is leftmost-first, not
+    // longest-match, so the form that consumes most is tried first, and the
+    // IPv4-embedded branches lead because every group of a dotted quad is
+    // also valid hex. `\b` is the wrong anchor around ":" (a non-word
+    // character), which is why `::1` and `2001:db8::` were not detected at
+    // all. A bare "::" is deliberately not matched. Mirrors the Python
+    // pattern character for character -- see the comment there
+    // (issue rules-engine#5).
+    p(EntityType.IPV6_ADDRESS, String.raw`(?<![0-9A-Za-z_:.])(?:(?:[0-9A-Fa-f]{1,4}:){6}(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|(?:[0-9A-Fa-f]{1,4}:){1,5}:(?:[0-9A-Fa-f]{1,4}:)*(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|::(?:[0-9A-Fa-f]{1,4}:)*(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}(?::[0-9A-Fa-f]{1,4}){1,7}|(?:[0-9A-Fa-f]{1,4}:){1,7}:|:(?::[0-9A-Fa-f]{1,4}){1,7})(?:%[0-9A-Za-z][0-9A-Za-z._-]*)?(?![0-9A-Za-z_:])`),
     p(EntityType.MAC_ADDRESS, String.raw`\b(?:[0-9a-fA-F]{2}[:\-]){5}[0-9a-fA-F]{2}\b`, null, "colon/dash"),
     p(EntityType.MAC_ADDRESS, String.raw`\b[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\b`, null, "Cisco"),
     p(EntityType.IMEI, String.raw`\b\d{15}\b`, "imei"),

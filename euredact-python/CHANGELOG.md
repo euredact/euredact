@@ -54,6 +54,21 @@
 
 ### Fixed
 
+- **Compressed IPv6 addresses were only half masked.** `2001:db8::ff00:42:8329`
+  came back as `[IPV6_ADDRESS]ff00:42:8329` — the interface identifier, the
+  most identifying half, survived into output that looked redacted. `::1` and
+  `2001:db8::` were not detected at all, and `::ffff:192.0.2.128` had only its
+  IPv4 tail masked. Two causes in one pattern: alternation is leftmost-first
+  rather than longest-match, so the bare `X::` branch won before the branches
+  that consume the tail; and `\b` cannot anchor a token that begins or ends
+  with `:`, a non-word character. The pattern now orders its branches
+  longest-first, leads with the IPv4-embedded forms (every group of a dotted
+  quad is also valid hex), bounds the token with lookarounds, and covers zone
+  indices (`fe80::1%eth0`). A bare `::` is deliberately not matched: it is the
+  unspecified address, not an identifier, and matching it would redact the
+  scope operator in `MyClass::method`. Ten conformance vectors (`ipv6-*`).
+  *(rules-engine#5)*
+
 - **A capitalised heading word was masked as a German ID card.** The
   Personalausweis pattern accepted any 9–10 upper-case alphanumerics after its
   first letter, and its context cue `Perso` is a substring of `PERSONAL` and

@@ -161,16 +161,32 @@ class SharedConfig(CountryConfig):
                 description="IPv4 address",
             ),
             # --- IPv6 ---
+            # Branch order is load-bearing: alternation is leftmost-FIRST, not
+            # longest-match, so the form that consumes most must be tried
+            # first. The previous pattern put the bare "X::" branch ahead of
+            # the compressed forms, so `2001:db8::ff00:42:8329` matched only
+            # `2001:db8::` and the interface identifier -- the most
+            # identifying half -- survived into the "redacted" output
+            # (issue rules-engine#5). The IPv4-embedded branches lead for the
+            # same reason: every group of a dotted quad is also valid hex, so
+            # a hex branch would otherwise stop inside it.
+            #
+            # `\b` is the wrong anchor here: ":" is a non-word character, so
+            # `\b::` can never match at the start of a token and `:\b` never
+            # at the end, which is why `::1` and `2001:db8::` were not
+            # detected at all. Lookarounds bound the token instead; they cost
+            # this pattern the RE2 prefilter, like the 11 others that opt out.
+            # The right-hand class deliberately omits "." so a trailing
+            # sentence period does not truncate the address.
+            #
+            # A bare "::" is not matched: it is the unspecified address, not
+            # an identifier, and matching it would redact the scope operator
+            # in `MyClass::method`.
             PatternDef(
                 entity_type=EntityType.IPV6_ADDRESS,
-                pattern=(
-                    r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b"
-                    r"|\b(?:[0-9a-fA-F]{1,4}:){1,7}:\b"
-                    r"|\b(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}\b"
-                    r"|\b::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}\b"
-                ),
+                pattern=r"(?<![0-9A-Za-z_:.])(?:(?:[0-9A-Fa-f]{1,4}:){6}(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|(?:[0-9A-Fa-f]{1,4}:){1,5}:(?:[0-9A-Fa-f]{1,4}:)*(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|::(?:[0-9A-Fa-f]{1,4}:)*(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}(?::[0-9A-Fa-f]{1,4}){1,7}|(?:[0-9A-Fa-f]{1,4}:){1,7}:|:(?::[0-9A-Fa-f]{1,4}){1,7})(?:%[0-9A-Za-z][0-9A-Za-z._-]*)?(?![0-9A-Za-z_:])",
                 validator=None,
-                description="IPv6 address",
+                description="IPv6 address, including RFC 4291 zero-compression, IPv4-embedded and zone-index forms",
             ),
             # --- MAC Address (colon/dash: 00:1A:2B:3C:4D:5E) ---
             PatternDef(

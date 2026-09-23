@@ -4,6 +4,23 @@
 
 ### Fixed
 
+- **Compressed IPv6 addresses were only half masked.** `2001:db8::ff00:42:8329`
+  came back as `[IPV6_ADDRESS]ff00:42:8329` — the interface identifier, the
+  most identifying half, survived into output that looked redacted. `::1` and
+  `2001:db8::` were not detected at all, and `::ffff:192.0.2.128` had only its
+  IPv4 tail masked. Two causes in one pattern: alternation is leftmost-first
+  rather than longest-match, so the bare `X::` branch won before the branches
+  that consume the tail; and `\b` cannot anchor a token that begins or ends
+  with `:`, a non-word character. The pattern now orders its branches
+  longest-first, leads with the IPv4-embedded forms (every group of a dotted
+  quad is also valid hex), bounds the token with lookarounds, and covers zone
+  indices (`fe80::1%eth0`). A bare `::` is deliberately not matched: it is the
+  unspecified address, not an identifier, and matching it would redact the
+  scope operator in `MyClass::method`. Ten conformance vectors (`ipv6-*`).
+  Mirrors `euredact-python`; the two patterns are character-for-character
+  identical.
+  *(rules-engine#5)*
+
 - **Cloud detections landed on the wrong characters after an emoji.** The
   service counts offsets in code points; this SDK slices UTF-16 units. They
   agree until the first character outside the Basic Multilingual Plane, after

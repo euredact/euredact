@@ -1838,6 +1838,126 @@
       ],
       "expectRedactedText": "ACME NV, IBAN [BANK_ACCOUNT], mail jan@example.com.",
       "notes": "An entry that matches nothing the rules tier detects (the org name) is harmless; the IBAN beside the allowlisted address is still masked."
+    },
+    {
+      "id": "ipv6-compressed-tail-survives-regression",
+      "text": "Client 2001:db8::ff00:42:8329 connected.",
+      "countries": null,
+      "mustDetect": {
+        "IPV6_ADDRESS": [
+          "2001:db8::ff00:42:8329"
+        ]
+      },
+      "expectRedactedText": "Client [IPV6_ADDRESS] connected.",
+      "notes": "issue rules-engine#5: the tail after '::' used to survive into the output ('[IPV6_ADDRESS]ff00:42:8329'). Alternation is leftmost-first, so the branch that consumes most must be ordered first."
+    },
+    {
+      "id": "ipv6-link-local-multi-group-tail",
+      "text": "Neighbour fe80::1ff:fe23:4567:890a on eth0.",
+      "countries": null,
+      "mustDetect": {
+        "IPV6_ADDRESS": [
+          "fe80::1ff:fe23:4567:890a"
+        ]
+      },
+      "expectRedactedText": "Neighbour [IPV6_ADDRESS] on eth0."
+    },
+    {
+      "id": "ipv6-loopback-leading-compression",
+      "text": "Bound to ::1 only.",
+      "countries": null,
+      "mustDetect": {
+        "IPV6_ADDRESS": [
+          "::1"
+        ]
+      },
+      "expectRedactedText": "Bound to [IPV6_ADDRESS] only.",
+      "notes": "issue rules-engine#5: not detected at all before, because the pattern anchored on \\b and ':' is a non-word character."
+    },
+    {
+      "id": "ipv6-trailing-compression-prefix",
+      "text": "Route 2001:db8:: via gateway.",
+      "countries": null,
+      "mustDetect": {
+        "IPV6_ADDRESS": [
+          "2001:db8::"
+        ]
+      },
+      "expectRedactedText": "Route [IPV6_ADDRESS] via gateway."
+    },
+    {
+      "id": "ipv6-bracketed-with-port",
+      "text": "Endpoint [2001:db8::1]:8443 refused.",
+      "countries": null,
+      "mustDetect": {
+        "IPV6_ADDRESS": [
+          "2001:db8::1"
+        ]
+      },
+      "expectRedactedText": "Endpoint [[IPV6_ADDRESS]]:8443 refused.",
+      "notes": "The port is not part of the address; the brackets stay."
+    },
+    {
+      "id": "ipv6-ipv4-mapped-is-one-span",
+      "text": "Mapped ::ffff:192.0.2.128 seen.",
+      "countries": null,
+      "mustDetect": {
+        "IPV6_ADDRESS": [
+          "::ffff:192.0.2.128"
+        ]
+      },
+      "mustNotDetect": [
+        "IP_ADDRESS"
+      ],
+      "expectRedactedText": "Mapped [IPV6_ADDRESS] seen.",
+      "notes": "issue rules-engine#5: the IPv4 rule used to claim the quad and leave '::ffff:' in the clear. Every group of a dotted quad is also valid hex, so the IPv4-embedded branches must precede the hex branches."
+    },
+    {
+      "id": "ipv6-zone-index-included",
+      "text": "Interface fe80::1%eth0 is up.",
+      "countries": null,
+      "mustDetect": {
+        "IPV6_ADDRESS": [
+          "fe80::1%eth0"
+        ]
+      },
+      "expectRedactedText": "Interface [IPV6_ADDRESS] is up."
+    },
+    {
+      "id": "ipv6-sentence-period-not-absorbed",
+      "text": "The address is 2001:db8::ff00:42:8329.",
+      "countries": null,
+      "mustDetect": {
+        "IPV6_ADDRESS": [
+          "2001:db8::ff00:42:8329"
+        ]
+      },
+      "expectRedactedText": "The address is [IPV6_ADDRESS].",
+      "notes": "A trailing sentence period must neither truncate the address nor be swallowed by it."
+    },
+    {
+      "id": "ipv6-scope-operator-is-not-an-address",
+      "text": "use std::io::Read; MyClass::method();",
+      "countries": null,
+      "mustNotDetect": [
+        "IPV6_ADDRESS"
+      ],
+      "expectRedactedText": "use std::io::Read; MyClass::method();",
+      "notes": "A bare '::' is the unspecified address, not an identifier; matching it would redact the C++/Rust scope operator."
+    },
+    {
+      "id": "ipv6-clock-and-mac-are-not-ipv6",
+      "text": "At 09:30:15 the NIC 00:1A:2B:3C:4D:5E registered.",
+      "countries": null,
+      "mustNotDetect": [
+        "IPV6_ADDRESS"
+      ],
+      "mustDetect": {
+        "MAC_ADDRESS": [
+          "00:1A:2B:3C:4D:5E"
+        ]
+      },
+      "notes": "Colon-separated hex that is not an IPv6 address must stay with its own type."
     }
   ]
 }
