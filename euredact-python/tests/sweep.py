@@ -49,7 +49,7 @@ COUNTRY_ARGS: list[list[str] | None] = [None, ["NL"], ["BE"], ["ZZ"]]
 _DET_LINE = re.compile(r'^- \[(?:EntityType\.)?(\w+)\] "(.*)" \(chars (\d+)-(\d+)\)$')
 
 
-def _training_documents() -> list[str]:
+def _training_documents(*, strict: bool = True) -> list[str]:
     """Reconstruct the original documents from the LLM training set.
 
     Each record holds the rules-engine detections (original value plus offsets)
@@ -66,8 +66,20 @@ def _training_documents() -> list[str]:
     docs: list[str] = []
     paths = sorted(DATA_DIR.rglob("*/test.jsonl"))
     paths += sorted(DATA_DIR.rglob("*/train.jsonl"))
+    unreadable: list[str] = []
     for path in paths:
-        for line in path.open():
+        try:
+            lines = path.read_text().splitlines()
+        except OSError as exc:
+            unreadable.append(f"{path.name}: {type(exc).__name__}")
+            continue
+        # An iCloud-evicted file reads as empty rather than failing, which is
+        # indistinguishable from a legitimately empty split unless we look.
+        if not lines and path.stat().st_size > 0:
+            unreadable.append(f"{path.name}: reads empty but stat reports "
+                              f"{path.stat().st_size:,} bytes (evicted?)")
+            continue
+        for line in lines:
             try:
                 rec = json.loads(line)
                 user = next(m["content"] for m in rec["messages"]
@@ -100,10 +112,19 @@ def _training_documents() -> list[str]:
             text = "".join(out)
             if all(text[s:s + len(v)] == v for _t, v, s in dets):
                 docs.append(text)
+    if unreadable and strict:
+        raise CorpusUnreadable(
+            f"{len(unreadable)} training file(s) could not be read. They supply "
+            f"most of the long documents in the corpus, so a run without them "
+            f"measures a different population:\n  " + "\n  ".join(unreadable))
     return docs
 
 
-def load_documents(limit: int | None = None) -> list[str]:
+class CorpusUnreadable(RuntimeError):
+    """A corpus file exists but could not be read or parsed."""
+
+
+def load_documents(limit: int | None = None, *, strict: bool = True) -> list[str]:
     """Every document we can find: the synthetic corpus, plus real documents
     reconstructed from the LLM training set when it is present.
 
@@ -112,17 +133,45 @@ def load_documents(limit: int | None = None) -> list[str]:
     documents averaging ten times that, with prose around the identifiers — and
     they are concatenated, so a prefix would quietly sweep only the short ones.
     Every cross-SDK divergence worth having found lived in the long documents.
+
+    A file that cannot be read raises :class:`CorpusUnreadable` rather than
+    being skipped. Skipping made a run measure a *different corpus* while
+    printing the same document count: because the sample is evenly spaced over
+    whatever loaded, losing one file shifts every document in it. Cross-SDK
+    parity read 0.30% on a corpus missing two files and 0.05% on the whole
+    one, from an identical engine, and nothing in the output distinguished the
+    two (issue rules-engine#18).
+
+    The corpus lives in iCloud Drive on macOS, where eviction leaves the
+    directory entry intact: ``stat`` reports the full size and the read returns
+    nothing. ``dd if=<file> of=/dev/null`` materialises it again.
+
+    Pass ``strict=False`` for exploratory work where a partial corpus is
+    acceptable; never for a figure that will be quoted.
     """
     docs: list[str] = []
+    unreadable: list[str] = []
 
     for path in sorted(DATA_DIR.glob("*.json")):
         try:
             records = json.loads(path.read_text())
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError) as exc:
+            unreadable.append(f"{path.name}: {type(exc).__name__}")
             continue
         docs.extend(rec["source_text"] for rec in records if rec.get("source_text"))
 
-    docs.extend(_training_documents())
+    if unreadable and strict:
+        raise CorpusUnreadable(
+            f"{len(unreadable)} corpus file(s) could not be read, so this run "
+            f"would measure a different corpus than it reports:\n  "
+            + "\n  ".join(unreadable)
+            + "\n\nOn macOS the corpus lives in iCloud Drive and its contents "
+            "can be evicted while the file still appears full size. Restore "
+            "them with:\n"
+            "  for f in \"$EUREDACT_CORPUS\"/*.json; do dd if=\"$f\" of=/dev/null bs=1m 2>/dev/null; done"
+        )
+
+    docs.extend(_training_documents(strict=strict))
 
     if limit and limit < len(docs):
         step = len(docs) / limit
@@ -218,11 +267,22 @@ def main() -> int:
                     help="exit code and violations only")
     args = ap.parse_args()
 
-    docs = load_documents(args.limit)
+    try:
+        docs = load_documents(args.limit)
+    except CorpusUnreadable as exc:
+        print(exc)
+        return 77
     if not docs:
         print(f"No corpus found under {DATA_DIR}.")
         print("The sweep needs the generated datasets; skipping is not a pass.")
         return 77  # distinct from 0 (clean) and 1 (violations)
+
+    # The population, not just the sample: two runs reporting the same
+    # "documents swept" can have drawn from different corpora (#18).
+    if not args.quiet:
+        total = len(load_documents())
+        print(f"corpus: {total:,} documents available", end="")
+        print(f", sampling {len(docs):,}" if len(docs) < total else "")
 
     sweep = Sweep()
     for text in docs:

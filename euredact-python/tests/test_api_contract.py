@@ -218,3 +218,41 @@ class TestCountryArgumentType:
         with pytest.warns(UnknownCountryWarning):
             result = euredact.redact("Werknemer met BSN 111222333", countries=["ZZ"])
         assert result.detections, "detection must continue on an unknown code"
+
+
+class TestPublicSurface:
+    """Every name the package promises must be importable from its root.
+
+    `Exemption` shipped in 0.5.0 documented in the README and present in
+    `euredact.types`, but never re-exported: `from euredact import Exemption`
+    raised, while the TypeScript SDK exported it correctly, so the two SDKs
+    disagreed on their public surface (issue rules-engine#20). The cause was an
+    edit that silently matched nothing; behaviour tests all passed, because
+    nothing exercised the import path.
+    """
+
+    def test_every_name_in_all_is_importable(self):
+        import euredact
+
+        missing = [n for n in euredact.__all__ if not hasattr(euredact, n)]
+        assert missing == [], f"declared in __all__ but not importable: {missing}"
+
+    @pytest.mark.parametrize("name", [
+        "Detection", "DetectionSource", "EntityType", "Exemption",
+        "RedactResult", "DocumentContext", "EuRedact",
+    ])
+    def test_public_types_are_exported_from_the_root(self, name):
+        """These are the types a caller annotates with, so they must resolve
+        at the path the documentation gives, not only in a submodule."""
+        import euredact
+
+        assert hasattr(euredact, name), f"from euredact import {name} would fail"
+        assert name in euredact.__all__, f"{name} is importable but not in __all__"
+
+    def test_the_two_sdks_agree_on_the_result_type_surface(self):
+        """Fields a caller reads off RedactResult, in both SDKs."""
+        from euredact.types import RedactResult
+
+        for field in ("redacted_text", "detections", "tokens", "exempted",
+                      "source", "degraded", "detection_mode"):
+            assert field in RedactResult.__dataclass_fields__, field
