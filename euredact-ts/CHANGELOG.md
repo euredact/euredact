@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 (2026-09-24)
+
+No changes to this SDK. The version is kept in step with `euredact-python`,
+which ships a fix: `Exemption` is now exported from the package root. The
+TypeScript SDK already exported it correctly (`import type { Exemption } from
+"euredact"`), so nothing here needed changing. *(rules-engine#20)*
+
 ## 0.5.0 (2026-09-24)
 
 ### Fixed
