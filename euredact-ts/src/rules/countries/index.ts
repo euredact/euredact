@@ -114,7 +114,14 @@ const SHARED: CountryConfig = {
     // is Unicode-aware) matched local parts like "petras_ž@..." while this one
     // did not. \p{L}\p{N} with the `u` flag restores parity; the leading guard
     // is a Unicode-safe word boundary.
-    p(EntityType.EMAIL, String.raw`(?<![\p{L}\p{N}._%+\-])[\p{L}\p{N}._%+\-]+@(?:[\p{L}\p{N}\-]+\.)+\p{L}{2,}\b`),
+    // The apostrophe is allowed only between word characters: it belongs in a
+    // local part, but putting it in the class would let the match absorb a
+    // quote from the surrounding text, while leaving it out made
+    // `johno'neill@outlook.ie` mask as `johno'[EMAIL]` (issue rules-engine#10).
+    // The second lookbehind refuses to start a match after `<word-char>'`,
+    // which is a match already in progress; without it every apostrophe was a
+    // fresh start offset and the scan went quadratic. Mirrors Python.
+    p(EntityType.EMAIL, String.raw`(?<![\p{L}\p{N}._%+\-])(?<![\p{L}\p{N}._%+\-]')[\p{L}\p{N}._%+\-]+(?:'[\p{L}\p{N}._%+\-]+)*@(?:[\p{L}\p{N}\-]+\.)+\p{L}{2,}\b`),
     // IBAN (any country) — structure + mod-97 only. Country-specific IBAN
     // patterns still exist and win on identical spans; this one guarantees an
     // IBAN is never missed just because its country was not requested.

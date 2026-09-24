@@ -70,6 +70,15 @@
   unchanged; the recall figures are lower because they are now counting what
   they always claimed to. Harness only — no engine behaviour changes.
   *(rules-engine#8)*
+- **An apostrophe in an email local part left the prefix unmasked.**
+  `johno'neill@outlook.ie` masked as `johno'[EMAIL]`: the local-part class had
+  no apostrophe, so the match began after it and the surname — the identifying
+  half — survived into output that looked redacted. **1,415 entities** in the
+  152,300-document corpus, and the failure correlates with Irish and Southern
+  European names rather than falling evenly across the people in the data. The
+  apostrophe is now accepted *between* word characters, so a quote belonging to
+  the surrounding text (`'john@x.ie'`) is still left alone. Four conformance
+  vectors. *(rules-engine#10)*
 
 - **Compressed IPv6 addresses were only half masked.** `2001:db8::ff00:42:8329`
   came back as `[IPV6_ADDRESS]ff00:42:8329` — the interface identifier, the

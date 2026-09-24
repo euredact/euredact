@@ -2002,6 +2002,61 @@
         ]
       },
       "expectRedactedText": "Contact Joren ([EMAIL], [PHONE]) morgen."
+    },
+    {
+      "id": "email-apostrophe-in-local-part",
+      "text": "Contact johno'neill@outlook.ie today.",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "EMAIL": [
+          "johno'neill@outlook.ie"
+        ]
+      },
+      "expectRedactedText": "Contact [EMAIL] today.",
+      "notes": "issue rules-engine#10: the local-part class had no apostrophe, so the match began after it and masked as \"johno'[EMAIL]\" — the surname stayed in the clear. 1,415 corpus entities."
+    },
+    {
+      "id": "email-apostrophe-with-underscore-prefix",
+      "text": "Mail aoife_o'sullivan@eircom.net please.",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "EMAIL": [
+          "aoife_o'sullivan@eircom.net"
+        ]
+      },
+      "expectRedactedText": "Mail [EMAIL] please."
+    },
+    {
+      "id": "email-quoted-address-keeps-its-quotes",
+      "text": "config: 'john@x.ie' set",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "EMAIL": [
+          "john@x.ie"
+        ]
+      },
+      "expectRedactedText": "config: '[EMAIL]' set",
+      "notes": "The apostrophe belongs to the surrounding text here. Putting ' in the character class would have absorbed it, the same defect as rules-engine#3."
+    },
+    {
+      "id": "email-possessive-prose-is-not-absorbed",
+      "text": "O'Brien's address is jan@x.ie today.",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "EMAIL": [
+          "jan@x.ie"
+        ]
+      },
+      "expectRedactedText": "O'Brien's address is [EMAIL] today.",
+      "notes": "A possessive near an address must not extend the span."
     }
   ]
 }
