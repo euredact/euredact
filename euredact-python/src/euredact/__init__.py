@@ -28,7 +28,13 @@ from euredact.cloud.config import configure
 from euredact.rules.bic_registry import set_bic_registry
 from euredact.rules.context import DocumentContext
 from euredact.sdk import EuRedact, restore
-from euredact.types import Detection, DetectionSource, EntityType, RedactResult
+from euredact.types import (
+    Detection,
+    DetectionSource,
+    EntityType,
+    Exemption,
+    RedactResult,
+)
 
 __all__ = [
     "__version__",
@@ -43,6 +49,7 @@ __all__ = [
     "Detection",
     "DetectionSource",
     "EntityType",
+    "Exemption",
     "EuRedact",
     "redact",
     "redact_batch",

@@ -45,7 +45,7 @@ sys.path.insert(0, str(ROOT / "euredact-python" / "src"))
 sys.path.insert(0, str(ROOT / "euredact-python" / "tests"))
 
 import euredact
-from sweep import load_documents
+from sweep import CorpusUnreadable, load_documents
 
 
 def covered(spans) -> set[int]:
@@ -90,10 +90,18 @@ def main() -> int:
                     help="percent of identically-masked spans allowed to differ in type")
     args = ap.parse_args()
 
-    docs = load_documents(args.limit)
+    try:
+        docs = load_documents(args.limit)
+        total = len(load_documents())
+    except CorpusUnreadable as exc:
+        print(exc)
+        return 77
     if not docs:
         print("No corpus found; set EUREDACT_CORPUS.")
         return 77
+    # Report the population, not just the sample: an unreadable file used to
+    # shrink it silently and shift every document in the sample (#18).
+    print(f"corpus available        : {total:,} documents")
 
     with tempfile.TemporaryDirectory() as tmp:
         docs_path = Path(tmp) / "docs.json"

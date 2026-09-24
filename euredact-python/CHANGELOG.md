@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`Exemption` is exported from the package root.** It shipped in 0.5.0
+  documented in the README and present in `euredact.types`, but never
+  re-exported, so `from euredact import Exemption` raised while the TypeScript
+  SDK exported it correctly. No functional loss — `result.exempted` was always
+  populated — but the documented import path did not resolve. A contract test
+  now asserts every name in `__all__` is importable and that the public types
+  resolve at the root. *(rules-engine#20)*
+
+- **`make sweep` and `make parity` refuse to run on an incomplete corpus.**
+  Both loaders skipped any file they could not read and carried on. Because a
+  `--limit` takes an evenly spaced sample across the whole corpus, losing one
+  file shifts every document in the sample, so two runs printing the same
+  document count could describe different populations — cross-SDK parity read
+  0.05% on one population and 0.30% on another, from an identical engine. The
+  loaders now raise `CorpusUnreadable`, naming each file and how to restore it,
+  and both commands print the population they sampled from. The check covers
+  the training `.jsonl` splits as well, which supply 60,773 of the 213,073
+  documents and were the larger hole: an iCloud-evicted file there reads as
+  empty rather than failing, which is indistinguishable from an empty split
+  unless the size is checked. With this in place parity reproduces at **0.30%**
+  across consecutive runs. *(rules-engine#18)*
+
 ## 0.5.0 (2026-09-24)
 
 ### Added
