@@ -149,7 +149,7 @@ test("a plain hit is not served to a tokenized call", () => {
 test("tokens count towards the cache budget", () => {
   const base: RedactResult = {
     redactedText: "x", detections: [], source: "rules", degraded: false,
-    inferredCountries: [], evidence: [], detectionMode: "declared", tokens: {},
+    inferredCountries: [], evidence: [], detectionMode: "declared", tokens: {}, exempted: [],
   };
   const withTokens = { ...base, tokens: { EMAIL_ABCD: "jan@example.com" } };
   assert.equal(resultChars(withTokens) - resultChars(base), "EMAIL_ABCD".length + "jan@example.com".length);

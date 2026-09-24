@@ -169,6 +169,7 @@ function toResult(payload: WireResult, text: string): RedactResult {
     evidence: [],
     detectionMode: "declared",
     tokens: {},
+    exempted: [],
   };
 }
 

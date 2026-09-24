@@ -87,6 +87,8 @@ print(result.detections)
 | send a prompt to an LLM and restore the reply | `tokenize=True`, then [`restore()`](#euredactrestore) |
 | keep relationships visible across a whole session | `referential_integrity=True` |
 | never redact my own company name or addresses | `allowlist=[...]`, or `EuRedact(allowlist=[...])` |
+| never redact anything at my own domain | `allowlist_domains=["acme.be"]` |
+| audit what the allowlist kept in the document | `result.exempted` |
 | catch person names, employers, job titles, diagnoses | `mode="cloud"` — see [Cloud tier](#cloud-tier) |
 | include dates of birth | `detect_dates=True` |
 | redact a document too large for one call | `context=` + `chunk_offset=` — see [Chunked documents](#chunked-documents) |
@@ -144,7 +146,8 @@ The three output styles are mutually exclusive in practice — pick at most one.
 | *(none)* | — | Default: each span becomes `[ENTITY_TYPE]`. |
 | `referential_integrity` | `False` | Replace each distinct value with a consistent label (`EMAIL_1`). Labels persist **on the instance** across calls, so two documents sharing a value get the same label. See [Referential Integrity](#referential-integrity). |
 | `tokenize` | `False` | Replace each value with a reversible token (`EMAIL_K7Q2`) and return the token → value mapping in `result.tokens`; pass it to [`restore()`](#euredactrestore). Tokens are unique to the **call**, so nothing is retained. Cannot be combined with `referential_integrity`. See [Reversible tokenization](#reversible-tokenization). |
-| `allowlist` | `None` | Values never to redact, matched whole and case-insensitively, merged with the instance's list. Applies to cloud-tier types too. See [Allowlist](#allowlist). |
+| `allowlist` | `None` | Values never to redact, matched whole and case-insensitively, merged with the instance's list. Structured identifiers (IBAN, phone, VAT, …) also match across spacing and hyphenation. Applies to cloud-tier types too. See [Allowlist](#allowlist). |
+| `allowlist_domains` | `None` | Domains whose addresses are never redacted, e.g. `["acme.be"]`. Applies to `EMAIL` and `URL` only, and covers subdomains. See [Allowlist](#allowlist). |
 
 **Long documents and tiers**
 
@@ -284,6 +287,7 @@ EuRedact(
 |---|---|---|
 | `max_input_length` | `10_485_760` (~10 MB) | Longest document `redact()` accepts, in characters. Above it, `ValueError` — split the input or raise the ceiling. |
 | `allowlist` | `None` | Values never to redact, for every call on this instance: your own organisation's name, its own addresses. Merged with the per-call `allowlist`. See [Allowlist](#allowlist). |
+| `allowlist_domains` | `None` | Domains never to redact, for every call on this instance. Merged with the per-call value. |
 
 State held on the instance — the result cache, referential-integrity labels and
 custom patterns — is per instance, which is what makes one instance per tenant
@@ -334,6 +338,7 @@ class RedactResult:
     detection_mode: str = "declared"                        # "declared" if countries= was passed,
                                                             # "inferred" otherwise
     tokens: dict[str, str] = {}                             # token -> original value; only with tokenize=True
+    exempted: list[Exemption] = []                          # spans the allowlist kept, with the rule that matched
 ```
 
 #### `Detection`
@@ -517,7 +522,7 @@ refuses oversized input rather than chunking it) and `CloudError`.
 
 Options the service cannot honour raise rather than being ignored: multiple
 `countries`, `country_hint`, `context`/`chunk_offset`, `referential_integrity`
-and `coref`. `tokenize` and `allowlist` are honoured: the SDK applies them to
+and `coref`. `tokenize`, `allowlist` and `allowlist_domains` are honoured: the SDK applies them to
 the spans the service returns and rebuilds the text from those.
 
 ## `NAME` is now `PERSON_NAME`
@@ -955,12 +960,73 @@ print(sdk.redact(text, countries=["NL"], allowlist=["jan@acme.be"]).redacted_tex
 # "ACME NV: mail info@acme.be or jan@acme.be about IBAN [BANK_ACCOUNT]."
 ```
 
-Matching is whole-span and case-insensitive, and nothing more. `acme.be` does
-not exempt every address at that domain: a broader match is how "our domain"
-turns into "everyone who ever mailed us". A bare string (`allowlist="ACME NV"`)
-raises `TypeError` rather than being iterated into single letters that exempt
-nothing. An allowlisted value is removed from `detections` as well as from the
-text. Works in cloud mode and together with `tokenize`.
+Matching is whole-span and case-insensitive. A bare string
+(`allowlist="ACME NV"`) raises `TypeError` rather than being iterated into
+single letters that exempt nothing. Works in cloud mode — including on types
+only the model finds, such as `ORGANISATION_NAME` — and together with
+`tokenize`.
+
+### Spacing and punctuation
+
+For **structured identifiers** separators are presentational, so an allowlisted
+value matches however the document writes it:
+
+```python
+sdk = euredact.EuRedact(allowlist=["NL91ABNA0417164300"])
+sdk.redact("Pay to NL91 ABNA 0417 1643 00.", countries=["NL"]).redacted_text
+# 'Pay to NL91 ABNA 0417 1643 00.'   — exempt, despite the spacing
+```
+
+Applies to `BANK_ACCOUNT`, `BIC`, `CREDIT_CARD`, `PHONE`, `VAT`, `NATIONAL_ID`,
+`SSN`, `TAX_ID`, `PASSPORT`, `DRIVERS_LICENSE`, `RESIDENCE_PERMIT`,
+`HEALTH_INSURANCE`, `CHAMBER_OF_COMMERCE`, `IMEI` and `VIN`. It widens the
+*spelling*, never the *scope*: a different account is still redacted.
+
+Free-text types (`EMAIL`, `PERSON_NAME`, `ORGANISATION_NAME`, …) stay literal,
+because folding would exempt values you never listed —
+`jan.devries@acme.be` and `jandevries@acme.be` are different mailboxes at most
+providers, and `ACME NV` folded would also match `ACMENV`. Case still does not
+matter, so list a company's legal spellings if they vary:
+`["ACME NV", "ACME N.V."]`.
+
+### Exempting a whole domain
+
+Enumerating every mailbox does not scale — a new hire's address is redacted in
+your own documents until someone updates the list. `allowlist_domains` takes
+the domain instead:
+
+```python
+sdk = euredact.EuRedact(allowlist_domains=["acme.be"])
+sdk.redact("Mail jan@acme.be or piet@acme.be", countries=["NL"]).redacted_text
+# 'Mail jan@acme.be or piet@acme.be'
+```
+
+It applies to `EMAIL` and `URL` only and covers subdomains (`mail.acme.be`).
+The match is on a label boundary, so `acme.be` does **not** exempt
+`evilacme.be`. Entries may be written `acme.be`, `@acme.be` or `.acme.be`.
+
+There are deliberately **no wildcards**. The allowlist is the only option that
+turns redaction *off*, so an over-broad entry fails toward under-redaction and
+does so silently: `*@*` would disable email redaction entirely and `* Maes` a
+family's names. A domain rule cannot be widened that way — it structurally
+cannot match a person's name or an IBAN.
+
+### What was exempted
+
+Every exemption is reported, so a document that keeps a direct identifier can be
+audited rather than taken on trust:
+
+```python
+r = euredact.redact("Mail jan@acme.be", countries=["NL"], allowlist_domains=["acme.be"])
+for e in r.exempted:
+    print(e.entity_type, e.text, e.rule, e.rule_kind)
+# EntityType.EMAIL jan@acme.be acme.be domain
+```
+
+`Exemption` carries `entity_type`, `start`, `end`, `text`, the `rule` that
+matched as you wrote it, and `rule_kind` (`"value"` or `"domain"`). An exempted
+span is absent from `detections`, so `exempted` is the only record that it was
+found at all.
 
 ## Architecture
 

@@ -85,6 +85,34 @@ harness — recall was 99.4% hinted and 99.2% blind, so this release adds
 
 ### Added
 
+- **The allowlist reports what it exempted, matches structured identifiers
+  across spacing, and can take a whole domain.** Three changes to one feature:
+
+  `RedactResult.exempted` lists every span the allowlist kept, with the rule
+  that matched and whether it was a value or a domain rule. An exemption is a
+  deliberate decision to leave a direct identifier in a document that otherwise
+  claims to be redacted; it was previously indistinguishable from never having
+  detected it. *(rules-engine#16)*
+
+  A structured identifier now matches however the document spaces it, so
+  `allowlist: ["NL91ABNA0417164300"]` exempts `NL91 ABNA 0417 1643 00` — the
+  spelling a company's own IBAN usually appears in. Applies to IBAN, BIC, card,
+  phone, VAT, national and tax IDs, passport, licence, permit, health,
+  chamber-of-commerce, IMEI and VIN. Free-text types stay literal, because
+  folding would exempt values the caller never listed: `jan.devries@acme.be`
+  and `jandevries@acme.be` are different mailboxes at most providers.
+  *(rules-engine#15)*
+
+  `allowlistDomains: ["acme.be"]` exempts every address at an owned domain
+  without enumerating each mailbox, which drifts as people join and leave. It
+  applies to `EMAIL` and `URL` only, covers subdomains, and matches on a label
+  boundary so `acme.be` does not exempt `evilacme.be`. There are deliberately
+  no wildcards: the allowlist is the only option that turns redaction *off*, so
+  an over-broad entry fails toward under-redaction silently. *(rules-engine#17)*
+
+  Mirrors `euredact-python`; code building `RedactResult` literals must add
+  `exempted`.
+
 - **Reversible tokenization: `redact(text, { tokenize: true })` and `restore()`.**
   Each value is replaced by a token that names its type and nothing else —
   `EMAIL_K7Q2`, `PERSON_NAME_W3NB` — and the result carries the way back:

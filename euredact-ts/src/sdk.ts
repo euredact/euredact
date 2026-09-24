@@ -5,7 +5,7 @@ import { normalize, mapOffsetToOriginal } from "./normalizer.js";
 import { RuleEngine } from "./rules/engine.js";
 import { DocumentContext } from "./rules/context.js";
 import { weightsToRanking } from "./rules/evidence.js";
-import { EntityType, type Detection, type RedactResult } from "./types.js";
+import { EntityType, type Detection, type Exemption, type RedactResult } from "./types.js";
 
 const DATE_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
 
@@ -150,18 +150,40 @@ export function restore(text: string, tokens: Record<string, string>): string {
 }
 
 /**
+ * Types whose separators are presentational: the same identifier stays the
+ * same value however it is spaced, hyphenated or dotted, so an allowlisted
+ * IBAN is exempted whether the document writes NL91ABNA0417164300 or
+ * NL91 ABNA 0417 1643 00 (issue rules-engine#15).
+ *
+ * Free-text types are deliberately absent: folding separators in an address
+ * would make `jan.devries@acme.be` exempt `jandevries@acme.be`, a different
+ * mailbox at most providers.
+ */
+const SEPARATOR_INSENSITIVE = new Set<EntityType | string>([
+  EntityType.BANK_ACCOUNT, EntityType.BIC, EntityType.CREDIT_CARD,
+  EntityType.PHONE, EntityType.VAT, EntityType.NATIONAL_ID, EntityType.SSN,
+  EntityType.TAX_ID, EntityType.PASSPORT, EntityType.DRIVERS_LICENSE,
+  EntityType.RESIDENCE_PERMIT, EntityType.HEALTH_INSURANCE,
+  EntityType.CHAMBER_OF_COMMERCE, EntityType.IMEI, EntityType.VIN,
+]);
+
+/** Types carrying a domain an owner may want exempted wholesale. */
+const DOMAIN_BEARING = new Set<EntityType | string>([EntityType.EMAIL, EntityType.URL]);
+
+const SEPARATORS = /[\s.\-/()]+/g;
+
+/**
  * Reject a bare string where a list of allowlisted values is expected.
  *
  * A string is iterable, so `allowlist: "ACME NV"` would become the
  * one-character entries "A", "C", ... — none of which is a whole detection, so
- * nothing is exempted and the caller's own name is redacted after all. Same
- * reasoning as `checkCountryArg`.
+ * nothing is exempted and the caller's own name is redacted after all.
  */
-function checkAllowlistArg(value: unknown): void {
+function checkAllowlistArg(value: unknown, param = "allowlist"): void {
   if (typeof value === "string") {
     throw new TypeError(
-      `allowlist must be an array of values, not a bare string. ` +
-      `Pass allowlist: ["${value}"] rather than allowlist: "${value}".`,
+      `${param} must be an array of values, not a bare string. ` +
+      `Pass ${param}: ["${value}"] rather than ${param}: "${value}".`,
     );
   }
 }
@@ -175,26 +197,93 @@ function allowlistKey(value: string): string {
   return value.normalize("NFC").trim().toLowerCase();
 }
 
-function normalizeAllowlist(values: string[] | null | undefined): Set<string> {
+/** `allowlistKey` with presentational separators removed. */
+function foldedKey(value: string): string {
+  return allowlistKey(value).replace(SEPARATORS, "");
+}
+
+/** Comparison key -> the entry as the caller wrote it (for reporting). */
+function normalizeAllowlist(values: string[] | null | undefined): Map<string, string> {
   checkAllowlistArg(values);
-  const out = new Set<string>();
-  for (const v of values ?? []) if (v && v.trim()) out.add(allowlistKey(v));
+  const out = new Map<string, string>();
+  for (const v of values ?? []) {
+    if (!v || !v.trim()) continue;
+    if (!out.has(allowlistKey(v))) out.set(allowlistKey(v), v);
+    if (!out.has(foldedKey(v))) out.set(foldedKey(v), v);
+  }
   return out;
 }
 
+/** Domain key -> the entry as written. A leading `@` or `.` is ignored. */
+function normalizeDomains(values: string[] | null | undefined): Map<string, string> {
+  checkAllowlistArg(values, "allowlistDomains");
+  const out = new Map<string, string>();
+  for (const v of values ?? []) {
+    if (!v || !v.trim()) continue;
+    const k = allowlistKey(v).replace(/^[@.]+/, "");
+    if (k && !out.has(k)) out.set(k, v);
+  }
+  return out;
+}
+
+/** The domain an exemption rule would apply to, or null. */
+function domainOf(entityType: EntityType | string, value: string): string | null {
+  if (!DOMAIN_BEARING.has(entityType)) return null;
+  let v = allowlistKey(value);
+  if (v.includes("@")) return v.slice(v.lastIndexOf("@") + 1).replace(/^[<[(]+|[>\])(),;:"']+$/g, "") || null;
+  v = v.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
+  return v.split("/")[0].split(":")[0].replace(/^[<[(]+|[>\])(),;:"']+$/g, "") || null;
+}
+
+/** The [rule, kind] exempting this detection, or null. */
+function matchingRule(
+  det: Detection,
+  slice: string,
+  allowed: Map<string, string>,
+  domains: Map<string, string>,
+): [string, "value" | "domain"] | null {
+  for (const candidate of [slice, det.text]) {
+    if (!candidate) continue;
+    const exact = allowed.get(allowlistKey(candidate));
+    if (exact !== undefined) return [exact, "value"];
+    if (SEPARATOR_INSENSITIVE.has(det.entityType)) {
+      const folded = allowed.get(foldedKey(candidate));
+      if (folded !== undefined) return [folded, "value"];
+    }
+    const host = domainOf(det.entityType, candidate);
+    if (host) {
+      for (const [owned, entry] of domains) {
+        if (host === owned || host.endsWith("." + owned)) return [entry, "domain"];
+      }
+    }
+  }
+  return null;
+}
+
 /**
- * Drop every detection whose value is on the allowlist.
+ * Split detections into those to redact and those the caller exempted.
  *
- * Whole span only: `euredact.be` does not exempt `joren@euredact.be`. Both the
- * original slice and the detection's own text are checked, since the two
- * differ when normalisation changed the document, and the cloud tier's text
- * is whatever the service reported.
+ * Whole span only: `euredact.be` as a *value* does not exempt
+ * `joren@euredact.be`; that is what `allowlistDomains` is for.
  */
-function applyAllowlist(text: string, detections: Detection[], allowed: Set<string>): Detection[] {
-  if (allowed.size === 0) return detections;
-  return detections.filter(
-    d => !allowed.has(allowlistKey(text.slice(d.start, d.end))) && !allowed.has(allowlistKey(d.text)),
-  );
+function applyAllowlist(
+  text: string,
+  detections: Detection[],
+  allowed: Map<string, string>,
+  domains: Map<string, string>,
+): [Detection[], Exemption[]] {
+  if (allowed.size === 0 && domains.size === 0) return [detections, []];
+  const kept: Detection[] = [];
+  const exempted: Exemption[] = [];
+  for (const d of detections) {
+    const hit = matchingRule(d, text.slice(d.start, d.end), allowed, domains);
+    if (hit === null) kept.push(d);
+    else exempted.push({
+      entityType: d.entityType, start: d.start, end: d.end,
+      text: text.slice(d.start, d.end), rule: hit[0], ruleKind: hit[1],
+    });
+  }
+  return [kept, exempted];
 }
 
 /** Two label schemes for the same spans cannot both apply. */
@@ -287,6 +376,11 @@ export interface RedactOptions {
    * detection. Merged with the instance's allowlist.
    */
   allowlist?: string[] | null;
+  /**
+   * Domains whose addresses are never redacted, e.g. `["acme.be"]`. Applies to
+   * EMAIL and URL only, and covers subdomains. Merged with the instance list.
+   */
+  allowlistDomains?: string[] | null;
   detectDates?: boolean;
   cache?: boolean;
 }
@@ -327,7 +421,8 @@ export class EuRedact {
   private cache = new ResultCache();
   private referentialMapper = new ReferentialMapper();
   private maxInputLength: number;
-  private allowlist: Set<string>;
+  private allowlist: Map<string, string>;
+  private allowlistDomains: Map<string, string>;
 
   /**
    * @param options.maxInputLength Longest document `redact` accepts, in characters.
@@ -335,9 +430,14 @@ export class EuRedact {
    *   instance — an organisation's own name, its own addresses. Merged with
    *   the per-call `allowlist`. Matched whole, case-insensitively.
    */
-  constructor(options?: { maxInputLength?: number; allowlist?: string[] | null }) {
+  constructor(options?: {
+    maxInputLength?: number;
+    allowlist?: string[] | null;
+    allowlistDomains?: string[] | null;
+  }) {
     this.maxInputLength = options?.maxInputLength ?? DEFAULT_MAX_INPUT_LENGTH;
     this.allowlist = normalizeAllowlist(options?.allowlist);
+    this.allowlistDomains = normalizeDomains(options?.allowlistDomains);
   }
 
   addCustomPattern(name: string, pattern: string): void {
@@ -353,10 +453,17 @@ export class EuRedact {
   }
 
   /** The instance allowlist merged with a call's, in comparison form. */
-  private allowedFor(options: RedactOptions): Set<string> {
-    const allowed = normalizeAllowlist(options.allowlist);
-    for (const v of this.allowlist) allowed.add(v);
+  private allowedFor(options: RedactOptions): Map<string, string> {
+    const allowed = new Map(this.allowlist);
+    for (const [k, v] of normalizeAllowlist(options.allowlist)) allowed.set(k, v);
     return allowed;
+  }
+
+  /** The instance domain list merged with a call's. */
+  private domainsFor(options: RedactOptions): Map<string, string> {
+    const domains = new Map(this.allowlistDomains);
+    for (const [k, v] of normalizeDomains(options.allowlistDomains)) domains.set(k, v);
+    return domains;
   }
 
   /** The label function for one call, given its output options. */
@@ -408,9 +515,10 @@ export class EuRedact {
     // option that is safe to ignore — it can only cause MORE to be detected,
     // never less, so it cannot produce under-redaction.
     const allowed = this.allowedFor(options);
+    const domains = this.domainsFor(options);
     const result = await new CloudClient().redact(text, { country: countries[0] });
-    if (options.tokenize || allowed.size > 0) {
-      await this.remaskCloudResult(result, text, { tokenize: options.tokenize ?? false, allowed });
+    if (options.tokenize || allowed.size > 0 || domains.size > 0) {
+      await this.remaskCloudResult(result, text, { tokenize: options.tokenize ?? false, allowed, domains });
     }
     return result;
   }
@@ -431,7 +539,7 @@ export class EuRedact {
   private async remaskCloudResult(
     result: RedactResult,
     text: string,
-    opts: { tokenize: boolean; allowed: Set<string> },
+    opts: { tokenize: boolean; allowed: Map<string, string>; domains: Map<string, string> },
   ): Promise<void> {
     const { CloudError } = await import("./cloud/errors.js");
     for (const det of result.detections) {
@@ -439,7 +547,7 @@ export class EuRedact {
         throw new CloudError("span offsets do not match the document; cannot apply tokenize/allowlist locally");
       }
     }
-    result.detections = applyAllowlist(text, result.detections, opts.allowed);
+    [result.detections, result.exempted] = applyAllowlist(text, result.detections, opts.allowed, opts.domains);
     const tokenMapper = opts.tokenize ? new TokenMapper(text, result.detections) : null;
     result.redactedText = applyReplacements(text, result.detections, this.labelFor(false, tokenMapper));
     result.tokens = tokenMapper ? tokenMapper.tokens : {};
@@ -450,6 +558,7 @@ export class EuRedact {
     checkCountryArg(options.countryHint, "countryHint");
     checkLabelOptions(options);
     const allowed = this.allowedFor(options);
+    const domains = this.domainsFor(options);
 
     const requestedMode = options.mode ?? "rules";
     if (requestedMode === "cloud") {
@@ -504,7 +613,8 @@ export class EuRedact {
     // text — it has to key the cache too.
     // JSON rather than a joined string: an entry may itself contain the
     // separator, and two different lists must never share a key.
-    const allowKey = allowed.size ? JSON.stringify([...allowed].sort()) : "";
+    const allowKey = (allowed.size ? JSON.stringify([...allowed.keys()].sort()) : "")
+      + (domains.size ? "|dom=" + JSON.stringify([...domains.keys()].sort()) : "");
     const cacheMode = `${mode}|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}|tok=${tokenize}|allow=${allowKey}`;
 
     let cacheKey: string | undefined;
@@ -536,7 +646,8 @@ export class EuRedact {
     if (!detectDates) {
       detections = detections.filter(d => !DATE_TYPES.has(d.entityType));
     }
-    detections = applyAllowlist(text, detections, allowed);
+    let exempted: Exemption[];
+    [detections, exempted] = applyAllowlist(text, detections, allowed, domains);
 
     detections.sort((a, b) => a.start - b.start || b.end - a.end);
 
@@ -557,6 +668,7 @@ export class EuRedact {
       evidence,
       detectionMode: countries && countries.length ? "declared" : "inferred",
       tokens: tokenMapper ? tokenMapper.tokens : {},
+      exempted,
     };
 
     if (cache && cacheKey) {

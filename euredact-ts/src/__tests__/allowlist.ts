@@ -203,6 +203,76 @@ testAsync("allowlist and tokenize together in cloud mode", () =>
     assert.equal(restore(r.redactedText, r.tokens), CLOUD_DOC);
   }));
 
+
+// ── Separator-insensitive matching (issue rules-engine#15) ────────────────
+
+for (const written of ["NL91ABNA0417164300", "NL91 ABNA 0417 1643 00", "NL91-ABNA-0417-1643-00"]) {
+  test(`an allowlisted IBAN is exempt written as ${written}`, () => {
+    const r = new EuRedact().redact(`Pay to ${written} today.`, { countries: ["NL"], allowlist: ["NL91ABNA0417164300"] });
+    assert.ok(r.redactedText.includes(written));
+  });
+}
+test("a phone number folds too", () =>
+  assert.ok(new EuRedact().redact("Call +32 475 12 34 56 now", { countries: ["BE"], allowlist: ["+32475123456"] })
+    .redactedText.includes("+32 475 12 34 56")));
+test("free-text types stay literal", () =>
+  assert.ok(!new EuRedact().redact("mail jandevries@acme.be", { countries: ["NL"], allowlist: ["jan.devries@acme.be"] })
+    .redactedText.includes("jandevries@acme.be")));
+test("folding does not exempt a different account", () =>
+  assert.ok(!new EuRedact().redact("Pay to NL02ABNA0123456789 today.", { countries: ["NL"], allowlist: ["NL91ABNA0417164300"] })
+    .redactedText.includes("NL02ABNA0123456789")));
+
+// ── Domain exemption (issue rules-engine#17) ──────────────────────────────
+
+test("every address at an owned domain is exempt", () =>
+  assert.equal(new EuRedact().redact("mail jan@acme.be or piet@acme.be", { countries: ["NL"], allowlistDomains: ["acme.be"] }).redactedText,
+               "mail jan@acme.be or piet@acme.be"));
+test("subdomains are covered", () =>
+  assert.ok(new EuRedact().redact("mail jan@mail.acme.be", { countries: ["NL"], allowlistDomains: ["acme.be"] })
+    .redactedText.includes("jan@mail.acme.be")));
+test("a lookalike domain is not covered", () =>
+  assert.ok(!new EuRedact().redact("mail jan@evilacme.be", { countries: ["NL"], allowlistDomains: ["acme.be"] })
+    .redactedText.includes("jan@evilacme.be")));
+test("other types are untouched by a domain rule", () => {
+  const r = new EuRedact().redact("mail jan@acme.be, IBAN NL91 ABNA 0417 1643 00", { countries: ["NL"], allowlistDomains: ["acme.be"] });
+  assert.ok(r.redactedText.includes("jan@acme.be"));
+  assert.ok(!r.redactedText.includes("NL91 ABNA 0417 1643 00"));
+});
+for (const entry of ["acme.be", "@acme.be", ".acme.be", "ACME.BE"]) {
+  test(`domain entry form ${entry} is accepted`, () =>
+    assert.ok(new EuRedact().redact("mail jan@acme.be", { countries: ["NL"], allowlistDomains: [entry] })
+      .redactedText.includes("jan@acme.be")));
+}
+test("instance-level domains apply", () =>
+  assert.ok(new EuRedact({ allowlistDomains: ["acme.be"] }).redact("mail jan@acme.be", { countries: ["NL"] })
+    .redactedText.includes("jan@acme.be")));
+test("a bare string is rejected for domains", () =>
+  assert.throws(() => new EuRedact().redact("x", { countries: ["NL"], allowlistDomains: "acme.be" as unknown as string[] }),
+                /allowlistDomains must be an array/));
+
+// ── The exemption record (issue rules-engine#16) ──────────────────────────
+
+test("a value exemption is reported", () => {
+  const r = new EuRedact().redact(DOC, { countries: ["NL"], allowlist: ["jan@example.com"] });
+  assert.equal(r.exempted.length, 1);
+  const e = r.exempted[0];
+  assert.equal(e.text, "jan@example.com");
+  assert.equal(e.entityType, EntityType.EMAIL);
+  assert.deepEqual([e.rule, e.ruleKind], ["jan@example.com", "value"]);
+  assert.equal(DOC.slice(e.start, e.end), e.text);
+});
+test("a domain exemption names the domain rule", () => {
+  const r = new EuRedact().redact("mail jan@acme.be", { countries: ["NL"], allowlistDomains: ["acme.be"] });
+  assert.deepEqual(r.exempted.map(e => [e.rule, e.ruleKind]), [["acme.be", "domain"]]);
+});
+test("the rule is reported as the caller wrote it", () => {
+  const r = new EuRedact().redact("Pay NL91 ABNA 0417 1643 00", { countries: ["NL"], allowlist: ["NL91ABNA0417164300"] });
+  assert.equal(r.exempted[0].rule, "NL91ABNA0417164300");
+  assert.equal(r.exempted[0].text, "NL91 ABNA 0417 1643 00");
+});
+test("no allowlist means no exemptions", () =>
+  assert.deepEqual(new EuRedact().redact(DOC, { countries: ["NL"] }).exempted, []));
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try {

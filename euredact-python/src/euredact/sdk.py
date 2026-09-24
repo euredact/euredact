@@ -17,7 +17,7 @@ from euredact.normalizer import map_offset_to_original, normalize
 from euredact.rules.context import DocumentContext
 from euredact.rules.engine import RuleEngine, check_country_arg
 from euredact.rules.evidence import weights_to_ranking
-from euredact.types import Detection, EntityType, RedactResult
+from euredact.types import Detection, EntityType, Exemption, RedactResult
 
 # Date entity types — opt-in via detect_dates=True
 _DATE_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
@@ -128,11 +128,34 @@ class ReferentialMapper:
         self._mapping.clear()
 
 
-def check_allowlist_arg(value: object) -> None:
+#: Types whose separators are presentational: the same identifier stays the
+#: same value however it is spaced, hyphenated or dotted. An allowlisted IBAN
+#: must be exempted whether the document writes NL91ABNA0417164300 or
+#: NL91 ABNA 0417 1643 00 (issue rules-engine#15).
+#:
+#: Free-text types are deliberately absent. Folding separators in an address
+#: would make `jan.devries@acme.be` exempt `jandevries@acme.be`, a different
+#: mailbox at most providers; folding an organisation name would make
+#: `ACME NV` exempt `ACMENV`, which can be a different company.
+_SEPARATOR_INSENSITIVE = frozenset({
+    EntityType.BANK_ACCOUNT, EntityType.BIC, EntityType.CREDIT_CARD,
+    EntityType.PHONE, EntityType.VAT, EntityType.NATIONAL_ID, EntityType.SSN,
+    EntityType.TAX_ID, EntityType.PASSPORT, EntityType.DRIVERS_LICENSE,
+    EntityType.RESIDENCE_PERMIT, EntityType.HEALTH_INSURANCE,
+    EntityType.CHAMBER_OF_COMMERCE, EntityType.IMEI, EntityType.VIN,
+})
+
+#: Types that carry a domain an owner may want exempted wholesale.
+_DOMAIN_BEARING = frozenset({EntityType.EMAIL, EntityType.URL})
+
+_SEPARATORS = re.compile(r"[\s.\-/()]+")
+
+
+def check_allowlist_arg(value: object, param: str = "allowlist") -> None:
     """Reject a bare string where a list of allowlisted values is expected.
 
     ``allowlist="ACME NV"`` is iterable, so it would become the one-character
-    entries ``"A"``, ``"C"``, ... — none of which is a whole detection, so
+    entries ``"A"``, ``"C"``, ... -- none of which is a whole detection, so
     nothing is exempted and the caller's own name is redacted after all. Same
     reasoning as :func:`check_country_arg`: a wrong type is a programming
     error with no correct interpretation to fall back on.
@@ -140,8 +163,8 @@ def check_allowlist_arg(value: object) -> None:
     if isinstance(value, (str, bytes)):
         shown = value.decode(errors="replace") if isinstance(value, bytes) else value
         raise TypeError(
-            f"allowlist must be a list of values, not a bare string. "
-            f"Pass allowlist=[{shown!r}] rather than allowlist={shown!r}.")
+            f"{param} must be a list of values, not a bare string. "
+            f"Pass {param}=[{shown!r}] rather than {param}={shown!r}.")
 
 
 def _allowlist_key(value: str) -> str:
@@ -154,30 +177,95 @@ def _allowlist_key(value: str) -> str:
     return unicodedata.normalize("NFC", value).strip().lower()
 
 
-def _normalize_allowlist(values: list[str] | None) -> frozenset[str]:
+def _folded_key(value: str) -> str:
+    """:func:`_allowlist_key` with presentational separators removed."""
+    return _SEPARATORS.sub("", _allowlist_key(value))
+
+
+def _normalize_allowlist(values: list[str] | None) -> dict[str, str]:
+    """Comparison key -> the entry as the caller wrote it (for reporting)."""
     check_allowlist_arg(values)
-    if not values:
-        return frozenset()
-    return frozenset(_allowlist_key(v) for v in values if v and v.strip())
+    out: dict[str, str] = {}
+    for v in values or ():
+        if v and v.strip():
+            out.setdefault(_allowlist_key(v), v)
+            out.setdefault(_folded_key(v), v)
+    return out
+
+
+def _normalize_domains(values: list[str] | None) -> dict[str, str]:
+    """Domain key -> the entry as written. A leading ``@`` or ``.`` is ignored."""
+    check_allowlist_arg(values, "allowlist_domains")
+    out: dict[str, str] = {}
+    for v in values or ():
+        if v and v.strip():
+            out.setdefault(_allowlist_key(v).lstrip("@."), v)
+    return out
+
+
+def _domain_of(entity_type: EntityType | str, value: str) -> str | None:
+    """The domain an exemption rule would apply to, or None."""
+    if entity_type not in _DOMAIN_BEARING:
+        return None
+    v = _allowlist_key(value)
+    if "@" in v:
+        return v.rsplit("@", 1)[1].strip("<>[](),;:\"'")
+    v = re.sub(r"^[a-z][a-z0-9+.\-]*://", "", v)
+    return v.split("/", 1)[0].split(":", 1)[0].strip("<>[](),;:\"'") or None
+
+
+def _matching_rule(
+    det: Detection, slice_: str, allowed: dict[str, str], domains: dict[str, str]
+) -> tuple[str, str] | None:
+    """The (rule, kind) exempting this detection, or None.
+
+    Both the original slice and the detection's own text are checked: the two
+    differ when normalisation changed the document, and the cloud tier's text
+    is whatever the service reported.
+    """
+    for candidate in (slice_, det.text):
+        if not candidate:
+            continue
+        rule = allowed.get(_allowlist_key(candidate))
+        if rule is not None:
+            return rule, "value"
+        if det.entity_type in _SEPARATOR_INSENSITIVE:
+            rule = allowed.get(_folded_key(candidate))
+            if rule is not None:
+                return rule, "value"
+        host = _domain_of(det.entity_type, candidate)
+        if host:
+            for owned, entry in domains.items():
+                if host == owned or host.endswith("." + owned):
+                    return entry, "domain"
+    return None
 
 
 def _apply_allowlist(
-    text: str, detections: list[Detection], allowed: frozenset[str]
-) -> list[Detection]:
-    """Drop every detection whose value is on the allowlist.
+    text: str,
+    detections: list[Detection],
+    allowed: dict[str, str],
+    domains: dict[str, str],
+) -> tuple[list[Detection], list[Exemption]]:
+    """Split detections into those to redact and those the caller exempted.
 
-    Whole span only: ``euredact.be`` does not exempt ``joren@euredact.be``.
-    Both the original slice and the detection's own text are checked, since
-    the two differ when normalisation changed the document, and the cloud
-    tier's text is whatever the service reported.
+    Whole span only: ``euredact.be`` as a *value* does not exempt
+    ``joren@euredact.be``; that is what ``allowlist_domains`` is for.
     """
-    if not allowed:
-        return detections
-    return [
-        d for d in detections
-        if _allowlist_key(text[d.start : d.end]) not in allowed
-        and _allowlist_key(d.text) not in allowed
-    ]
+    if not allowed and not domains:
+        return detections, []
+    kept: list[Detection] = []
+    exempted: list[Exemption] = []
+    for d in detections:
+        hit = _matching_rule(d, text[d.start : d.end], allowed, domains)
+        if hit is None:
+            kept.append(d)
+        else:
+            rule, kind = hit
+            exempted.append(Exemption(
+                entity_type=d.entity_type, start=d.start, end=d.end,
+                text=text[d.start : d.end], rule=rule, rule_kind=kind))
+    return kept, exempted
 
 
 #: Characters a token suffix is drawn from. No vowels, so a suffix never spells
@@ -276,6 +364,7 @@ class EuRedact:
         *,
         max_input_length: int = DEFAULT_MAX_INPUT_LENGTH,
         allowlist: list[str] | None = None,
+        allowlist_domains: list[str] | None = None,
     ) -> None:
         """
         Args:
@@ -283,12 +372,16 @@ class EuRedact:
             allowlist: Values never to redact, for every call on this instance
                 -- an organisation's own name, its own addresses. Merged with
                 the per-call ``allowlist``. Matched whole, case-insensitively.
+            allowlist_domains: Domains whose addresses are never redacted, e.g.
+                ``["acme.be"]``. Applies to EMAIL and URL only, and covers
+                subdomains. Merged with the per-call value.
         """
         self._engine = RuleEngine()
         self._cache = ResultCache()
         self._referential_mapper = ReferentialMapper()
         self._max_input_length = max_input_length
         self._allowlist = _normalize_allowlist(allowlist)
+        self._allowlist_domains = _normalize_domains(allowlist_domains)
 
     def add_custom_pattern(self, name: str, pattern: str) -> None:
         """Register a custom regex pattern detected as *name*."""
@@ -327,6 +420,7 @@ class EuRedact:
         referential_integrity: bool = False,
         tokenize: bool = False,
         allowlist: list[str] | None = None,
+        allowlist_domains: list[str] | None = None,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -372,7 +466,8 @@ class EuRedact:
             raise ValueError(
                 "tokenize and referential_integrity are two label schemes for "
                 "the same spans; pass one of them")
-        allowed = self._allowlist | _normalize_allowlist(allowlist)
+        allowed = {**self._allowlist, **_normalize_allowlist(allowlist)}
+        domains = {**self._allowlist_domains, **_normalize_domains(allowlist_domains)}
 
         if mode == "cloud":
             # Routed before any local work: the service runs its own rules
@@ -382,7 +477,7 @@ class EuRedact:
                 text, countries=countries, country_hint=country_hint,
                 context=context, chunk_offset=chunk_offset,
                 referential_integrity=referential_integrity, tokenize=tokenize,
-                allowed=allowed, coref=coref,
+                allowed=allowed, domains=domains, coref=coref,
             )
         if mode != "rules":
             raise ValueError(
@@ -408,6 +503,8 @@ class EuRedact:
         # JSON rather than a joined string: an entry may itself contain the
         # separator, and two different lists must never share a key.
         allow_key = json.dumps(sorted(allowed)) if allowed else ""
+        if domains:
+            allow_key += "|dom=" + json.dumps(sorted(domains))
         cache_mode = f"{mode}|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}|tok={tokenize}|allow={allow_key}"
         # A context makes the result depend on evidence from other chunks, so
         # the text no longer identifies the result. Caching is disabled rather
@@ -446,7 +543,7 @@ class EuRedact:
         # Filter date types unless opted in
         if not detect_dates:
             detections = [d for d in detections if d.entity_type not in _DATE_TYPES]
-        detections = _apply_allowlist(text, detections, allowed)
+        detections, exempted = _apply_allowlist(text, detections, allowed, domains)
 
         # Steps 7-13: [CLOUD EXTENSION] — no-ops in rules-only mode
 
@@ -476,6 +573,7 @@ class EuRedact:
             evidence=tuple(evidence),
             detection_mode="declared" if countries else "inferred",
             tokens=token_mapper.tokens if token_mapper is not None else {},
+            exempted=exempted,
         )
 
         # Step 17: Cache
@@ -494,7 +592,8 @@ class EuRedact:
         chunk_offset: int,
         referential_integrity: bool,
         tokenize: bool,
-        allowed: frozenset[str],
+        allowed: dict[str, str],
+        domains: dict[str, str],
         coref: bool,
     ) -> RedactResult:
         """Send the document to the cloud tier.
@@ -531,12 +630,14 @@ class EuRedact:
         # detected, never less, so it cannot produce under-redaction.
         with CloudClient() as client:
             result = client.redact(text, country=countries[0].upper())
-        if tokenize or allowed:
-            self._remask_cloud_result(result, text, tokenize=tokenize, allowed=allowed)
+        if tokenize or allowed or domains:
+            self._remask_cloud_result(
+                result, text, tokenize=tokenize, allowed=allowed, domains=domains)
         return result
 
     def _remask_cloud_result(
-        self, result: RedactResult, text: str, *, tokenize: bool, allowed: frozenset[str]
+        self, result: RedactResult, text: str, *, tokenize: bool,
+        allowed: dict[str, str], domains: dict[str, str],
     ) -> None:
         """Rebuild the masked text from the service's spans, in place.
 
@@ -553,7 +654,8 @@ class EuRedact:
                 raise CloudError(
                     "span offsets do not match the document; cannot apply "
                     "tokenize/allowlist locally")
-        result.detections = _apply_allowlist(text, result.detections, allowed)
+        result.detections, result.exempted = _apply_allowlist(
+            text, result.detections, allowed, domains)
         token_mapper = TokenMapper(text, result.detections) if tokenize else None
         result.redacted_text = _apply_replacements(
             text, result.detections, self._label_for(False, token_mapper)
@@ -572,6 +674,7 @@ class EuRedact:
         referential_integrity: bool = False,
         tokenize: bool = False,
         allowlist: list[str] | None = None,
+        allowlist_domains: list[str] | None = None,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -596,6 +699,7 @@ class EuRedact:
                 referential_integrity=referential_integrity,
                 tokenize=tokenize,
                 allowlist=allowlist,
+                allowlist_domains=allowlist_domains,
                 detect_dates=detect_dates,
                 coref=coref,
                 coref_model=coref_model,
@@ -613,6 +717,7 @@ class EuRedact:
         referential_integrity: bool = False,
         tokenize: bool = False,
         allowlist: list[str] | None = None,
+        allowlist_domains: list[str] | None = None,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> list[RedactResult]:
@@ -637,6 +742,7 @@ class EuRedact:
                 referential_integrity=referential_integrity,
                 tokenize=tokenize,
                 allowlist=allowlist,
+                allowlist_domains=allowlist_domains,
                 detect_dates=detect_dates,
                 cache=cache,
             )
@@ -653,6 +759,7 @@ class EuRedact:
         referential_integrity: bool = False,
         tokenize: bool = False,
         allowlist: list[str] | None = None,
+        allowlist_domains: list[str] | None = None,
         detect_dates: bool = False,
         cache: bool = True,
         max_concurrency: int = 4,
@@ -681,6 +788,7 @@ class EuRedact:
                     referential_integrity=referential_integrity,
                     tokenize=tokenize,
                     allowlist=allowlist,
+                    allowlist_domains=allowlist_domains,
                     detect_dates=detect_dates,
                     cache=cache,
                 )
@@ -697,6 +805,7 @@ class EuRedact:
         referential_integrity: bool = False,
         tokenize: bool = False,
         allowlist: list[str] | None = None,
+        allowlist_domains: list[str] | None = None,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> Iterator[RedactResult]:
@@ -718,6 +827,7 @@ class EuRedact:
                 referential_integrity=referential_integrity,
                 tokenize=tokenize,
                 allowlist=allowlist,
+                allowlist_domains=allowlist_domains,
                 detect_dates=detect_dates,
                 cache=cache,
             )

@@ -7,7 +7,7 @@
     "countries": "list of ISO 3166-1 alpha-2 codes, or null for no country hint",
     "mustDetect": "map of entity type -> exact list of detected texts for that type, in document order",
     "mustNotDetect": "list of entity types that must produce no detection",
-    "options": "optional per-call options, camelCase as in the TypeScript RedactOptions; today only `allowlist` (list of values never to redact)",
+    "options": "optional per-call options, camelCase as in the TypeScript RedactOptions; today `allowlist` (values never to redact) and `allowlistDomains` (domains whose addresses are never redacted)",
     "expectRedactedText": "optional exact redacted output; the default bracketed labels, with no referential or token option"
   },
   "cases": [
@@ -2057,6 +2057,115 @@
       },
       "expectRedactedText": "O'Brien's address is [EMAIL] today.",
       "notes": "A possessive near an address must not extend the span."
+    },
+    {
+      "id": "allowlist-iban-folds-separators",
+      "text": "Pay to NL91 ABNA 0417 1643 00 today.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlist": [
+          "NL91ABNA0417164300"
+        ]
+      },
+      "mustNotDetect": [
+        "BANK_ACCOUNT"
+      ],
+      "expectRedactedText": "Pay to NL91 ABNA 0417 1643 00 today.",
+      "notes": "issue rules-engine#15: separators in a structured identifier are presentational, so an allowlisted IBAN is exempt however the document spaces it."
+    },
+    {
+      "id": "allowlist-iban-folding-is-value-exact",
+      "text": "Pay to NL02 ABNA 0123 4567 89 today.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlist": [
+          "NL91ABNA0417164300"
+        ]
+      },
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "NL02 ABNA 0123 4567 89"
+        ]
+      },
+      "expectRedactedText": "Pay to [BANK_ACCOUNT] today.",
+      "notes": "Folding widens the spelling, never the scope: a different account is still redacted."
+    },
+    {
+      "id": "allowlist-domain-exempts-every-mailbox",
+      "text": "Mail jan@acme.be or piet@acme.be today.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlistDomains": [
+          "acme.be"
+        ]
+      },
+      "mustNotDetect": [
+        "EMAIL"
+      ],
+      "expectRedactedText": "Mail jan@acme.be or piet@acme.be today.",
+      "notes": "issue rules-engine#17: an owned domain, without enumerating every mailbox."
+    },
+    {
+      "id": "allowlist-domain-does-not-cover-a-lookalike",
+      "text": "Mail jan@evilacme.be today.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlistDomains": [
+          "acme.be"
+        ]
+      },
+      "mustDetect": {
+        "EMAIL": [
+          "jan@evilacme.be"
+        ]
+      },
+      "expectRedactedText": "Mail [EMAIL] today.",
+      "notes": "The match is on a label boundary: acme.be must not exempt evilacme.be."
+    },
+    {
+      "id": "allowlist-domain-covers-a-subdomain",
+      "text": "Mail jan@mail.acme.be today.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlistDomains": [
+          "acme.be"
+        ]
+      },
+      "mustNotDetect": [
+        "EMAIL"
+      ],
+      "expectRedactedText": "Mail jan@mail.acme.be today."
+    },
+    {
+      "id": "allowlist-domain-leaves-other-types-alone",
+      "text": "Mail jan@acme.be, IBAN NL91 ABNA 0417 1643 00.",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlistDomains": [
+          "acme.be"
+        ]
+      },
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "NL91 ABNA 0417 1643 00"
+        ]
+      },
+      "mustNotDetect": [
+        "EMAIL"
+      ],
+      "expectRedactedText": "Mail jan@acme.be, IBAN [BANK_ACCOUNT]."
     }
   ]
 }

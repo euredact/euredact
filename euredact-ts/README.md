@@ -81,6 +81,8 @@ console.log(result.detections);
 | send a prompt to an LLM and restore the reply | `{ tokenize: true }`, then [`restore()`](#restoretext-tokens) |
 | keep relationships visible across a whole session | `{ referentialIntegrity: true }` |
 | never redact my own company name or addresses | `{ allowlist: [...] }`, or `new EuRedact({ allowlist })` |
+| never redact anything at my own domain | `{ allowlistDomains: ["acme.be"] }` |
+| audit what the allowlist kept in the document | `result.exempted` |
 | catch person names, employers, job titles, diagnoses | `redactAsync(text, { mode: "cloud" })` — see [Cloud tier](#cloud-tier) |
 | include dates of birth | `{ detectDates: true }` |
 | redact a document too large for one call | `context` + `chunkOffset` — see [Chunked documents](#chunked-documents) |
@@ -109,6 +111,7 @@ interface RedactOptions {
   referentialIntegrity?: boolean;   // consistent labels, EMAIL_1
   tokenize?: boolean;               // reversible tokens, EMAIL_K7Q2
   allowlist?: string[] | null;      // values never redacted
+  allowlistDomains?: string[] | null; // domains never redacted (EMAIL/URL)
   detectDates?: boolean;            // include DOB / date of death
   cache?: boolean;                  // reuse results for identical input
 }
@@ -130,7 +133,8 @@ interface RedactOptions {
 | *(none)* | — | Default: each span becomes `[ENTITY_TYPE]`. |
 | `referentialIntegrity` | `false` | Consistent label per distinct value (`EMAIL_1`), persisting **on the instance** across calls. See [Referential Integrity](#referential-integrity). |
 | `tokenize` | `false` | Reversible token per value (`EMAIL_K7Q2`), with the mapping in `result.tokens` for [`restore()`](#restoretext-tokens). Unique to the **call**. Cannot be combined with `referentialIntegrity`. See [Reversible tokenization](#reversible-tokenization). |
-| `allowlist` | `null` | Values never to redact, whole-span and case-insensitive, merged with the instance's list. Applies to cloud-tier types too. See [Allowlist](#allowlist). |
+| `allowlist` | `null` | Values never to redact, whole-span and case-insensitive, merged with the instance's list. Structured identifiers (IBAN, phone, VAT, …) also match across spacing and hyphenation. Applies to cloud-tier types too. See [Allowlist](#allowlist). |
+| `allowlistDomains` | `null` | Domains whose addresses are never redacted, e.g. `["acme.be"]`. Applies to `EMAIL` and `URL` only, and covers subdomains. See [Allowlist](#allowlist). |
 
 **Long documents and tiers**
 
@@ -230,6 +234,7 @@ new EuRedact({
 |---|---|---|
 | `maxInputLength` | `10_485_760` | Longest document `redact()` accepts, in characters. Above it, it throws — split the input or raise the ceiling. |
 | `allowlist` | `null` | Values never to redact, for every call on this instance. Merged with the per-call `allowlist`. See [Allowlist](#allowlist). |
+| `allowlistDomains` | `null` | Domains never to redact, for every call on this instance. |
 
 The result cache, referential-integrity labels and custom patterns are all per
 instance, which is what makes one instance per tenant the right default.
@@ -246,6 +251,7 @@ interface RedactResult {
   source: string;             // Detection backend ("rules")
   degraded: boolean;          // True if the engine fell back to a simpler mode
   tokens: Record<string, string>; // token -> original value; only with tokenize: true
+  exempted: Exemption[];          // spans the allowlist kept, with the rule that matched
 }
 ```
 
@@ -406,7 +412,7 @@ seen a chunk boundary.
 
 Options the service cannot honour reject rather than being ignored: multiple
 `countries`, `countryHint`, `context`/`chunkOffset` and `referentialIntegrity`.
-`tokenize` and `allowlist` are honoured: the SDK applies them to the spans the
+`tokenize`, `allowlist` and `allowlistDomains` are honoured: the SDK applies them to the spans the
 service returns and rebuilds the text from those.
 
 The package stays **zero-dependency** — the client uses the platform's own
@@ -772,12 +778,58 @@ console.log(sdk.redact(text, { countries: ["NL"], allowlist: ["jan@acme.be"] }).
 // "ACME NV: mail info@acme.be or jan@acme.be about IBAN [BANK_ACCOUNT]."
 ```
 
-Matching is whole-span and case-insensitive, and nothing more. `acme.be` does
-not exempt every address at that domain: a broader match is how "our domain"
-turns into "everyone who ever mailed us". A bare string (`allowlist: "ACME NV"`)
-throws `TypeError` rather than being iterated into single letters that exempt
-nothing. An allowlisted value is removed from `detections` as well as from the
-text. Works in cloud mode and together with `tokenize`.
+Matching is whole-span and case-insensitive. A bare string
+(`allowlist: "ACME NV"`) throws `TypeError` rather than being iterated into
+single letters that exempt nothing. Works in cloud mode via `redactAsync` —
+including on types only the model finds, such as `ORGANISATION_NAME` — and
+together with `tokenize`.
+
+### Spacing and punctuation
+
+For **structured identifiers** separators are presentational, so an allowlisted
+value matches however the document writes it:
+
+```ts
+const sdk = new EuRedact({ allowlist: ["NL91ABNA0417164300"] });
+sdk.redact("Pay to NL91 ABNA 0417 1643 00.", { countries: ["NL"] }).redactedText;
+// 'Pay to NL91 ABNA 0417 1643 00.'   — exempt, despite the spacing
+```
+
+Applies to `BANK_ACCOUNT`, `BIC`, `CREDIT_CARD`, `PHONE`, `VAT`, `NATIONAL_ID`,
+`SSN`, `TAX_ID`, `PASSPORT`, `DRIVERS_LICENSE`, `RESIDENCE_PERMIT`,
+`HEALTH_INSURANCE`, `CHAMBER_OF_COMMERCE`, `IMEI` and `VIN`. It widens the
+*spelling*, never the *scope*: a different account is still redacted. Free-text
+types stay literal, because `jan.devries@acme.be` and `jandevries@acme.be` are
+different mailboxes at most providers.
+
+### Exempting a whole domain
+
+```ts
+const sdk = new EuRedact({ allowlistDomains: ["acme.be"] });
+sdk.redact("Mail jan@acme.be or piet@acme.be", { countries: ["NL"] }).redactedText;
+// 'Mail jan@acme.be or piet@acme.be'
+```
+
+`EMAIL` and `URL` only, covering subdomains (`mail.acme.be`). The match is on a
+label boundary, so `acme.be` does **not** exempt `evilacme.be`. Entries may be
+written `acme.be`, `@acme.be` or `.acme.be`.
+
+There are deliberately **no wildcards**. The allowlist is the only option that
+turns redaction *off*, so an over-broad entry fails toward under-redaction and
+does so silently.
+
+### What was exempted
+
+```ts
+const r = redact("Mail jan@acme.be", { countries: ["NL"], allowlistDomains: ["acme.be"] });
+for (const e of r.exempted) console.log(e.entityType, e.text, e.rule, e.ruleKind);
+// EMAIL jan@acme.be acme.be domain
+```
+
+`Exemption` carries `entityType`, `start`, `end`, `text`, the `rule` that
+matched as you wrote it, and `ruleKind` (`"value"` or `"domain"`). An exempted
+span is absent from `detections`, so `exempted` is the only record that it was
+found at all.
 
 ## Architecture
 

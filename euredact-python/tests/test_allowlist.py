@@ -186,3 +186,118 @@ class TestCloud:
         assert "bas@example.be" in r.redacted_text
         assert len(r.tokens) == 1
         assert euredact.restore(r.redacted_text, r.tokens) == CLOUD_DOC
+
+
+class TestSeparatorInsensitiveMatching:
+    """A structured identifier is the same value however it is spaced
+    (issue rules-engine#15). Free-text types stay literal."""
+
+    @pytest.mark.parametrize("written", [
+        "NL91ABNA0417164300",
+        "NL91 ABNA 0417 1643 00",
+        "NL91-ABNA-0417-1643-00",
+    ])
+    def test_an_allowlisted_iban_is_exempt_however_it_is_written(self, sdk, written):
+        r = sdk.redact(f"Pay to {written} today.", countries=["NL"],
+                       allowlist=["NL91ABNA0417164300"])
+        assert written in r.redacted_text
+
+    def test_an_exemption_only_applies_to_something_detected(self, sdk):
+        """`NL91.ABNA.0417.1643.00` is not an IBAN format the engine knows, so
+        there is no BANK_ACCOUNT span to exempt. The allowlist filters
+        detections; it cannot exempt what was never detected."""
+        r = sdk.redact("Pay to NL91.ABNA.0417.1643.00 today.", countries=["NL"],
+                       allowlist=["NL91ABNA0417164300"])
+        assert not any(d.entity_type == EntityType.BANK_ACCOUNT for d in r.detections)
+        assert r.exempted == []
+
+    def test_a_phone_number_folds_too(self, sdk):
+        r = sdk.redact("Call +32 475 12 34 56 now", countries=["BE"],
+                       allowlist=["+32475123456"])
+        assert "+32 475 12 34 56" in r.redacted_text
+
+    def test_free_text_types_stay_literal(self, sdk):
+        """Folding an address would exempt a different mailbox."""
+        r = sdk.redact("mail jandevries@acme.be", countries=["NL"],
+                       allowlist=["jan.devries@acme.be"])
+        assert "jandevries@acme.be" not in r.redacted_text
+
+    def test_folding_does_not_exempt_a_different_account(self, sdk):
+        r = sdk.redact("Pay to NL02ABNA0123456789 today.", countries=["NL"],
+                       allowlist=["NL91ABNA0417164300"])
+        assert "NL02ABNA0123456789" not in r.redacted_text
+
+
+class TestDomainExemption:
+    def test_every_address_at_an_owned_domain_is_exempt(self, sdk):
+        r = sdk.redact("mail jan@acme.be or piet@acme.be", countries=["NL"],
+                       allowlist_domains=["acme.be"])
+        assert r.redacted_text == "mail jan@acme.be or piet@acme.be"
+
+    def test_subdomains_are_covered(self, sdk):
+        r = sdk.redact("mail jan@mail.acme.be", countries=["NL"],
+                       allowlist_domains=["acme.be"])
+        assert "jan@mail.acme.be" in r.redacted_text
+
+    def test_a_lookalike_domain_is_not_covered(self, sdk):
+        """`acme.be` must not exempt `evilacme.be`."""
+        r = sdk.redact("mail jan@evilacme.be", countries=["NL"],
+                       allowlist_domains=["acme.be"])
+        assert "jan@evilacme.be" not in r.redacted_text
+
+    def test_other_types_are_untouched(self, sdk):
+        r = sdk.redact("mail jan@acme.be, IBAN NL91 ABNA 0417 1643 00",
+                       countries=["NL"], allowlist_domains=["acme.be"])
+        assert "jan@acme.be" in r.redacted_text
+        assert "NL91 ABNA 0417 1643 00" not in r.redacted_text
+
+    @pytest.mark.parametrize("entry", ["acme.be", "@acme.be", ".acme.be", "ACME.BE"])
+    def test_entry_forms_are_accepted(self, sdk, entry):
+        r = sdk.redact("mail jan@acme.be", countries=["NL"], allowlist_domains=[entry])
+        assert "jan@acme.be" in r.redacted_text
+
+    def test_instance_level_domains(self):
+        s = euredact.EuRedact(allowlist_domains=["acme.be"])
+        assert "jan@acme.be" in s.redact("mail jan@acme.be", countries=["NL"]).redacted_text
+
+    def test_a_bare_string_is_rejected(self, sdk):
+        with pytest.raises(TypeError, match="allowlist_domains must be a list"):
+            sdk.redact("x", countries=["NL"], allowlist_domains="acme.be")
+
+
+class TestExemptionRecord:
+    """An exemption leaves a record (issue rules-engine#16)."""
+
+    def test_a_value_exemption_is_reported(self, sdk):
+        r = sdk.redact(DOC, countries=["NL"], allowlist=["jan@example.com"])
+        assert len(r.exempted) == 1
+        e = r.exempted[0]
+        assert e.text == "jan@example.com"
+        assert e.entity_type == EntityType.EMAIL
+        assert (e.rule, e.rule_kind) == ("jan@example.com", "value")
+        assert DOC[e.start:e.end] == e.text
+
+    def test_a_domain_exemption_names_the_domain_rule(self, sdk):
+        r = sdk.redact("mail jan@acme.be", countries=["NL"], allowlist_domains=["acme.be"])
+        assert [(e.rule, e.rule_kind) for e in r.exempted] == [("acme.be", "domain")]
+
+    def test_the_rule_is_reported_as_the_caller_wrote_it(self, sdk):
+        r = sdk.redact("Pay NL91 ABNA 0417 1643 00", countries=["NL"],
+                       allowlist=["NL91ABNA0417164300"])
+        assert r.exempted[0].rule == "NL91ABNA0417164300"
+        assert r.exempted[0].text == "NL91 ABNA 0417 1643 00"
+
+    def test_no_allowlist_means_no_exemptions(self, sdk):
+        assert sdk.redact(DOC, countries=["NL"]).exempted == []
+
+    def test_exempted_spans_are_absent_from_detections(self, sdk):
+        r = sdk.redact(DOC, countries=["NL"], allowlist=["jan@example.com"])
+        assert "jan@example.com" not in [d.text for d in r.detections]
+
+    def test_exemptions_count_towards_the_cache_budget(self):
+        from euredact.cache import _result_chars
+        from euredact.types import Exemption, RedactResult
+        bare = RedactResult(redacted_text="x", detections=[])
+        with_ex = RedactResult(redacted_text="x", detections=[], exempted=[
+            Exemption(entity_type=EntityType.EMAIL, start=0, end=3, text="abc", rule="r")])
+        assert _result_chars(with_ex) - _result_chars(bare) == len("abc") + len("r")

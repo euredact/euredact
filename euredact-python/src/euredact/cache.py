@@ -20,6 +20,7 @@ def _result_chars(result: RedactResult) -> int:
         len(result.redacted_text)
         + sum(len(d.text) for d in result.detections)
         + sum(len(k) + len(v) for k, v in result.tokens.items())
+        + sum(len(e.text) + len(e.rule) for e in result.exempted)
     )
 
 

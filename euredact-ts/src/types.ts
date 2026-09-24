@@ -154,6 +154,25 @@ export interface Detection {
   outOfScope?: boolean;
 }
 
+/**
+ * A detection the allowlist kept out of the redacted output.
+ *
+ * An exemption is a deliberate decision to leave a direct identifier in a
+ * document that otherwise claims to be redacted, so it is reported rather than
+ * silently dropped: without this, "never detected" and "detected and kept"
+ * look identical on the result.
+ */
+export interface Exemption {
+  entityType: EntityType | string;
+  start: number;
+  end: number;
+  text: string;
+  /** The allowlist entry that matched, as the caller wrote it. */
+  rule: string;
+  /** `"value"` for the literal allowlist, `"domain"` for allowlistDomains. */
+  ruleKind: "value" | "domain";
+}
+
 export interface RedactResult {
   redactedText: string;
   detections: Detection[];
@@ -188,6 +207,9 @@ export interface RedactResult {
    * a cached result shares it with every caller.
    */
   tokens: Record<string, string>;
+  /** Detections the allowlist kept out of the output, with the rule that
+   *  matched. Empty unless an allowlist was in force. */
+  exempted: Exemption[];
 }
 
 export interface PatternDef {

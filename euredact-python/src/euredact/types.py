@@ -155,6 +155,26 @@ class Detection:
     """
 
 
+@dataclass(frozen=True)
+class Exemption:
+    """A detection the allowlist kept out of the redacted output.
+
+    An exemption is a deliberate decision to leave a direct identifier in a
+    document that otherwise claims to be redacted, so it is reported rather
+    than silently dropped: without this, "never detected" and "detected and
+    kept" look identical on the result.
+    """
+
+    entity_type: EntityType | str
+    start: int
+    end: int
+    text: str
+    #: The allowlist entry that matched, as the caller wrote it.
+    rule: str
+    #: ``"value"`` for the literal allowlist, ``"domain"`` for allowlist_domains.
+    rule_kind: str = "value"
+
+
 @dataclass
 class RedactResult:
     """Returned by redact()."""
@@ -185,6 +205,11 @@ class RedactResult:
     already means the tier selector (``"rules"`` / ``"cloud"``), which
     :attr:`source` reports.
     """
+
+    exempted: list[Exemption] = field(default_factory=list)
+    """Detections the allowlist kept out of the output, with the rule that
+    matched. Empty unless an allowlist was in force. See
+    :class:`Exemption`."""
 
     tokens: dict[str, str] = field(default_factory=dict)
     """Token -> original text, populated by ``redact(tokenize=True)``.
