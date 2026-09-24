@@ -54,14 +54,44 @@
 
 ### Fixed
 
-- **`make eval` no longer scores a partial redaction as a hit.** A gold
-  identifier counted as recalled when its literal text was absent from the
-  output — which masking a *single character* already achieves — with a
-  fallback that accepted one character of span overlap. IPv6 therefore scored
-  100% recall and 100% precision over 636 corpus entities while the engine
-  left the tail of every compressed address in the clear; the check that
-  exists to catch under-redaction reported perfection on a leak. Recall now
-  requires every character of the span to be masked, and the report
+- **Both SDKs now share one evaluation definition.** The stricter recall rule
+  landed in the Python harness first; `evalFull.ts` now shares the same
+  coverage-based outcome, and its category map gained the `HEALTH_ID` and
+  `SECRET` entries Python already carried — `HEALTH_ID` had no engine type to
+  fall back on, so its 252 labels were scored against a name the engine never
+  emits. With both aligned the SDKs agree on every per-type row and on the
+  total: 664,360 of 667,268 labels fully masked, hinted.
+  *(rules-engine#12)*
+
+### Accuracy
+
+Re-measured on the 152,300-document corpus for this release; the full
+breakdown, including what each fix moved, is in
+[`docs/v0.5.0-corpus-results.md`](../docs/v0.5.0-corpus-results.md).
+
+| engine | mode | recall | precision |
+|---|---|---:|---:|
+| Python | hinted | 99.56% | 99.78% |
+| Python | blind | 99.39% | 99.63% |
+| TypeScript | hinted | 99.56% | 99.78% |
+| TypeScript | blind | 99.39% | 99.63% |
+
+**Measured with the improved harness, so not directly comparable with the
+0.4.0 figures.** Recall now requires the whole identifier to be masked, where
+it previously accepted an identifier as found once its literal text was absent
+from the output. On equal terms — the 0.4.0 engine measured with the current
+harness — recall was 99.4% hinted and 99.2% blind, so this release adds
+**+0.16pp** and **+0.19pp** respectively.
+
+
+- **`make eval` measures whole-identifier masking.** A gold identifier counted
+  as recalled once its literal text was absent from the output — which masking
+  a *single character* already achieves — with a fallback that accepted one
+  character of span overlap, so a truncated span could score as a complete
+  detection. The IPv6 work in this release surfaced it: those 636 entities
+  scored 100% while the tail of each compressed address was still in the
+  clear. Recall now requires every character of the span to be masked, and the
+  report
   distinguishes four outcomes: fully masked, **partially masked** (a new
   column), masked under another type, and not present in the document (no
   longer silently credited). Re-measured on the 152,300-document corpus:

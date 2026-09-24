@@ -1,12 +1,14 @@
 import { fileURLToPath } from "url";
+import { coveredChars, recallOutcome } from "./evalScoringLib.js";
 /**
  * Full-corpus evaluation, mirroring the Python `tests/eval_full.py` methodology
  * exactly so the two engines' numbers are directly comparable:
  *
  *  - every record, not a per-file sample;
  *  - country hints taken from the record's own PII annotations;
- *  - a label counts as found when its text is gone from the redacted output,
- *    or a detection overlaps its span **with an acceptable entity type**;
+ *  - a label counts as recalled only when **every character** of its span is
+ *    masked by a detection of an acceptable type; partial, mistyped and
+ *    unlocatable outcomes are counted separately (issues #8, #12);
  *  - DOB is reported separately (deferred to the LLM tier by design);
  *  - precision counts each detection as TP/FP by span+type match.
  *
@@ -45,6 +47,13 @@ const CATEGORY_MAP: Record<string, string[]> = {
   VIN: ["VIN"],
   PASSPORT: ["PASSPORT"],
   HEALTH_INSURANCE: ["HEALTH_INSURANCE", "NATIONAL_ID"],
+  // HEALTH_ID and SECRET were missing, so each fell back to its own name as
+  // an entity type. SECRET happens to be a real one and worked by accident;
+  // HEALTH_ID is not, so all 252 scored as misses and charged the engine's
+  // correct HEALTH_INSURANCE detections as false positives. Python fixed this
+  // in its own map; the mirror did not follow (issue rules-engine#12).
+  HEALTH_ID: ["HEALTH_INSURANCE", "NATIONAL_ID"],
+  SECRET: ["SECRET"],
   CHAMBER_OF_COMMERCE: ["CHAMBER_OF_COMMERCE", "VAT"],
   IP_ADDRESS: ["IP_ADDRESS"],
   IPV6_ADDRESS: ["IPV6_ADDRESS"],
@@ -75,6 +84,9 @@ console.log(`Combined: ${data.length} records\n`);
 function run(useCountryHints: boolean) {
   const sdk = new EuRedact();
   const catTp = new Map<string, number>();
+  const catPartial = new Map<string, number>();
+  const catMistyped = new Map<string, number>();
+  const catUnlocatable = new Map<string, number>();
   const catTotal = new Map<string, number>();
   const detTp = new Map<string, number>();
   const detFp = new Map<string, number>();
@@ -103,20 +115,11 @@ function run(useCountryHints: boolean) {
       const acceptable = CATEGORY_MAP[cat] ?? [cat];
       bump(catTotal, cat);
 
-      let found = !result.redactedText.includes(pii.PII_identifier);
-      if (!found) {
-        const idx = text.indexOf(pii.PII_identifier);
-        if (idx >= 0) {
-          const end = idx + pii.PII_identifier.length;
-          for (const det of result.detections) {
-            if (det.start < end && det.end > idx && acceptable.includes(det.entityType as string)) {
-              found = true;
-              break;
-            }
-          }
-        }
-      }
-      if (found) bump(catTp, cat);
+      const outcome = recallOutcome(text, result.detections, pii.PII_identifier, acceptable);
+      if (outcome === "partial") bump(catPartial, cat);
+      else if (outcome === "mistyped") bump(catMistyped, cat);
+      else if (outcome === "unlocatable") bump(catUnlocatable, cat);
+      if (outcome === "hit") bump(catTp, cat);
     }
 
     const spans: Array<[number, number, string]> = [];
@@ -139,7 +142,7 @@ function run(useCountryHints: boolean) {
   }
 
   const elapsedMs = Number(process.hrtime.bigint() - t0) / 1e6;
-  return { catTp, catTotal, detTp, detFp, elapsedMs, chars, docs };
+  return { catTp, catPartial, catMistyped, catUnlocatable, catTotal, detTp, detFp, elapsedMs, chars, docs };
 }
 
 const sumExclDob = (m: Map<string, number>) =>
