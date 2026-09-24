@@ -71,6 +71,24 @@ console.log(result.detections);
 
 ## API Reference
 
+### Which option do I need?
+
+| I want to… | Use |
+|---|---|
+| redact a document with no further setup | `redact(text)` — all 31 countries, `[ENTITY_TYPE]` output |
+| restrict scope to the countries I operate in | `{ countries: ["NL", "BE"] }` |
+| keep detection wide but resolve ambiguity | `{ countryHint: ["DE"] }` |
+| send a prompt to an LLM and restore the reply | `{ tokenize: true }`, then [`restore()`](#restoretext-tokens) |
+| keep relationships visible across a whole session | `{ referentialIntegrity: true }` |
+| never redact my own company name or addresses | `{ allowlist: [...] }`, or `new EuRedact({ allowlist })` |
+| catch person names, employers, job titles, diagnoses | `redactAsync(text, { mode: "cloud" })` — see [Cloud tier](#cloud-tier) |
+| include dates of birth | `{ detectDates: true }` |
+| redact a document too large for one call | `context` + `chunkOffset` — see [Chunked documents](#chunked-documents) |
+| detect an identifier the engine does not know | [`addCustomPattern()`](#addcustompatternname-pattern) |
+| isolate tenants from each other | one `new EuRedact()` each |
+| free PII held in memory | `clear()` |
+
+
 ### Module-Level Functions
 
 #### `redact(text, options?)`
@@ -83,30 +101,66 @@ Main entry point. Detects and redacts PII in the given text.
 
 ```ts
 interface RedactOptions {
-  countries?: string[] | null;    // Scope. Flags anything attributed elsewhere as
-                                  // outOfScope. Never gates what is looked for.
-  countryHint?: string[] | null;  // A prior only — resolves ambiguity without
-                                  // narrowing scope or flagging anything
-  context?: DocumentContext | null; // Share country evidence across the chunks
-                                  // of one document (see "Chunked documents")
-  chunkOffset?: number;           // Where this chunk starts in the document
-  referentialIntegrity?: boolean; // Replace with consistent labels (default: false)
-  tokenize?: boolean;             // Reversible EMAIL_K7Q2-style tokens; mapping in
-                                  // result.tokens (see "Reversible tokenization")
-  allowlist?: string[] | null;    // Values never to redact (see "Allowlist")
-  detectDates?: boolean;          // Include DOB/date-of-death detections (default: false)
-  cache?: boolean;                // Enable result caching (default: true)
+  countries?: string[] | null;      // scope (see below); null = all 31
+  countryHint?: string[] | null;    // a prior only; does not narrow scope
+  context?: DocumentContext | null; // share evidence across chunks
+  chunkOffset?: number;             // where this chunk starts
+  mode?: string;                    // "rules" (default) | "cloud"
+  referentialIntegrity?: boolean;   // consistent labels, EMAIL_1
+  tokenize?: boolean;               // reversible tokens, EMAIL_K7Q2
+  allowlist?: string[] | null;      // values never redacted
+  detectDates?: boolean;            // include DOB / date of death
+  cache?: boolean;                  // reuse results for identical input
 }
 ```
 
+**What is looked for**
+
 | Parameter | Default | Description |
 |---|---|---|
-| `countries` | `null` | ISO 3166-1 alpha-2 codes to restrict detection. `null` loads all 31 countries. |
-| `referentialIntegrity` | `false` | Replace PII with consistent labels instead of entity-type labels. |
-| `tokenize` | `false` | Replace each value with a reversible token (`EMAIL_K7Q2`) and return the token → value mapping in `result.tokens`. Tokens are unique to the call. See [Reversible tokenization](#reversible-tokenization). Cannot be combined with `referentialIntegrity`. |
-| `allowlist` | `null` | Values never to redact, matched whole and case-insensitively. Merged with the instance's allowlist. See [Allowlist](#allowlist). |
-| `detectDates` | `false` | Include date-of-birth and date-of-death detections. Off by default. |
-| `cache` | `true` | Cache results for identical inputs. |
+| `text` | — | Input text to scan. Longer than `maxInputLength` throws. |
+| `countries` | `null` | ISO 3166-1 alpha-2 codes that define **scope**. `null` loads all 31. This never gates what is looked for: a detection attributed elsewhere is flagged `outOfScope`, never dropped. A bare string throws `TypeError`. See [Country codes](#country-codes). |
+| `countryHint` | `null` | A **prior only**. Resolves an ambiguous value without narrowing scope. See [Country Hints](#country-hints). |
+| `detectDates` | `false` | Include `DOB` and `DATE_OF_DEATH`. Off by default: a bare date without keyword or structural context is deferred to the cloud tier. |
+
+**How the output looks** — pick at most one of the first three.
+
+| Parameter | Default | Description |
+|---|---|---|
+| *(none)* | — | Default: each span becomes `[ENTITY_TYPE]`. |
+| `referentialIntegrity` | `false` | Consistent label per distinct value (`EMAIL_1`), persisting **on the instance** across calls. See [Referential Integrity](#referential-integrity). |
+| `tokenize` | `false` | Reversible token per value (`EMAIL_K7Q2`), with the mapping in `result.tokens` for [`restore()`](#restoretext-tokens). Unique to the **call**. Cannot be combined with `referentialIntegrity`. See [Reversible tokenization](#reversible-tokenization). |
+| `allowlist` | `null` | Values never to redact, whole-span and case-insensitive, merged with the instance's list. Applies to cloud-tier types too. See [Allowlist](#allowlist). |
+
+**Long documents and tiers**
+
+| Parameter | Default | Description |
+|---|---|---|
+| `mode` | `"rules"` | `"rules"` runs locally and synchronously. `"cloud"` must go through [`redactAsync()`](#redactasynctext-options) — `redact()` is synchronous and a network call cannot be. See [Cloud tier](#cloud-tier). |
+| `context` | `null` | Share country evidence across the chunks of one document. Pass the same `DocumentContext` to every chunk. Disables the cache. See [Chunked documents](#chunked-documents). |
+| `chunkOffset` | `0` | Where this chunk starts in the whole document. Only rebases spans recorded in `context`; returned detections stay relative to `text`. |
+| `cache` | `true` | Reuse the result for an identical input and configuration. |
+
+TypeScript has no `coref` option; the Python SDK accepts one as a reserved
+no-op.
+
+#### `redactAsync(text, options?)`
+
+```ts
+function redactAsync(text: string, options?: RedactOptions): Promise<RedactResult>;
+```
+
+The asynchronous entry point, and the only way to reach the [cloud
+tier](#cloud-tier). With `mode: "rules"` (the default) it resolves immediately
+with exactly what `redact()` returns, so a caller that may or may not use the
+cloud tier can keep one code path:
+
+```ts
+const result = await redactAsync(text, { countries: ["BE"], mode: "cloud" });
+```
+
+Takes the same `RedactOptions` as `redact()`. Options the service cannot honour
+throw rather than being ignored — see [Cloud tier](#cloud-tier).
 
 #### `redactBatch(texts, options?)`
 
@@ -162,9 +216,24 @@ console.log(result.redactedText);
 // "See [CASE_REF] for details"
 ```
 
-The `EuRedact` class exposes: `redact()`, `redactAsync()`, `redactBatch()`, and
-`addCustomPattern()`. Its constructor takes `maxInputLength` and an `allowlist`
-that applies to every call on the instance — see [Allowlist](#allowlist).
+The `EuRedact` class exposes `redact()`, `redactAsync()`, `redactBatch()`,
+`clear()` and `addCustomPattern()`.
+
+```ts
+new EuRedact({
+  maxInputLength?: number,   // default 10_485_760 (~10 MB)
+  allowlist?: string[] | null,
+})
+```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `maxInputLength` | `10_485_760` | Longest document `redact()` accepts, in characters. Above it, it throws — split the input or raise the ceiling. |
+| `allowlist` | `null` | Values never to redact, for every call on this instance. Merged with the per-call `allowlist`. See [Allowlist](#allowlist). |
+
+The result cache, referential-integrity labels and custom patterns are all per
+instance, which is what makes one instance per tenant the right default.
+`clear()` releases the cache and the label mapping.
 
 ### Return Types
 

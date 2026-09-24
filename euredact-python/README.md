@@ -77,6 +77,24 @@ print(result.detections)
 
 ## API Reference
 
+### Which option do I need?
+
+| I want to… | Use |
+|---|---|
+| redact a document with no further setup | `redact(text)` — all 31 countries, `[ENTITY_TYPE]` output |
+| restrict scope to the countries I operate in | `countries=["NL", "BE"]` |
+| keep detection wide but resolve ambiguity | `country_hint=["DE"]` |
+| send a prompt to an LLM and restore the reply | `tokenize=True`, then [`restore()`](#euredactrestore) |
+| keep relationships visible across a whole session | `referential_integrity=True` |
+| never redact my own company name or addresses | `allowlist=[...]`, or `EuRedact(allowlist=[...])` |
+| catch person names, employers, job titles, diagnoses | `mode="cloud"` — see [Cloud tier](#cloud-tier) |
+| include dates of birth | `detect_dates=True` |
+| redact a document too large for one call | `context=` + `chunk_offset=` — see [Chunked documents](#chunked-documents) |
+| detect an identifier the engine does not know | [`add_custom_pattern()`](#euredactadd_custom_pattern) |
+| isolate tenants from each other | one `EuRedact()` instance each — see [Instance Isolation](#instance-isolation) |
+| free PII held in memory | `clear()` |
+
+
 EuRedact provides both module-level functions (using a shared singleton) and an
 instance-based `EuRedact` class. The module-level API is the easiest way to get
 started; the class-based API gives you isolated instances with separate caches
@@ -91,27 +109,58 @@ euredact.redact(
     text: str,
     *,
     countries: list[str] | None = None,
+    country_hint: list[str] | None = None,
+    context: DocumentContext | None = None,
+    chunk_offset: int = 0,
     mode: str = "rules",
     referential_integrity: bool = False,
     tokenize: bool = False,
     allowlist: list[str] | None = None,
     detect_dates: bool = False,
+    coref: bool = False,
+    coref_model: str = "default",
     cache: bool = True,
 ) -> RedactResult
 ```
 
-Main entry point. Detects and redacts PII in the given text.
+Main entry point. Detects and redacts PII in the given text. Every option is
+keyword-only.
+
+**What is looked for**
 
 | Parameter | Default | Description |
 |---|---|---|
-| `text` | -- | Input text to scan. |
-| `countries` | `None` | ISO 3166-1 alpha-2 codes to restrict detection (e.g. `["NL", "BE"]`). `None` loads all 31 countries. |
-| `mode` | `"rules"` | Detection mode. Currently only `"rules"` is supported. |
-| `referential_integrity` | `False` | Replace PII with consistent labels instead of entity-type labels. |
-| `tokenize` | `False` | Replace each value with a reversible token (`EMAIL_K7Q2`) and return the token → value mapping in `result.tokens`. Tokens are unique to the call. See [Reversible tokenization](#reversible-tokenization). Cannot be combined with `referential_integrity`. |
-| `allowlist` | `None` | Values never to redact, matched whole and case-insensitively. Merged with the instance's allowlist. See [Allowlist](#allowlist). |
-| `detect_dates` | `False` | Include date-of-birth and date-of-death detections. Off by default because bare dates without strong context are better handled by an LLM tier. When enabled, the engine applies keyword and structural (JSON/CSV) checks. |
-| `cache` | `True` | Cache results for identical inputs. |
+| `text` | — | Input text to scan. Longer than `max_input_length` raises `ValueError`. |
+| `countries` | `None` | ISO 3166-1 alpha-2 codes that define **scope** (e.g. `["NL", "BE"]`). `None` loads all 31. This never gates what is looked for: a detection attributed elsewhere is flagged `out_of_scope`, never dropped. Passing a bare string raises `TypeError`. See [Country codes](#country-codes). |
+| `country_hint` | `None` | A **prior only**. Helps resolve an ambiguous value without narrowing scope or flagging anything out of scope. See [Country Hints](#country-hints). |
+| `detect_dates` | `False` | Include `DOB` and `DATE_OF_DEATH`. Off by default: a bare date without keyword or structural context is deferred to the cloud tier. When on, the engine applies keyword and JSON/CSV-header checks. |
+
+**How the output looks**
+
+The three output styles are mutually exclusive in practice — pick at most one.
+
+| Parameter | Default | Description |
+|---|---|---|
+| *(none)* | — | Default: each span becomes `[ENTITY_TYPE]`. |
+| `referential_integrity` | `False` | Replace each distinct value with a consistent label (`EMAIL_1`). Labels persist **on the instance** across calls, so two documents sharing a value get the same label. See [Referential Integrity](#referential-integrity). |
+| `tokenize` | `False` | Replace each value with a reversible token (`EMAIL_K7Q2`) and return the token → value mapping in `result.tokens`; pass it to [`restore()`](#euredactrestore). Tokens are unique to the **call**, so nothing is retained. Cannot be combined with `referential_integrity`. See [Reversible tokenization](#reversible-tokenization). |
+| `allowlist` | `None` | Values never to redact, matched whole and case-insensitively, merged with the instance's list. Applies to cloud-tier types too. See [Allowlist](#allowlist). |
+
+**Long documents and tiers**
+
+| Parameter | Default | Description |
+|---|---|---|
+| `mode` | `"rules"` | `"rules"` runs locally. `"cloud"` sends the document to the euRedact service, which adds the model-only types (person names, organisations, job titles, diagnoses). See [Cloud tier](#cloud-tier). |
+| `context` | `None` | Share country evidence across the chunks of one document, so a chunk with no country signal of its own is still scored against the rest. Pass the same [`DocumentContext`](#documentcontext) to every chunk. Disables the cache. See [Chunked documents](#chunked-documents). |
+| `chunk_offset` | `0` | Where this chunk starts in the whole document. Used only to rebase spans recorded in `context`; returned detections are always relative to `text`. |
+| `cache` | `True` | Reuse the result for an identical input and configuration. Set `False` for one-off calls on sensitive text, or when timing the engine. |
+
+**Not yet implemented**
+
+| Parameter | Default | Description |
+|---|---|---|
+| `coref` | `False` | Reserved for pronoun/coreference resolution. Accepted and ignored in rules mode; raises in cloud mode. |
+| `coref_model` | `"default"` | Reserved, with `coref`. |
 
 #### `euredact.redact_batch()`
 
@@ -220,11 +269,52 @@ print(result.redacted_text)
 ```
 
 The `EuRedact` class exposes the same methods as the module-level API: `redact()`,
-`redact_batch()`, `aredact()`, `aredact_batch()`, `redact_iter()`, and
-`add_custom_pattern()`. Its constructor takes `max_input_length` and an
-`allowlist` that applies to every call on the instance — see [Allowlist](#allowlist).
+`redact_batch()`, `aredact()`, `aredact_batch()`, `redact_iter()`, `clear()` and
+`add_custom_pattern()`.
+
+```python
+EuRedact(
+    *,
+    max_input_length: int = 10_485_760,
+    allowlist: list[str] | None = None,
+)
+```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `max_input_length` | `10_485_760` (~10 MB) | Longest document `redact()` accepts, in characters. Above it, `ValueError` — split the input or raise the ceiling. |
+| `allowlist` | `None` | Values never to redact, for every call on this instance: your own organisation's name, its own addresses. Merged with the per-call `allowlist`. See [Allowlist](#allowlist). |
+
+State held on the instance — the result cache, referential-integrity labels and
+custom patterns — is per instance, which is what makes one instance per tenant
+the right default. `clear()` releases the cache and the label mapping.
 
 ### Return Types
+
+#### `DocumentContext`
+
+```python
+from euredact import DocumentContext
+
+ctx = DocumentContext()
+for offset, chunk in chunks:
+    result = euredact.redact(chunk, context=ctx, chunk_offset=offset)
+```
+
+Shares country evidence across the chunks of one document, so a chunk carrying
+no country signal of its own is still scored against what the rest of the
+document showed. Pass the same object to every chunk, with `chunk_offset` set
+to where the chunk starts. Passing a context disables the result cache, because
+the result then depends on evidence from other chunks rather than on the text
+alone.
+
+| Method | Description |
+|---|---|
+| `add(evidence, chunk_offset=0)` | Record a chunk's evidence. `redact()` calls this for you. |
+| `evidence()` | Every signal gathered so far, spans rebased onto the whole document. |
+
+Not supported in cloud mode: the model has never seen a chunk boundary, so the
+service rejects oversized input rather than splitting it.
 
 #### `RedactResult`
 
@@ -396,6 +486,34 @@ twice. `Retry-After` is obeyed. A document that outlives the service's sync
 window is polled transparently — callers never write that branch. Oversized
 input raises `TooLargeError` (413): the service refuses it rather than
 chunking, because the model has never seen a chunk boundary.
+
+### `euredact.configure()`
+
+```python
+euredact.configure(
+    api_key: str | None = None,
+    *,
+    base_url: str | None = None,
+    timeout_s: float = 30.0,
+    poll_timeout_s: float = 300.0,
+    max_retries: int = 3,
+    headers: dict[str, str] | None = None,
+) -> CloudConfig
+```
+
+| Parameter | Default | Environment variable | Description |
+|---|---|---|---|
+| `api_key` | — | `EUREDACT_API_KEY` | Your alpha key. Required; `configure()` raises without one. |
+| `base_url` | `https://api.euredact.dev` | `EUREDACT_BASE_URL` | Service endpoint. |
+| `timeout_s` | `30.0` | — | Per-request timeout. |
+| `poll_timeout_s` | `300.0` | — | Ceiling for polling a document that outlives the synchronous window. |
+| `max_retries` | `3` | — | Retries for `429` and `5xx`. Each carries an `Idempotency-Key`, so a retry after a timeout cannot bill twice, and `Retry-After` is obeyed. |
+| `headers` | `None` | — | Extra headers sent with every request. |
+
+`configure()` reads the two environment variables itself, so it must still be
+called — but with no arguments if the environment is set. Errors are
+`NotConfiguredError`, `QuotaExceededError`, `TooLargeError` (413, the service
+refuses oversized input rather than chunking it) and `CloudError`.
 
 Options the service cannot honour raise rather than being ignored: multiple
 `countries`, `country_hint`, `context`/`chunk_offset`, `referential_integrity`

@@ -260,6 +260,22 @@ Both SDKs take `mode="rules"` (default) or `mode="cloud"` — see
 [Cloud tier](#cloud-tier). In TypeScript the cloud path is `redactAsync()`,
 because `redact()` is synchronous and a network call cannot be.
 
+Every option is documented in full in the package READMEs, each of which opens
+its reference with a **Which option do I need?** table:
+
+| Option | What it does |
+|---|---|
+| `countries` | Scope. Flags out-of-scope detections; never gates what is looked for. |
+| `country_hint` / `countryHint` | A prior only — resolves ambiguity without narrowing scope. |
+| `mode` | `"rules"` (local) or `"cloud"` (adds names, organisations, job titles, diagnoses). |
+| `tokenize` | Reversible `EMAIL_K7Q2` tokens plus a mapping for `restore()`. Per call. |
+| `referential_integrity` / `referentialIntegrity` | Consistent `EMAIL_1` labels, persisting on the instance. |
+| `allowlist` | Values never redacted, per call or per instance. Applies to cloud types too. |
+| `detect_dates` / `detectDates` | Include dates of birth and death. |
+| `context` + `chunk_offset` / `chunkOffset` | Share country evidence across the chunks of one document. |
+| `cache` | Reuse results for identical input. |
+| `max_input_length` / `maxInputLength` | Constructor ceiling on document size. |
+
 ## Performance
 
 Measured on one core (Apple Silicon M3 Pro, CPython 3.12.13, Node 22.12) with
