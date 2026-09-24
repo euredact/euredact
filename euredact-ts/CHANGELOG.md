@@ -4,6 +4,37 @@
 
 ### Fixed
 
+- **Both SDKs now share one evaluation definition.** The stricter recall rule
+  landed in the Python harness first; `evalFull.ts` now shares the same
+  coverage-based outcome, and its category map gained the `HEALTH_ID` and
+  `SECRET` entries Python already carried — `HEALTH_ID` had no engine type to
+  fall back on, so its 252 labels were scored against a name the engine never
+  emits. With both aligned the SDKs agree on every per-type row and on the
+  total: 664,360 of 667,268 labels fully masked, hinted.
+  Mirrors the Python harness.
+  *(rules-engine#12)*
+
+### Accuracy
+
+Re-measured on the 152,300-document corpus for this release; the full
+breakdown, including what each fix moved, is in
+[`docs/v0.5.0-corpus-results.md`](../docs/v0.5.0-corpus-results.md).
+
+| engine | mode | recall | precision |
+|---|---|---:|---:|
+| Python | hinted | 99.56% | 99.78% |
+| Python | blind | 99.39% | 99.63% |
+| TypeScript | hinted | 99.56% | 99.78% |
+| TypeScript | blind | 99.39% | 99.63% |
+
+**Measured with the improved harness, so not directly comparable with the
+0.4.0 figures.** Recall now requires the whole identifier to be masked, where
+it previously accepted an identifier as found once its literal text was absent
+from the output. On equal terms — the 0.4.0 engine measured with the current
+harness — recall was 99.4% hinted and 99.2% blind, so this release adds
+**+0.16pp** and **+0.19pp** respectively.
+
+
 - **An apostrophe in an email local part left the prefix unmasked.**
   `johno'neill@outlook.ie` masked as `johno'[EMAIL]`: the local-part class had
   no apostrophe, so the match began after it and the surname — the identifying
