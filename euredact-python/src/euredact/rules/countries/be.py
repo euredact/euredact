@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from euredact.rules.countries._base import CountryConfig, PatternDef
+from euredact.rules.countries._shared import PASSPORT_CONTEXT
 from euredact.types import EntityType
 
 
@@ -79,10 +80,7 @@ class BEConfig(CountryConfig):
                 pattern=r"\b[A-Z]{2}\d{6}\b",
                 validator=None,
                 description="Belgian passport — 2 letters + 6 digits",
-                context_keywords=[
-                    "paspoort", "passport", "passeport", "reisdocument",
-                    "travel document", "document de voyage",
-                ],
+                context_keywords=PASSPORT_CONTEXT,
                 requires_context=True,
             ),
             # --- Driving Licence ---

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from euredact.rules.countries._base import CountryConfig, PatternDef
+from euredact.rules.countries._shared import PASSPORT_CONTEXT
 from euredact.types import EntityType
 
 
@@ -109,10 +110,7 @@ class NLConfig(CountryConfig):
                 pattern=r"\b[A-Z][A-Z0-9]{8}\b",
                 validator=None,
                 description="Dutch passport — letter + 8 alphanumeric",
-                context_keywords=[
-                    "paspoort", "passport", "reisdocument", "travel document",
-                    "paspoortnummer", "identiteitsbewijs",
-                ],
+                context_keywords=PASSPORT_CONTEXT,
                 requires_context=True,
             ),
             # --- License Plate (XX-999-X, 99-XXX-9, etc.) ---

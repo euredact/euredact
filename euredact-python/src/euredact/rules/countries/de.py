@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from euredact.rules.countries._base import CountryConfig, PatternDef
+from euredact.rules.countries._shared import PASSPORT_CONTEXT
 from euredact.types import EntityType
 
 
@@ -83,10 +84,7 @@ class DEConfig(CountryConfig):
                 pattern=r"\b[CFGHJK][0-9CFGHJKLMNPRTVWXYZ]{8}\d?\b",
                 validator=None,
                 description="German passport number — same alphabet as the ID card",
-                context_keywords=[
-                    "Reisepass", "passport", "Passnummer", "Reisepassnummer",
-                    "Reisepass Nummer", "Reisepass-Nr", "Pass Nr",
-                ],
+                context_keywords=PASSPORT_CONTEXT,
                 requires_context=True,
             ),
             # --- License Plate ---

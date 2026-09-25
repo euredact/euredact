@@ -2166,6 +2166,483 @@
         "EMAIL"
       ],
       "expectRedactedText": "Mail jan@acme.be, IBAN [BANK_ACCOUNT]."
+    },
+    {
+      "id": "passport-foreign-shape-german-label",
+      "text": "Reisepass: CA1234567 vorgelegt.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "CA1234567"
+        ]
+      },
+      "expectRedactedText": "Reisepass: [PASSPORT] vorgelegt.",
+      "notes": "issue rules-engine#23: the shape is not German and the label is not Dutch, so before the shared keyword list neither pattern fired. A foreign passport in a German document is the ordinary case."
+    },
+    {
+      "id": "passport-requires-a-label",
+      "text": "Reference AB1234567 attached.",
+      "countries": null,
+      "mustNotDetect": [
+        "PASSPORT"
+      ],
+      "expectRedactedText": "Reference AB1234567 attached.",
+      "notes": "The generic shape is only safe because it is label-gated; without a passport word it must never fire."
+    },
+    {
+      "id": "passport-password-is-not-a-passport",
+      "text": "password: ABC123456",
+      "countries": null,
+      "mustNotDetect": [
+        "PASSPORT"
+      ],
+      "expectRedactedText": "password: ABC123456",
+      "notes": "Context matching is substring, so the bare Scandinavian 'pass' would fire inside 'password'. It is deliberately absent from the keyword list; only compound forms are listed."
+    },
+    {
+      "id": "passport-passenger-is-not-a-passport",
+      "text": "passenger XY1234567 boarded",
+      "countries": null,
+      "mustNotDetect": [
+        "PASSPORT"
+      ],
+      "expectRedactedText": "passenger XY1234567 boarded"
+    },
+    {
+      "id": "passport-national-pattern-still-wins",
+      "text": "Reisepass: KMM767RVL2 vorgelegt.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "KMM767RVL2"
+        ]
+      },
+      "expectRedactedText": "Reisepass: [PASSPORT] vorgelegt.",
+      "notes": "A conforming German passport is still matched; the generic rule ranks below the national one and does not displace it."
+    },
+    {
+      "id": "passport-at-labelled",
+      "text": "Reisepass: XK7392015",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "Reisepass: [PASSPORT]",
+      "notes": "AT has no passport pattern of its own and relies on the shared label-gated rule. One vector per such country, so removing a keyword or narrowing the shape fails here rather than silently dropping a country's coverage (issue rules-engine#23)."
+    },
+    {
+      "id": "passport-bg-labelled",
+      "text": "паспорт: XK7392015",
+      "countries": [
+        "BG"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "паспорт: [PASSPORT]",
+      "notes": "BG has no passport pattern of its own and relies on the shared label-gated rule. One vector per such country, so removing a keyword or narrowing the shape fails here rather than silently dropping a country's coverage (issue rules-engine#23)."
+    },
+    {
+      "id": "passport-ch-labelled",
+      "text": "Reisepass: XK7392015",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "Reisepass: [PASSPORT]",
+      "notes": "CH relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-cy-labelled",
+      "text": "διαβατήριο: XK7392015",
+      "countries": [
+        "CY"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "διαβατήριο: [PASSPORT]",
+      "notes": "CY relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-cz-labelled",
+      "text": "cestovní pas: XK7392015",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "cestovní pas: [PASSPORT]",
+      "notes": "CZ relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-dk-labelled",
+      "text": "passnummer: XK7392015",
+      "countries": [
+        "DK"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passnummer: [PASSPORT]",
+      "notes": "DK relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-ee-labelled",
+      "text": "passi number: XK7392015",
+      "countries": [
+        "EE"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passi number: [PASSPORT]",
+      "notes": "EE relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-el-labelled",
+      "text": "διαβατήριο: XK7392015",
+      "countries": [
+        "EL"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "διαβατήριο: [PASSPORT]",
+      "notes": "EL relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-es-labelled",
+      "text": "pasaporte: XK7392015",
+      "countries": [
+        "ES"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "pasaporte: [PASSPORT]",
+      "notes": "ES relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-fi-labelled",
+      "text": "passinumero: XK7392015",
+      "countries": [
+        "FI"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passinumero: [PASSPORT]",
+      "notes": "FI relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-hr-labelled",
+      "text": "broj putovnice: XK7392015",
+      "countries": [
+        "HR"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "broj putovnice: [PASSPORT]",
+      "notes": "HR relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-hu-labelled",
+      "text": "útlevélszám: XK7392015",
+      "countries": [
+        "HU"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "útlevélszám: [PASSPORT]",
+      "notes": "HU relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-ie-labelled",
+      "text": "passport number: XK7392015",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passport number: [PASSPORT]",
+      "notes": "IE relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-is-labelled",
+      "text": "vegabréfsnúmer: XK7392015",
+      "countries": [
+        "IS"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "vegabréfsnúmer: [PASSPORT]",
+      "notes": "IS relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-it-labelled",
+      "text": "passaporto: XK7392015",
+      "countries": [
+        "IT"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passaporto: [PASSPORT]",
+      "notes": "IT relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-lt-labelled",
+      "text": "paso numeris: XK7392015",
+      "countries": [
+        "LT"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "paso numeris: [PASSPORT]",
+      "notes": "LT relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-lu-labelled",
+      "text": "passeport: XK7392015",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passeport: [PASSPORT]",
+      "notes": "LU relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-lv-labelled",
+      "text": "pases numurs: XK7392015",
+      "countries": [
+        "LV"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "pases numurs: [PASSPORT]",
+      "notes": "LV relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-mt-labelled",
+      "text": "passaport: XK7392015",
+      "countries": [
+        "MT"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passaport: [PASSPORT]",
+      "notes": "MT relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-no-labelled",
+      "text": "passnummer: XK7392015",
+      "countries": [
+        "NO"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passnummer: [PASSPORT]",
+      "notes": "NO relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-pl-labelled",
+      "text": "numer paszportu: XK7392015",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "numer paszportu: [PASSPORT]",
+      "notes": "PL relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-pt-labelled",
+      "text": "passaporte: XK7392015",
+      "countries": [
+        "PT"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passaporte: [PASSPORT]",
+      "notes": "PT relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-ro-labelled",
+      "text": "pașaport: XK7392015",
+      "countries": [
+        "RO"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "pașaport: [PASSPORT]",
+      "notes": "RO relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-se-labelled",
+      "text": "passnummer: XK7392015",
+      "countries": [
+        "SE"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passnummer: [PASSPORT]",
+      "notes": "SE relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-si-labelled",
+      "text": "številka potnega lista: XK7392015",
+      "countries": [
+        "SI"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "številka potnega lista: [PASSPORT]",
+      "notes": "SI relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-sk-labelled",
+      "text": "cestovný pas: XK7392015",
+      "countries": [
+        "SK"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "cestovný pas: [PASSPORT]",
+      "notes": "SK relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-uk-labelled",
+      "text": "passport number: XK7392015",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "XK7392015"
+        ]
+      },
+      "expectRedactedText": "passport number: [PASSPORT]",
+      "notes": "UK relies on the shared label-gated passport rule."
+    },
+    {
+      "id": "passport-uk-nine-digits",
+      "text": "passport number: 512847603",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "512847603"
+        ]
+      },
+      "expectRedactedText": "passport number: [PASSPORT]",
+      "notes": "The canon gives UK as 9 digits. An all-numeric passport was missed entirely while the shared rule required a leading letter (issue rules-engine#23)."
+    },
+    {
+      "id": "passport-uk-gbr-prefixed",
+      "text": "passport: GBR512847603",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "GBR512847603"
+        ]
+      },
+      "expectRedactedText": "passport: [PASSPORT]",
+      "notes": "Canon: UK 9 digits, optionally GBR-prefixed."
+    },
+    {
+      "id": "passport-canon-single-letter-form",
+      "text": "Reisepass: X1234567",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "X1234567"
+        ]
+      },
+      "expectRedactedText": "Reisepass: [PASSPORT]",
+      "notes": "Canon EU pattern is 1-2 letters + 7 digits; the single-letter form must match too."
     }
   ]
 }
