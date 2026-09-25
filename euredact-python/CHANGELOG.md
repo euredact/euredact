@@ -46,6 +46,44 @@
   **the same false-positive counts** (1,230 / 2,370), so the wider keyword set
   costs nothing measurable. *(rules-engine#23)*
 
+### Fixed
+
+- **A German tax identifier was left in the clear under its own official
+  label.** `Steuerliche Identifikationsnummer 47 362 819 054` masked nothing
+  (and, run on, masked only the last two groups); the same happened to
+  `Steueridentifikationsnummer lautet:` and `Steuer-IdNr lautet:`. A German
+  Steuer-ID that fails its checksum is masked only on the strength of the
+  label beside it, so when the label was not read the value was emitted
+  verbatim. Two independent causes, both fixed:
+
+  - `CUE_WINDOW` was 32 characters, which is how long a *label* may be.
+    `"Steuerliche Identifikationsnummer "` is 34 and
+    `"Steueridentifikationsnummer lautet: "` is 36, so the label's own start
+    fell outside the window and the `(?<![A-Za-z0-9_])` boundary had nothing
+    to anchor against — the label read as no label at all. This is the same
+    failure that made `sozialversicherungsnummer` unreachable for the whole of
+    0.3.8, recurring on a longer compound. The window is now 44, which admits
+    the longest label the table carries together with one qualifier word
+    (`"Steuerliche Identifikationsnummer lautet: "`, 42 characters).
+
+  - A cue may use its run-on **or** one qualifier word, never both. `steuer-?id`
+    spent its run-on reaching the end of `Steuer-IdNr` and had none left for
+    `lautet`. The German long forms are now spelled out in the cue
+    (`steuerliche identifikations-nummer`, `steuer-identifikations-nummer`,
+    `steuer-id-nr`), so the label matches whole and its qualifier stays free.
+    `Steuerliche Identifikationsnummer` matched nothing before: it is two
+    words, and `steuer-?id` cannot reach across `liche `.
+
+  Widening the window does not widen how far a cue may sit from its value —
+  that is bounded by the run-on/qualifier tail, not by the window — and a
+  vector pins it: a tax label a sentence away still licenses nothing.
+  Nine conformance vectors cover the four forms that leaked, the three that
+  already worked, the longest form with a qualifier, and that boundary.
+  A parametrised test now asserts every long label in the cue table is
+  reachable both adjacent to its value and across a qualifier word, so a
+  label too long for the window fails loudly instead of silently going dead.
+  *(rules-engine#26)*
+
 ## 0.5.1 (2026-09-24)
 
 ### Fixed

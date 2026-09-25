@@ -2643,6 +2643,131 @@
       },
       "expectRedactedText": "Reisepass: [PASSPORT]",
       "notes": "Canon EU pattern is 1-2 letters + 7 digits; the single-letter form must match too."
+    },
+    {
+      "id": "cue-de-steuerliche-identifikationsnummer",
+      "text": "Steuerliche Identifikationsnummer 47 362 819 054",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "47 362 819 054"
+        ]
+      },
+      "expectRedactedText": "Steuerliche Identifikationsnummer [TAX_ID]",
+      "notes": "The official two-word label the Bundeszentralamt für Steuern uses. The value fails the checksum, so it is masked only on the strength of the label; at CUE_WINDOW=32 the label's own start fell outside the window and the number was left in the clear."
+    },
+    {
+      "id": "cue-de-steuerliche-identifikationsnummer-colon",
+      "text": "Steuerliche Identifikationsnummer: 63 841 720 395",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "63 841 720 395"
+        ]
+      },
+      "expectRedactedText": "Steuerliche Identifikationsnummer: [TAX_ID]",
+      "notes": "Same label with the colon, which pushes it one character further from the value."
+    },
+    {
+      "id": "cue-de-steuerliche-identifikationsnummer-qualifier",
+      "text": "Steuerliche Identifikationsnummer lautet: 63 841 720 395",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "63 841 720 395"
+        ]
+      },
+      "expectRedactedText": "Steuerliche Identifikationsnummer lautet: [TAX_ID]",
+      "notes": "The longest label in the table reaching across one qualifier word: 42 characters, which is what sets CUE_WINDOW."
+    },
+    {
+      "id": "cue-de-steueridentifikationsnummer-qualifier",
+      "text": "Steueridentifikationsnummer lautet: 63 841 720 395",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "63 841 720 395"
+        ]
+      },
+      "expectRedactedText": "Steueridentifikationsnummer lautet: [TAX_ID]",
+      "notes": "The one-word form across a qualifier. This needed the label spelled out in the cue: `steuer-?id` plus a run-on to reach \"entifikationsnummer\" leaves no qualifier, and a cue may use one or the other, never both."
+    },
+    {
+      "id": "cue-de-steuer-idnr-qualifier",
+      "text": "Steuer-IdNr lautet: 57 834 291 604.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "57 834 291 604"
+        ]
+      },
+      "expectRedactedText": "Steuer-IdNr lautet: [TAX_ID].",
+      "notes": "The abbreviation across a qualifier. Fits the old window; it failed because `steuer-?id` spent its run-on on \"Nr\" and had none left for \"lautet\"."
+    },
+    {
+      "id": "cue-de-steuer-idnr-adjacent",
+      "text": "Steuer-IdNr 63 841 720 395",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "63 841 720 395"
+        ]
+      },
+      "expectRedactedText": "Steuer-IdNr [TAX_ID]",
+      "notes": "Worked before this change; pinned so spelling the long forms out cannot regress the short one."
+    },
+    {
+      "id": "cue-de-steueridentifikationsnummer-adjacent",
+      "text": "Steueridentifikationsnummer 63 841 720 395",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "63 841 720 395"
+        ]
+      },
+      "expectRedactedText": "Steueridentifikationsnummer [TAX_ID]",
+      "notes": "Worked before this change, via the run-on. Pinned."
+    },
+    {
+      "id": "cue-de-steuernummer-qualifier",
+      "text": "Steuernummer lautet: 63 841 720 395",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "63 841 720 395"
+        ]
+      },
+      "expectRedactedText": "Steuernummer lautet: [TAX_ID]",
+      "notes": "Worked before this change: a label with nothing to run on to has its qualifier free. Pinned."
+    },
+    {
+      "id": "cue-de-tax-label-beyond-the-window-is-not-a-cue",
+      "text": "Steuerliche Identifikationsnummer siehe beiliegendes Schreiben vom Amt 63 841 720 395",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "TAX_ID",
+        "NATIONAL_ID"
+      ],
+      "expectRedactedText": "Steuerliche Identifikationsnummer siehe beiliegendes Schreiben vom Amt 63 841 720 395",
+      "notes": "Widening CUE_WINDOW to 44 must not turn a distant label into a licence for every number after it -- the postal-code year defect. The label is there but a sentence away, the value fails the German tax checksum, and nothing else claims it, so it is correctly declined."
     }
   ]
 }
