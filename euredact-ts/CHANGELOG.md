@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 (2026-09-25)
 
 ### Added
 
@@ -56,12 +56,15 @@
   are spelled out in the tax cue. The cue table and window are asserted equal
   across the two SDKs, so both moved together. *(rules-engine#26)*
 
-## 0.5.1 (2026-09-24)
+### Also in this release
 
-No changes to this SDK. The version is kept in step with `euredact-python`,
-which ships a fix: `Exemption` is now exported from the package root. The
-TypeScript SDK already exported it correctly (`import type { Exemption } from
-"euredact"`), so nothing here needed changing. *(rules-engine#20)*
+- Two fixes land in `euredact-python` only. `Exemption` is now exported from
+  its package root; this SDK already exported it correctly
+  (`import type { Exemption } from "euredact"`), so nothing here needed
+  changing. *(rules-engine#20)* And `make sweep` / `make parity` now refuse to
+  run on an incomplete corpus rather than silently sampling a different
+  population — the reason the cross-SDK parity figure quoted here reproduces.
+  *(rules-engine#18)*
 
 ## 0.5.0 (2026-09-24)
 

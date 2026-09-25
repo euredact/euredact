@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 (2026-09-25)
 
 ### Added
 
@@ -83,10 +83,6 @@
   reachable both adjacent to its value and across a qualifier word, so a
   label too long for the window fails loudly instead of silently going dead.
   *(rules-engine#26)*
-
-## 0.5.1 (2026-09-24)
-
-### Fixed
 
 - **`Exemption` is exported from the package root.** It shipped in 0.5.0
   documented in the README and present in `euredact.types`, but never
