@@ -31,6 +31,61 @@ def _build_iban_pattern() -> str:
 _GENERIC_IBAN = _build_iban_pattern()
 
 
+#: Words that name a travel document, in the official languages of the 31
+#: countries this engine covers, plus English.
+#:
+#: Shared by every passport pattern. Before this existed each country kept its
+#: own list, so a passport was only recognised when its *shape* and its *label*
+#: came from the same country: `Reisepass: CA1234567` was missed because the
+#: German pattern rejects that alphabet while the Dutch pattern, whose shape
+#: fits, had never heard of "Reisepass". A foreign passport recorded in a
+#: German, Polish or Greek document is the ordinary case, not the exotic one
+#: (issue rules-engine#23).
+PASSPORT_CONTEXT = [
+    # English
+    "passport", "passport no", "passport number", "travel document",
+    # German / Austrian / Swiss
+    "reisepass", "passnummer", "reisepassnummer", "reisepass-nr", "pass nr",
+    "reisedokument",
+    # Dutch / Flemish
+    "paspoort", "paspoortnummer", "reisdocument", "identiteitsbewijs",
+    # French
+    "passeport", "numéro de passeport", "document de voyage",
+    # Italian
+    "passaporto", "numero di passaporto", "documento di viaggio",
+    # Spanish
+    "pasaporte", "número de pasaporte", "documento de viaje",
+    # Portuguese
+    "passaporte", "número do passaporte",
+    # Nordic. The bare Scandinavian word for passport is "pass", and the
+    # Finnish is "passi" -- both are omitted deliberately. Context matching is
+    # substring, not word-boundary, so "pass" fires inside "password",
+    # "Passwort", "passenger" and "Passstrasse", and "passi" inside "passive"
+    # and "passing". Each of those masked an unrelated token as a passport,
+    # and `db_password=...` took the span away from SECRET. Only the compound
+    # forms, which cannot appear inside an unrelated word, are listed.
+    "passnummer", "passnr", "passets nummer", "passin numero", "passinumero",
+    # Estonian. "pass" alone is the word, and is excluded above as a
+    # substring hazard, so only the compounds appear.
+    "passi number", "passinumber",
+    "vegabréf", "vegabréfsnúmer",
+    # Baltic. Latvian "pase" is omitted for the same reason -- it sits inside
+    # "phase" and "passed".
+    # Lithuanian "pasas" is omitted on the same grounds as "pass": five
+    # characters, no space, and it is also the Spanish word for raisins, so it
+    # can appear in ordinary ES prose. The compound form carries Lithuanian.
+    "paso numeris", "pases numurs",
+    # Polish / Czech / Slovak / Slovene / Croatian
+    "paszport", "numer paszportu", "cestovní pas", "číslo pasu",
+    "cestovný pas", "potni list", "številka potnega lista",
+    "putovnica", "broj putovnice",
+    # Hungarian / Romanian / Bulgarian / Greek / Maltese
+    "útlevél", "útlevélszám", "pașaport", "numărul pașaportului",
+    "паспорт", "номер на паспорт", "διαβατήριο",
+    "αριθμός διαβατηρίου", "passaport",
+]
+
+
 SECRET_CONTEXT = [
     # English
     "key", "token", "secret", "password", "credential",
@@ -140,6 +195,47 @@ class SharedConfig(CountryConfig):
                 pattern=r"\+\d{1,3}(?:[\s\-/]?(?:\(\d{1,4}\)|\d{1,4})){2,7}",
                 validator="e164",
                 description="International phone number (E.164) — any country",
+            ),
+            # --- Passport (any country) ---
+            # The per-country patterns cover DE, NL and BE only; the other 27
+            # had none, so a passport was recognised in three countries out of
+            # thirty. This is the same argument as the E.164 phone rule above:
+            # one country-independent shape, with the label carrying the
+            # precision.
+            #
+            # The shapes come from the project canon
+            # (`prompts/pii_definitions.md`, PASSPORT), not from invention:
+            #
+            #   EU pattern : 1-2 letters + 7 digits  (X1234567, AB1234567)
+            #   UK         : 9 digits, optionally GBR-prefixed
+            #
+            # The canon's position is that the EU converged on one shape, so
+            # 27 national regexes would contradict it as well as being
+            # unverifiable -- the corpus carries passports for four countries,
+            # and a wrong national pattern misses real passports, which is the
+            # failure direction that matters.
+            #
+            # An earlier draft required a leading letter and so missed an
+            # all-numeric passport entirely, the UK's own format among them.
+            # Requiring *exactly* nine digits for the numeric form is what
+            # keeps that safe: an eight-digit date such as 20240115 beside the
+            # word "passport" is rejected on shape, before the label is even
+            # consulted. BE and NL issue shorter forms (EH123456, 2+6) and
+            # keep their own patterns, which rank above this one.
+            #
+            # `requires_context` is what makes a shape this generic safe: an
+            # ICAO travel-document number is up to nine alphanumerics, which
+            # on its own describes half the identifiers in this file. It never
+            # fires without a passport word beside it, and it ranks below the
+            # national patterns, so DE, NL and BE still decide their own cases
+            # (issue rules-engine#23).
+            PatternDef(
+                entity_type=EntityType.PASSPORT,
+                pattern=r"\b(?:GBR\d{9}|[A-Z]{1,2}\d{7}|\d{9})\b",
+                validator=None,
+                description="Passport number — any country, label-gated",
+                context_keywords=PASSPORT_CONTEXT,
+                requires_context=True,
             ),
             # --- BIC/SWIFT ---
             PatternDef(

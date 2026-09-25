@@ -40,6 +40,42 @@ function p(
 // Secret context keywords (consolidated, reused across SECRET patterns)
 // ---------------------------------------------------------------------------
 
+/**
+ * Words that name a travel document, in the official languages of the 31
+ * countries this engine covers, plus English.
+ *
+ * Shared by every passport pattern. Before this existed each country kept its
+ * own list, so a passport was only recognised when its shape and its label
+ * came from the same country: `Reisepass: CA1234567` was missed because the
+ * German pattern rejects that alphabet while the Dutch pattern, whose shape
+ * fits, had never heard of "Reisepass" (issue rules-engine#23).
+ *
+ * The bare Scandinavian "pass", Finnish "passi" and Latvian "pase" are
+ * omitted deliberately: context matching is substring, not word-boundary, so
+ * they fire inside "password", "passenger", "passive" and "phase". Only the
+ * compound forms are listed. Mirrors PASSPORT_CONTEXT in Python.
+ */
+const PASSPORT_CONTEXT = [
+  "passport", "passport no", "passport number", "travel document",
+  "reisepass", "passnummer", "reisepassnummer", "reisepass-nr", "pass nr",
+  "reisedokument",
+  "paspoort", "paspoortnummer", "reisdocument", "identiteitsbewijs",
+  "passeport", "numéro de passeport", "document de voyage",
+  "passaporto", "numero di passaporto", "documento di viaggio",
+  "pasaporte", "número de pasaporte", "documento de viaje",
+  "passaporte", "número do passaporte",
+  "passnr", "passets nummer", "passin numero", "passinumero",
+  "passi number", "passinumber",
+  "vegabréf", "vegabréfsnúmer",
+  "paso numeris", "pases numurs",
+  "paszport", "numer paszportu", "cestovní pas", "číslo pasu",
+  "cestovný pas", "potni list", "številka potnega lista",
+  "putovnica", "broj putovnice",
+  "útlevél", "útlevélszám", "pașaport", "numărul pașaportului",
+  "паспорт", "номер на паспорт", "διαβατήριο",
+  "αριθμός διαβατηρίου", "passaport",
+];
+
 const SECRET_CONTEXT = [
   // English
   "key", "token", "secret", "password", "credential",
@@ -136,6 +172,17 @@ const SHARED: CountryConfig = {
     // "Call (+32 475 12 34 56) today." also masked the ")" (issue
     // rules-engine#3). Mirrors the Python pattern character for character.
     p(EntityType.PHONE, String.raw`\+\d{1,3}(?:[\s\-/]?(?:\(\d{1,4}\)|\d{1,4})){2,7}`, "e164", "International phone number (E.164) — any country"),
+    // Passport (any country). The per-country patterns cover BE, DE, FR and NL
+    // only; the other 26 had none. Same argument as the E.164 phone rule: one
+    // country-independent shape, with the label carrying the precision.
+    // Shapes from the project canon (prompts/pii_definitions.md, PASSPORT):
+    // EU is 1-2 letters + 7 digits, UK is 9 digits optionally GBR-prefixed.
+    // The canon's position is that the EU converged on one shape, so national
+    // regexes would contradict it as well as being unverifiable. An earlier
+    // draft required a leading letter and missed all-numeric passports, the
+    // UK's own format among them; requiring exactly nine digits for the
+    // numeric form rejects eight-digit dates on shape (issue rules-engine#23).
+    p(EntityType.PASSPORT, String.raw`\b(?:GBR\d{9}|[A-Z]{1,2}\d{7}|\d{9})\b`, null, "Passport number — any country, label-gated", PASSPORT_CONTEXT, true),
     p(EntityType.BIC, String.raw`\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b`, "bic"),
     // Space-separated form: "RZBA AT WW", "NICA BE BB". Written as a separate
     // pattern requiring a space between *every* group, rather than making the
@@ -230,7 +277,7 @@ const NL: CountryConfig = {
     p(EntityType.PHONE, String.raw`\b06[\s\-]?\d{2}[\s\-]?\d{2}[\s\-]?\d{2}[\s\-]?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\b0[1-9]\d{1,2}[\s\-]?\d{2,3}[\s\-]?\d{2}[\s\-]?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\+31\s?[1-9]\d{0,2}[\s\-]?\d{3,4}[\s\-]?\d{3,4}\b`),
-    p(EntityType.PASSPORT, String.raw`\b[A-Z][A-Z0-9]{8}\b`, null, "", ["paspoort", "passport", "reisdocument", "travel document", "paspoortnummer", "identiteitsbewijs"], true),
+    p(EntityType.PASSPORT, String.raw`\b[A-Z][A-Z0-9]{8}\b`, null, "", PASSPORT_CONTEXT, true),
     p(EntityType.LICENSE_PLATE, String.raw`\b(?:[A-Z]{2}[\-\s]?\d{3}[\-\s]?[A-Z]|\d[\-\s]?[A-Z]{3}[\-\s]?\d{2}|\d{2}[\-\s]?[A-Z]{3}[\-\s]?\d|[A-Z]{2}[\-\s]?\d{2}[\-\s]?[A-Z]{2}|\d{2}[\-\s]?[A-Z]{2}[\-\s]?\d{2}|\d[\-\s]?[A-Z]{2}[\-\s]?\d{3})\b`),
     p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{3}\s?[A-Z]{2}\b`),
   ],
@@ -246,7 +293,7 @@ const BE: CountryConfig = {
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b0\d{3}\.?\d{3}\.?\d{3}\b`, null, "", ["KBO", "BCE", "ondernemingsnummer", "numéro d'entreprise", "enterprise number", "bedrijfsnummer", "Kruispuntbank", "Banque-Carrefour", "Banque Carrefour", "Ondernemingen", "Entreprises", "onder nummer"], true),
     p(EntityType.PHONE, String.raw`\b0[1-9]\d{0,2}[/\s.\-]?\d{2,3}[.\s\-]?\d{2,3}[.\s\-]?\d{2,3}\b`),
     p(EntityType.PHONE, String.raw`\+32\s?\d{1,3}[\s.\-]?\d{2,3}[\s.\-]?\d{2}[\s.\-]?\d{2}`),
-    p(EntityType.PASSPORT, String.raw`\b[A-Z]{2}\d{6}\b`, null, "", ["paspoort", "passport", "passeport", "reisdocument", "travel document", "document de voyage"], true),
+    p(EntityType.PASSPORT, String.raw`\b[A-Z]{2}\d{6}\b`, null, "", PASSPORT_CONTEXT, true),
     p(EntityType.DRIVERS_LICENSE, String.raw`\b\d{10}\b`, null, "", ["rijbewijs", "permis de conduire", "driving licence", "driving license", "rijbewijsnummer"], true),
     p(EntityType.LICENSE_PLATE, String.raw`\b[12][\-\s]?[A-Z]{3}[\-\s]?\d{3}\b`),
     p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{3}\b`, null, "", ["postcode", "code postal", "postnummer", "postal code", "zip", "B-", "adres", "adresse", "wonende", "woonplaats", "rue", "straat", "laan", "avenue", "boulevard", "plein", "steenweg", "chaussée", "domicilié", "gedomicilieerd", "Levering:", "siège"], true),
@@ -266,7 +313,7 @@ const DE: CountryConfig = {
     p(EntityType.VAT, String.raw`\bDE\s?\d{9}\b`, "vat_de"),
     p(EntityType.PHONE, String.raw`\b0[1-9]\d{1,4}[\s/\-]?\d{3,8}\b`),
     p(EntityType.PHONE, String.raw`\+49\s?\d{2,5}[\s/\-]?\d{3,8}\b`),
-    p(EntityType.PASSPORT, String.raw`\b[CFGHJK][0-9CFGHJKLMNPRTVWXYZ]{8}\d?\b`, null, "", ["Reisepass", "passport", "Passnummer", "Reisepassnummer", "Reisepass Nummer", "Reisepass-Nr", "Pass Nr"], true),
+    p(EntityType.PASSPORT, String.raw`\b[CFGHJK][0-9CFGHJKLMNPRTVWXYZ]{8}\d?\b`, null, "", PASSPORT_CONTEXT, true),
     // The separator after the city code is mandatory. When it was optional, a
     // contiguous letter run split across both groups and the hyphen was
     // consumed as the *second* separator, so any "LETTERS-DIGITS" token
@@ -330,7 +377,7 @@ const FR: CountryConfig = {
     p(EntityType.VAT, String.raw`\bFR\s?[0-9A-HJ-NP-Z]{2}\s?\d{9}\b`, "vat_fr"),
     p(EntityType.PHONE, String.raw`\b0[1-9][\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\+33\s?[1-9][\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}`),
-    p(EntityType.PASSPORT, String.raw`\b\d{2}[A-Z]{2}\d{5}\b`, null, "", ["passeport", "passport", "numéro de passeport"], true),
+    p(EntityType.PASSPORT, String.raw`\b\d{2}[A-Z]{2}\d{5}\b`, null, "", PASSPORT_CONTEXT, true),
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z]{2}[\-\s]?\d{3}[\-\s]?[A-Z]{2}\b`),
     p(EntityType.POSTAL_CODE, String.raw`\b(?:0[1-9]|[1-8]\d|9[0-5]|97[1-6])\d{3}\b`, null, "", ["code postal", "CP", "postal code", "postcode", "adresse", "domicilié", "résidant", "rue", "avenue", "boulevard", "place", "chemin", "allée", "impasse", "ville"], true),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b\d{3}\s?\d{3}\s?\d{3}\b`, null, "", ["SIREN", "siren", "RCS", "entreprise", "immatricul", "numéro d'entreprise", "registre du commerce"], true),

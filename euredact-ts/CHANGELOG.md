@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Passport detection in all 31 countries, not four.** `BE`, `DE`, `FR` and
+  `NL` had a passport pattern; the other 27 had none, so a passport was
+  recognised in four countries out of thirty-one. A country-independent,
+  label-gated rule now covers the rest, alongside the per-country patterns
+  which stay and still decide their own cases.
+
+  The real defect was narrower than "26 missing patterns" and is fixed by the
+  same change. Every passport pattern kept its own context keywords, so a
+  passport was only recognised when its *shape* and its *label* came from the
+  same country: `Reisepass: CA1234567` was missed because the German pattern
+  rejects that alphabet while the Dutch pattern, whose shape fits, had never
+  heard of `Reisepass`. A foreign passport recorded in a German, Polish or
+  Greek document is the ordinary case, not the exotic one. All passport
+  patterns now share one multilingual keyword list.
+
+  The shapes come from the project canon (`prompts/pii_definitions.md`,
+  PASSPORT) rather than from invention: the EU pattern is 1–2 letters + 7
+  digits, and the UK is 9 digits, optionally `GBR`-prefixed. The canon's
+  position is that the EU converged on one shape, so 27 national regexes would
+  contradict it as well as being unverifiable against a corpus that carries
+  passports for four countries. Aligning to the canon also fixed a real miss:
+  an all-numeric passport was not detected at all while the rule required a
+  leading letter, the UK's own format among them. Requiring *exactly* nine
+  digits for the numeric form rejects an eight-digit date beside the word
+  "passport" on shape, before the label is consulted. The generic rule is deliberately permissive in shape and
+  leans entirely on the label, which is how the four existing patterns already
+  worked.
+
+  The bare Scandinavian `pass`, Finnish `passi`, Latvian `pase` and Lithuanian
+  `pasas` are deliberately absent from that list. Context matching is
+  substring, not word-boundary, so they fire inside `password`, `Passwort`,
+  `passenger`, `Passstrasse`, `passive`, `phase` — and `db_password=…` took
+  the span away from `SECRET`. Only compound forms are listed, and a test
+  asserts no keyword is short enough to hide inside another word.
+
+  One conformance vector per country that relies on the shared rule -- 27 of
+  them, so removing a keyword fails a named test rather than silently dropping
+  a country -- plus four covering the boundaries, and `tests/test_passport_coverage.py` in the Python SDK; the eight shared
+  conformance vectors run here too. Corpus
+  figures are unchanged: `make eval` reports the same recall, precision and
+  **the same false-positive counts** (1,230 / 2,370), so the wider keyword set
+  costs nothing measurable. *(rules-engine#23)*
+
 ## 0.5.1 (2026-09-24)
 
 No changes to this SDK. The version is kept in step with `euredact-python`,
