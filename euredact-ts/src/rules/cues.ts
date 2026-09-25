@@ -66,8 +66,20 @@ import { EntityType } from "../types.js";
  * How far back a cue may sit. Short on purpose: a cue is only evidence about
  * the value it introduces, which is the lesson of the postal-code year defect,
  * where a cue 150 characters away licensed every number in the window.
+ *
+ * This bounds how long a *label* may be, not how far it may sit from the
+ * value: every pattern is anchored with `$`, so the label still has to reach
+ * the span through a run-on or one qualifier word.
+ *
+ * 32 was too short for German tax labels, the longest the engine carries.
+ * "Steuerliche Identifikationsnummer " is 34 characters and
+ * "Steueridentifikationsnummer lautet: " is 36, so the label's own start sat
+ * outside the window and `(?<![A-Za-z0-9_])` had nothing to anchor against,
+ * leaving a critical-tier identifier in the clear (rules-engine#26). 44
+ * admits the longest with a qualifier: "Steuerliche Identifikationsnummer
+ * lautet: " is 42.
  */
-export const CUE_WINDOW = 32;
+export const CUE_WINDOW = 44;
 
 /**
  * (entity type, label pattern). Ordered: the first match wins, so the narrower
@@ -95,8 +107,15 @@ export const CUES: Array<[EntityType, RegExp]> = [
 
   // Tax number. Greece's ΑΦΜ is issued by the tax authority; the identity-card
   // number is the ΑΔΤ, above.
+  //
+  // The German long forms are spelled out rather than left to the run-on after
+  // `steuer-?id`. A cue may use its run-on *or* one qualifier word, never both,
+  // and "Steuer-IdNr lautet:" needs both: the run-on for "Nr" and the qualifier
+  // for "lautet". Naming the whole label leaves the qualifier free.
+  // "Steuerliche Identifikationsnummer" matched nothing at all — it is two
+  // words, and `steuer-?id` cannot reach across "liche " (rules-engine#26).
   [EntityType.TAX_ID,
-   /(?<![A-Za-z0-9_])(?:αφμ|α\.φ\.μ\.|steuer-?id|steuernummer|st\.?-?nr|stnr|tin|finanzamt\s+ist|tax\s*(?:id|no|number)|daňové\s*číslo|numer\s*podatkowy)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:αφμ|α\.φ\.μ\.|steuerliche\s*identifikations-?nummer|steuer-?identifikations-?nummer|steuer-?id-?nr\.?|steuer-?id|steuernummer|st\.?-?nr|stnr|tin|finanzamt\s+ist|tax\s*(?:id|no|number)|daňové\s*číslo|numer\s*podatkowy)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Health insurance: the insured person.
   [EntityType.HEALTH_INSURANCE,

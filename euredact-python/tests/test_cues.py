@@ -204,6 +204,63 @@ class TestDeclinedIdentifierRescue:
         assert types_of(sdk, "Tel: 85.03.19-284.73", ["BE"]) == []
 
 
+class TestLabelReachability:
+    """Every label the table carries must be able to reach its value.
+
+    A label longer than ``CUE_WINDOW`` is not a shorter cue -- it is no cue at
+    all, because the window holds only its tail and ``(?<![A-Za-z0-9_])`` has
+    nothing to anchor against. The failure is silent and reads exactly like a
+    label nobody added: ``sozialversicherungsnummer`` sat in the table
+    unreachable for the whole of 0.3.8, and at ``CUE_WINDOW = 32``
+    ``steuerliche identifikationsnummer`` was unreachable even adjacent, which
+    left a German tax identifier in the clear (rules-engine#26).
+
+    Only the tax case leaked end to end -- the others are also claimed by a
+    pattern of their own -- but a cue that cannot be reached is a defect
+    whether or not something else happens to cover for it, so this asserts the
+    reachability directly rather than through a redaction.
+    """
+
+    #: The longest literal label of each cue family, with the type it names.
+    LONG_LABELS = [
+        ("steuerliche identifikationsnummer", EntityType.TAX_ID),
+        ("steueridentifikationsnummer", EntityType.TAX_ID),
+        ("ondernemingen onder nummer", EntityType.CHAMBER_OF_COMMERCE),
+        ("sozialversicherungsnummer", EntityType.SSN),
+        ("rijksregisternummer", EntityType.NATIONAL_ID),
+        ("krankenversicherung", EntityType.HEALTH_INSURANCE),
+        ("organisationsnummer", EntityType.CHAMBER_OF_COMMERCE),
+        ("numéro d'entreprise", EntityType.CHAMBER_OF_COMMERCE),
+        ("identifikační číslo", EntityType.CHAMBER_OF_COMMERCE),
+        ("anställningsnummer", EntityType.INTERNAL_ID),
+        ("versichertennummer", EntityType.HEALTH_INSURANCE),
+        ("aansluitingsnummer", EntityType.HEALTH_INSURANCE),
+        ("ondernemingsnummer", EntityType.CHAMBER_OF_COMMERCE),
+    ]
+
+    @pytest.mark.parametrize(("label", "expected"), LONG_LABELS)
+    def test_a_long_label_is_reachable_adjacent(
+        self, label: str, expected: EntityType
+    ) -> None:
+        text = f"{label}: 123456789"
+        assert cued_type(text, len(label) + 2) == expected
+
+    @pytest.mark.parametrize(("label", "expected"), LONG_LABELS)
+    def test_a_long_label_is_reachable_across_a_qualifier(
+        self, label: str, expected: EntityType
+    ) -> None:
+        # The qualifier branch needs label + space + the word + punctuation, so
+        # it is the case that runs out of window first.
+        text = f"{label} lautet: 123456789"
+        assert cued_type(text, len(label) + 9) == expected
+
+    def test_the_window_admits_the_longest_label_with_a_qualifier(self) -> None:
+        longest = max((label for label, _ in self.LONG_LABELS), key=len)
+        assert len(f"{longest} lautet: ") <= CUE_WINDOW, (
+            f"CUE_WINDOW={CUE_WINDOW} cannot hold {longest!r} and a qualifier"
+        )
+
+
 class TestCrossSdkCueTable:
     """The TypeScript cue table is generated from this one and must match it.
 

@@ -47,6 +47,15 @@
   **the same false-positive counts** (1,230 / 2,370), so the wider keyword set
   costs nothing measurable. *(rules-engine#23)*
 
+### Fixed
+
+- **A German tax identifier was left in the clear under its own official
+  label**, identically to the Python SDK: `Steuerliche Identifikationsnummer`
+  matched no cue at all, and `Steuer-IdNr lautet:` could not reach across the
+  qualifier word. `CUE_WINDOW` moves from 32 to 44 and the German long forms
+  are spelled out in the tax cue. The cue table and window are asserted equal
+  across the two SDKs, so both moved together. *(rules-engine#26)*
+
 ## 0.5.1 (2026-09-24)
 
 No changes to this SDK. The version is kept in step with `euredact-python`,

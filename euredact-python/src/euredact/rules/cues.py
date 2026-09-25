@@ -64,8 +64,17 @@ from euredact.types import EntityType
 #: Raising it is not free: the qualifier branch needs label + space + up to 20
 #: characters + punctuation, so a longer window lets short labels reach a
 #: qualifier they could not reach before. Measured over the 152,300-document
-#: corpus when this moved from 22 to 32.
-CUE_WINDOW = 32
+#: corpus when this moved from 22 to 32, and again from 32 to 44.
+#:
+#: 32 was in turn too short for German tax labels, which are the longest the
+#: engine carries. ``"Steuerliche Identifikationsnummer "`` is 34 characters
+#: and ``"Steueridentifikationsnummer lautet: "`` is 36, so in both the label's
+#: own start sat outside the window and ``(?<![A-Za-z0-9_])`` had nothing to
+#: anchor against — the identical failure described above, on a longer
+#: compound, and it left a critical-tier identifier in the clear
+#: (rules-engine#26). 44 admits the longest of them with a qualifier:
+#: ``"Steuerliche Identifikationsnummer lautet: "`` is 42.
+CUE_WINDOW = 44
 
 #: ASCII-only left boundary. See the module docstring for why this is not ``\b``.
 _B = r"(?<![A-Za-z0-9_])"
@@ -164,8 +173,22 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
     # Greece's ΑΦΜ is issued by the tax authority; the identity-card number
     # is the ΑΔΤ, above. The engine used to return NATIONAL_ID for a value
     # cued ΑΦΜ, which is wrong independently of the phone problem.
+    # The German long forms are spelled out rather than left to the run-on
+    # after `steuer-?id`. A cue may use its run-on *or* one qualifier word,
+    # never both (see `_tail`), and "Steuer-IdNr lautet:" needs both: the
+    # run-on to absorb "Nr" and the qualifier to absorb "lautet". Naming the
+    # whole label leaves the qualifier free, so the official forms work in
+    # running prose and not only immediately before the value.
+    #
+    # "Steuerliche Identifikationsnummer" -- the form the Bundeszentralamt
+    # für Steuern uses in correspondence -- matched nothing at all: it is two
+    # words, and `steuer-?id` cannot reach across "liche ". Both leaked a
+    # critical-tier identifier in full (issue rules-engine#26).
     (EntityType.TAX_ID, re.compile(
-        _B + r"(?:αφμ|α\.φ\.μ\.|steuer-?id|steuernummer|st\.?-?nr|stnr|tin"
+        _B + r"(?:αφμ|α\.φ\.μ\."
+        r"|steuerliche\s*identifikations-?nummer"
+        r"|steuer-?identifikations-?nummer|steuer-?id-?nr\.?|steuer-?id"
+        r"|steuernummer|st\.?-?nr|stnr|tin"
         r"|finanzamt\s+ist|tax\s*(?:id|no|number)|daňové\s*číslo"
         r"|numer\s*podatkowy)" + _SEP, re.IGNORECASE)),
 
