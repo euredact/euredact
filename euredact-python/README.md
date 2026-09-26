@@ -444,6 +444,69 @@ plain string (e.g. `"EMPLOYEE_ID"`) rather than an `EntityType` enum member.
 
 String enum: `"rules"` or `"cloud"`.
 
+## Batch processing and concurrency
+
+Three entry points, and the difference between them is memory and ordering, not
+detection. All three load the country configurations once instead of per
+document, which is the whole reason to prefer them to a loop.
+
+| Call | Shape | Use when |
+|---|---|---|
+| `redact_batch(texts)` | `list[str] -> list[RedactResult]` | you have a list and want it back in order |
+| `aredact_batch(texts, max_concurrency=4)` | `list[str] -> list[RedactResult]`, awaited | you are in async code; work runs in a thread pool |
+| `redact_iter(texts)` | `Iterator[str] -> Iterator[RedactResult]` | the input does not fit in memory |
+
+```python
+import asyncio
+import euredact
+
+docs = ["Mijn BSN is 111222333.", "IBAN NL91ABNA0417164300."]
+
+# Synchronous, order preserved.
+for result in euredact.redact_batch(docs, countries=["NL"]):
+    print(result.redacted_text)
+
+# Async, four at a time. The engine is CPU-bound, so this offloads to threads
+# rather than pretending to be I/O.
+results = asyncio.run(euredact.aredact_batch(docs, countries=["NL"], max_concurrency=8))
+
+# Streaming: nothing accumulates.
+with open("corpus.txt") as fh:
+    for result in euredact.redact_iter(fh, countries=["NL"]):
+        ...
+```
+
+`max_concurrency` defaults to 4. Raising it past your core count does not help —
+the work is regex matching, not waiting.
+
+### Reuse one instance
+
+The module-level functions share a single hidden instance, which is usually what
+you want. Construct your own when you need the configuration to be per-tenant:
+custom patterns, an allowlist and the result cache all live on the instance.
+
+```python
+from euredact import EuRedact
+
+engine = EuRedact(allowlist=["ACME Corporation"])
+engine.add_custom_pattern("CASE_REF", r"CASE-\d{8}")
+
+engine.redact_batch(
+    ["ACME Corporation, ref CASE-20260401, BSN 111222333."], countries=["NL"]
+)[0].redacted_text
+# 'ACME Corporation, ref [CASE_REF], BSN [NATIONAL_ID].'
+```
+
+Reusing an instance is what makes the cache useful across documents. Instances
+are safe to share across threads and across concurrent async tasks.
+
+### Tokens and referential labels do not span a batch
+
+`tokenize=True` mints tokens **per call**, so item 3 of a batch does not share a
+token with item 1 even for the same value. If two documents must agree on a
+label, redact them as one text, or use `referential_integrity=True`, whose
+`TYPE_n` numbering is per instance rather than per call.
+
 ## Cloud tier
 
 > **Status: private alpha.** The cloud tier is in closed testing — it is **not**
@@ -492,6 +555,70 @@ window is polled transparently — callers never write that branch. Oversized
 input raises `TooLargeError` (413): the service refuses it rather than
 chunking, because the model has never seen a chunk boundary.
 
+### What leaves your machine
+
+Be precise about this, because it is the question a security review asks first
+and the answer is not "only the leftovers".
+
+In `mode="cloud"` the **whole document** is sent to the service over TLS. The
+local rules engine does not run first and nothing is stripped before the
+request: `redact()` hands off to the cloud path before normalisation, and the
+request body is the text you passed in.
+
+```
+mode="cloud"      your text ──TLS──▶ service (its own rules engine + model)
+                  masked text ◀────── spans + redacted_text
+```
+
+The service runs the same rules engine server-side and adds the model, which is
+why cloud results are a superset of rules results rather than a different
+answer. The local SDK touches the response, not the request: when `tokenize` or
+an `allowlist` is set, it rebuilds the masked text from the spans the service
+returned, and it verifies every span still matches the document before doing so.
+
+`detect_dates` is the one option not forwarded — the service always runs with
+dates on, because that is what the model was trained against. It can only cause
+more to be detected, never less.
+
+### Keeping identifiers local
+
+If your requirement is that structured identifiers **never leave your
+infrastructure**, do not use `mode="cloud"` for that — compose the local engine
+with whatever model you like instead. This is what `tokenize=True` is for:
+
+```python
+import euredact
+
+prompt = "Stuur een mail naar Bas Verhoeven (bas@example.nl) over NL91ABNA0417164300."
+
+# 1. Mask locally. Nothing has left the process.
+local = euredact.redact(prompt, countries=["NL"], tokenize=True)
+local.redacted_text
+# 'Stuur een mail naar Bas Verhoeven (EMAIL_S5SH) over BANK_ACCOUNT_5XXR.'
+local.tokens
+# {'BANK_ACCOUNT_5XXR': 'NL91ABNA0417164300', 'EMAIL_S5SH': 'bas@example.nl'}
+
+# 2. Send only the masked text to any model, ours or someone else's.
+answer = call_your_model(local.redacted_text)
+
+# 3. Put the real values back locally.
+euredact.restore(answer, local.tokens)
+```
+
+The token suffixes are random per call, so yours will differ.
+
+**Read that output carefully: `Bas Verhoeven` is still there.** That is the
+whole trade-off and it is why the cloud tier exists. The local engine masks what
+has a shape — the IBAN and the address — and cannot mask a name, an employer or
+a diagnosis, because it cannot find them. So this pattern keeps every structured
+identifier inside your process and sends the prose, names included.
+`mode="cloud"` sends everything and gets both back.
+
+These are different trust boundaries, not two speeds of the same thing. If names
+must be masked *and* identifiers must not leave your infrastructure, neither
+option does that today; run the model yourself against `local.redacted_text`.
+
+
 ### `euredact.configure()`
 
 ```python
@@ -536,6 +663,81 @@ cloud tier was stubbed until this release, so it was never emitted. Code
 matching the *string* `"NAME"` should be updated; `LEGACY_TYPE_ALIASES`
 publishes the mapping, and `STREET_ADDRESS` → `ADDRESS` and
 `NATIONALITY_ETHNICITY` → `SENSITIVE_ATTRIBUTE` are recognised the same way.
+
+## What `countries` actually controls
+
+This is the parameter most often misread, and reading it wrongly leads to
+under-redaction in exactly the case you care about — a foreign identifier in a
+domestic document. So, precisely:
+
+> `countries` decides how a detection is **attributed and scored**.
+> It does **not** decide what gets **found**.
+
+Country-specific patterns for every supported country run on every document,
+whatever you declare. Declaring `countries=["NL"]` does not switch the Belgian
+patterns off; it says "this document is Dutch", and anything Belgian that turns
+up is still detected and still masked — it is just flagged as sitting outside
+what you declared.
+
+The same Belgian national number, under four different calls:
+
+```python
+import euredact
+
+text = "Rijksregisternummer 85.07.30-033.61 van onze klant."
+
+for kwargs in ({"countries": ["NL"]},
+               {"countries": ["BE"]},
+               {},
+               {"countries": ["NL"], "country_hint": ["BE"]}):
+    result = euredact.redact(text, **kwargs)
+    detection = result.detections[0]
+    print(result.redacted_text, "|", result.detection_mode,
+          "| country:", detection.country,
+          "| country_confidence:", round(detection.country_confidence or 0, 2),
+          "| out_of_scope:", detection.out_of_scope)
+```
+
+```
+Rijksregisternummer [NATIONAL_ID] van onze klant. | declared | country: BE | country_confidence: 0 | out_of_scope: True
+Rijksregisternummer [NATIONAL_ID] van onze klant. | declared | country: BE | country_confidence: 0.88 | out_of_scope: False
+Rijksregisternummer [NATIONAL_ID] van onze klant. | inferred | country: BE | country_confidence: 0 | out_of_scope: False
+Rijksregisternummer [NATIONAL_ID] van onze klant. | declared | country: BE | country_confidence: 0.88 | out_of_scope: True
+```
+
+**The masked output is byte-identical in all four.** What moved is the metadata.
+
+| You pass | Effect on what is found | Effect on labelling |
+|---|---|---|
+| `countries=["NL"]` | None — every country's patterns still run | Attributed normally; a non-Dutch hit gets `out_of_scope=True` and `country_confidence=0.0` |
+| `countries=["BE"]` | None | The Belgian hit is corroborated: `country_confidence=0.88`, `out_of_scope=False` |
+| `countries=None` | None | `detection_mode="inferred"`; the country is inferred from the document and nothing is out of scope, because nothing was declared |
+| `country_hint=["BE"]` | None | A *prior*: it corroborates Belgian attribution **without** widening or narrowing scope, so `out_of_scope` still reflects `countries` alone |
+
+### How to use each one
+
+- **`countries=[...]`** — you know where the document is from. Use it. It
+  improves attribution and makes `out_of_scope` meaningful, and it is the
+  cheapest path because country inference is skipped.
+- **`countries=None`** — you do not know. The engine infers from the document
+  and reports `inferred_countries` with confidences.
+- **`country_hint=[...]`** — you have a weak signal (the customer's billing
+  country, the mailbox a document arrived in) that should resolve ambiguity
+  without declaring scope. Added in 0.3.2 precisely so that a hint could not be
+  mistaken for a scope restriction.
+
+### Why it works this way
+
+Until 0.3.2, `countries` *did* gate detection, and 0.3.3 fixed the remaining
+case where it "could change which spans were found, not just how they were
+labelled". Both were changed deliberately: a redaction library that hides a
+Belgian national number because you told it the document was Dutch has failed
+at the only job it has. Scoping is a reporting concern; masking is not.
+
+The practical consequence: **do not use `countries` as a filter.** If you only
+want Dutch detections in your output, filter on
+`detection.country == "NL"` or on `detection.out_of_scope` after the call —
+the value was still masked in the text either way.
 
 ## Country codes
 
