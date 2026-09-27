@@ -56,6 +56,19 @@ narrative lives. Sections here use that vocabulary
   since a two-digit year does not reveal the century. Six shared conformance
   vectors run in both SDKs. *(rules-engine#37)*
 
+- **The same two fixes as the Python SDK.** One shared `DOB_CONTEXT` covering
+  all 31 countries instead of seven languages, replacing the two divergent
+  copies -- `DOB_ISO_CONTEXT` was a shorter duplicate, so ISO dates were gated
+  on fewer keywords than `DD/MM/YYYY` ones. Every entry screened against the
+  corpus for substring hazards, which is why `"born "` carries its trailing
+  space and `fædd` is absent. *(rules-engine#38)*
+- The assigned-secret pattern no longer ends a span on sentence punctuation, so
+  `credentials. Reisepass: CA1234567.` is a `PASSPORT` rather than a `SECRET`
+  whose span includes the full stop. *(rules-engine#35)*
+
+  18 new shared conformance vectors -- one per language plus a bare date that
+  must not become a birth date -- run in both SDKs.
+
 ## 0.5.1 (2026-09-25)
 
 ### Added

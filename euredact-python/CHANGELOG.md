@@ -147,6 +147,60 @@ narrative lives. Sections here use that vocabulary
   cannot separate -- those need the phone cue, not the checksum.
   *(rules-engine#37)*
 
+- **33,441 dates of birth were left unmasked because the context list covered
+  seven languages of thirty-one.** `DOB` recall was 62.8% over the
+  152,300-record corpus -- the largest recall gap in the evaluation, and
+  excluded from the headline figure, so "99.6% recall (excl DOB)" was true while
+  DOB itself sat at 63%.
+
+  The pattern was never the problem. Per-country recall was bimodal: **eleven
+  countries at exactly 100%** -- German, Dutch, French, Spanish, Portuguese,
+  precisely the languages the list carried -- against twenty at 42-51%. Every
+  missed value was a standard date in a format the pattern already matched,
+  behind a birth keyword the list did not hold:
+
+      født 15/05/1994        (DK, NO)    syntynyt 08.04.1994     (FI)
+      född 1958-04-23        (SE)        fæddur 12.06.1962       (IS)
+      γεννηθείς/είσα ...     (EL, CY)    urodzony 12.06.1958     (PL)
+      born 07/05/1980        (UK, IE)    nato/a il 13/06/1994    (IT)
+
+  The last two are gaps *inside* covered languages, and the reason the UK,
+  Ireland and Italy were not at 100% either: the list held `date of birth` but
+  not bare `born`, and `nato il`/`nata il` but not the combined `nato/a il`.
+
+  One shared `DOB_CONTEXT` now covers all 31 countries, and it replaces **two**
+  divergent copies -- the ISO-format list was a shorter duplicate missing
+  `nato il`, `nascido` and `geburtstag`, so `YYYY-MM-DD` dates were gated on
+  fewer keywords than `DD/MM/YYYY` ones for no stated reason.
+
+  **DOB recall is now 100.0% in all 31 countries**, all 33,441 recovered.
+
+  Every entry was screened against the 29.2-million-character corpus for
+  occurrences inside a longer word, because context matching is substring and
+  not word-boundary. Two candidates were rejected by that screen: `fædd`, which
+  lives inside `fæddur`, and bare `born`, found inside `gabornagy` and
+  `gabornemeth` -- Hungarian names appearing as e-mail local parts. `"born "`
+  with the trailing space has 5,581 corpus hits and no embedded occurrences, so
+  that is the listed form. The same reasoning kept bare `pass` out of
+  `PASSPORT_CONTEXT` in 0.5.1. `tests/test_dob_context.py` asserts it, with one
+  named case per language so removing a keyword fails loudly. *(rules-engine#38)*
+
+- **An assigned secret's span swallowed the sentence's full stop, and with it
+  the type.** `credentials. Reisepass: CA1234567.` reported
+  `SECRET 'CA1234567.'` -- a passport number plus the period that ended the
+  sentence. The pattern was `(?<=[:=] )[^\s]{8,}`, and `[^\s]` does not stop at
+  a full stop.
+
+  The mistype was a consequence rather than a second defect: `PASSPORT` claimed
+  `CA1234567` and `SECRET` claimed `CA1234567.`, so deduplication saw two
+  overlapping candidates instead of one contested span and the cue table's
+  promotion of `PASSPORT` never applied. With the span corrected the two are
+  identical, the cue resolves it, and all three reported cases return
+  `PASSPORT`. The final character may now be anything except sentence
+  punctuation, so base64 padding stays inside the span
+  (`secret: aGVsbG8=`) while a period does not
+  (`password: Tr0ub4dor&3xKcd.`). *(rules-engine#35)*
+
 ## 0.5.1 (2026-09-25)
 
 ### Added

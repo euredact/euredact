@@ -730,8 +730,14 @@ def suppress_sequential(text: str, match: RawMatch) -> bool:
 # may not trade a false negative for tidiness. A placeholder for a *custom*
 # pattern is therefore not covered -- the suppressor cannot know which names
 # were registered.
+# The closing bracket is optional, and that is load-bearing rather than
+# permissive. Another pattern's span need not agree with this one about where
+# the marker ends: the assigned-secret rule stops before sentence punctuation
+# (rules-engine#35), so it claims "[POSTAL_CODE" without the "]" and a guard
+# that required the closer let it through. The opening bracket is still
+# required, so a bare word that happens to be a type name is not swallowed.
 _PLACEHOLDER = re.compile(
-    r"\A(?:\[([A-Z][A-Z0-9_]*)\]"          # [TYPE]
+    r"\A(?:\[([A-Z][A-Z0-9_]*)\]?"         # [TYPE] or a span that lost the ]
     r"|([A-Z][A-Z0-9_]*?)_(?:\d+|[A-HJ-NP-Z2-9]{4}))\Z"   # TYPE_1 / TYPE_K7Q2
 )
 

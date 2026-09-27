@@ -117,19 +117,50 @@ const SECRET_CONTEXT = [
 // DOB context keywords (reused across SHARED patterns)
 // ---------------------------------------------------------------------------
 
+// Every way the documents this engine sees introduce a date of birth.
+//
+// DOB recall was 62.8% -- 33,441 unmasked birth dates -- because this covered
+// seven languages of thirty-one. Eleven countries scored exactly 100% (the
+// listed languages) while twenty sat at 42-51%, which is what proved it was
+// coverage rather than capability (rules-engine#38).
+//
+// Matching is substring, not word-boundary, so every entry was screened against
+// the 29.2-million-character corpus for occurrences inside a longer word. Two
+// were rejected: `fædd` lives inside `fæddur`, and `born` was found inside
+// `gabornagy` and `gabornemeth` -- Hungarian names as e-mail local parts -- so
+// `"born "` with the trailing space is listed instead.
+//
+// DOB_CONTEXT is gone: it was a second, shorter copy missing `nato il`,
+// `nascido`, `geburtstag` and more, so ISO dates were gated on fewer keywords
+// than DD/MM/YYYY ones for no stated reason.
 const DOB_CONTEXT = [
+  // Germanic / Romance -- the original set, kept verbatim.
   "geboren", "geboortedatum", "date de naissance", "né le", "née le",
   "né(e) le", "nee le", "nee(e) le", "date of birth", "DOB",
   "Geburtsdatum", "geboren am", "geboren op", "nascido", "nacido",
   "data di nascita", "nato il", "nata il", "geb.", "geb.datum", "geb ",
   "birth date", "birthday", "naissance", "geboorte", "geburtstag",
-];
-
-const DOB_ISO_CONTEXT = [
-  "geboren", "geboortedatum", "date de naissance", "né le", "née le",
-  "né(e) le", "nee le", "date of birth", "DOB", "Geburtsdatum",
-  "geboren am", "geboren op", "geb.", "birth date", "birthday",
-  "naissance", "geboorte",
+  // English and Italian forms the list was missing.
+  "born ", "d.o.b", "nato/a il",
+  // Nordic.
+  "født", "fødselsdato", "född", "födelsedatum",
+  "syntynyt", "syntymäaika", "fæddur", "fæðingardagur",
+  // Greek -- Greece and Cyprus.
+  "γεννηθείς", "γεννήθηκε", "ημερομηνία γέννησης",
+  // West Slavic.
+  "urodzony", "urodzona", "data urodzenia",
+  "narozen", "datum narození", "narodený", "dátum narodenia",
+  // Hungarian, Romanian, Bulgarian.
+  "született", "születési", "născut", "născută", "data nașterii",
+  "роден", "родена", "дата на раждане",
+  // South Slavic.
+  "rođen", "rođena", "datum rođenja", "rojen", "rojena", "datum rojstva",
+  // Baltic.
+  "sündinud", "sünniaeg", "dzimis", "dzimusi", "dzimšanas datums",
+  "gimęs", "gimusi", "gimimo data",
+  // Maltese, Irish, Turkish (Cyprus).
+  "twieled", "twieldet", "data tat-twelid",
+  "rugadh", "dáta breithe", "doğum tarihi",
 ];
 
 const DATE_OF_DEATH_CONTEXT = [
@@ -239,7 +270,12 @@ const SHARED: CountryConfig = {
     // --- Secret / API Key (connection strings with embedded credentials) ---
     p(EntityType.SECRET, String.raw`(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq):\/\/[^\s:]{1,256}:[^\s@]{1,256}@[^\s]+`, null, "Connection string with credentials"),
     // --- Secret / API Key (assignment-based: KEY=value or KEY: value) ---
-    p(EntityType.SECRET, String.raw`(?<=[:=] )\S{8,}|(?<=[:=])\S{8,}`, "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
+    // The final character may not be sentence punctuation. `\S` does not stop
+    // at a full stop, so "Reisepass: CA1234567." was claimed as the
+    // ten-character span "CA1234567." -- a passport number plus the sentence's
+    // period, masked as a credential because a "credentials" word sat within
+    // the context window (rules-engine#35).
+    p(EntityType.SECRET, String.raw`(?<=[:=] )\S{7,}[^\s.,;:!?)'"]|(?<=[:=])\S{7,}[^\s.,;:!?)'"]`, "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
     // --- Secret / API Key (entropy-based fallback for longer tokens) ---
     // Only the *trailing* \b is replaced. It could not match when the token run
     // ended on "-", "+" or "/", so the engine backtracked across two
@@ -257,7 +293,7 @@ const SHARED: CountryConfig = {
     p(EntityType.SECRET, String.raw`\b[A-Za-z0-9_\-+/]{24,}[A-Za-z0-9_\-+/=]*(?![A-Za-z0-9_\-+/=])`, "high_entropy", "High-entropy token", SECRET_CONTEXT, true),
     p(EntityType.DOB, String.raw`\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b`, null, "DD/MM/YYYY", DOB_CONTEXT, true),
     p(EntityType.DATE_OF_DEATH, String.raw`\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b`, null, "", DATE_OF_DEATH_CONTEXT, true),
-    p(EntityType.DOB, String.raw`\b(?:19|20)\d{2}[/.\-](?:0[1-9]|1[0-2])[/.\-](?:0[1-9]|[12][0-9]|3[01])\b`, null, "ISO YYYY-MM-DD", DOB_ISO_CONTEXT, true),
+    p(EntityType.DOB, String.raw`\b(?:19|20)\d{2}[/.\-](?:0[1-9]|1[0-2])[/.\-](?:0[1-9]|[12][0-9]|3[01])\b`, null, "ISO YYYY-MM-DD", DOB_CONTEXT, true),
   ],
 };
 

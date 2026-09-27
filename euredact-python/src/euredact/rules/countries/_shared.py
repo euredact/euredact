@@ -41,6 +41,61 @@ _GENERIC_IBAN = _build_iban_pattern()
 #: fits, had never heard of "Reisepass". A foreign passport recorded in a
 #: German, Polish or Greek document is the ordinary case, not the exotic one
 #: (issue rules-engine#23).
+#: Every way the documents this engine sees introduce a date of birth.
+#:
+#: DOB recall was 62.8% -- 33,441 unmasked birth dates, the largest recall gap
+#: in the evaluation -- because this vocabulary covered seven languages of
+#: thirty-one. The distribution proved it was coverage and not capability:
+#: eleven countries scored exactly 100% (German, Dutch, French, Spanish,
+#: Portuguese -- the listed languages) while twenty sat at 42-51%
+#: (rules-engine#38).
+#:
+#: Two gaps were *inside* covered languages and are the reason UK, IE and IT
+#: were not at 100% either: bare ``born`` and the slash form ``nato/a il``.
+#:
+#: Matching is substring, not word-boundary, so every entry was screened
+#: against the 29.2-million-character corpus for occurrences inside a longer
+#: word. Two were rejected by that screen:
+#:
+#: * ``fædd`` -- lives inside ``fæddur``, so it adds nothing and doubles the
+#:   hits. ``fæddur`` is listed instead.
+#: * ``born`` -- found inside ``gabornagy`` and ``gabornemeth``, Hungarian
+#:   names appearing as e-mail local parts. ``"born "`` with the trailing space
+#:   has 5,581 corpus hits and no embedded occurrences, so that is the form
+#:   listed. The same reasoning kept bare ``pass`` out of PASSPORT_CONTEXT.
+DOB_CONTEXT = [
+    # Germanic / Romance — the original set, kept verbatim.
+    "geboren", "geboortedatum", "date de naissance", "né le", "née le",
+    "né(e) le", "nee le", "nee(e) le",
+    "date of birth", "DOB", "Geburtsdatum", "geboren am", "geboren op",
+    "nascido", "nacido", "data di nascita", "nato il", "nata il",
+    "geb.", "geb.datum", "geb ", "birth date", "birthday",
+    "naissance", "geboorte", "geburtstag",
+    # English and Italian forms the list was missing.
+    "born ", "d.o.b",
+    "nato/a il",
+    # Nordic.
+    "født", "fødselsdato", "född", "födelsedatum",
+    "syntynyt", "syntymäaika", "fæddur", "fæðingardagur",
+    # Greek — Greece and Cyprus.
+    "γεννηθείς", "γεννήθηκε", "ημερομηνία γέννησης",
+    # West Slavic.
+    "urodzony", "urodzona", "data urodzenia",
+    "narozen", "datum narození", "narodený", "dátum narodenia",
+    # Hungarian, Romanian, Bulgarian.
+    "született", "születési", "născut", "născută", "data nașterii",
+    "роден", "родена", "дата на раждане",
+    # South Slavic.
+    "rođen", "rođena", "datum rođenja", "rojen", "rojena", "datum rojstva",
+    # Baltic.
+    "sündinud", "sünniaeg", "dzimis", "dzimusi", "dzimšanas datums",
+    "gimęs", "gimusi", "gimimo data",
+    # Maltese, Irish, Turkish (Cyprus).
+    "twieled", "twieldet", "data tat-twelid",
+    "rugadh", "dáta breithe", "doğum tarihi",
+]
+
+
 PASSPORT_CONTEXT = [
     # English
     "passport", "passport no", "passport number", "travel document",
@@ -526,7 +581,25 @@ class SharedConfig(CountryConfig):
             # --- Secret / API Key (assignment-based: KEY=value or KEY: value) ---
             PatternDef(
                 entity_type=EntityType.SECRET,
-                pattern=r"(?<=[:=] )[^\s]{8,}|(?<=[:=])[^\s]{8,}",
+                # The final character may not be sentence punctuation. `[^\s]`
+                # does not stop at a full stop, so "Reisepass: CA1234567." was
+                # claimed as the ten-character span "CA1234567." -- a passport
+                # number plus the sentence's period, masked as a credential
+                # because a "credentials" word sat within the context window.
+                # Widening a span over its neighbour's punctuation is the same
+                # class as the phone pattern absorbing a trailing ")" in
+                # rules-engine#3 (rules-engine#35).
+                #
+                # "]" and "}" are *allowed* as the final character, and ")" is
+                # not. The span begins immediately after the ": ", so an opening
+                # bracket is inside it and its closer balances -- excluding "]"
+                # turned "[AKIA...]" into a span missing its bracket, which
+                # masked to "[SECRET]]" and, worse, slipped past the
+                # placeholder guard for "[POSTAL_CODE" (rules-engine#33). A
+                # parenthesis is the other way round: "(secret: x)" opens
+                # before the colon, so its ")" would be unbalanced.
+                pattern=r"(?<=[:=] )[^\s]{7,}[^\s.,;:!?)'\"]"
+                        r"|(?<=[:=])[^\s]{7,}[^\s.,;:!?)'\"]",
                 validator="high_entropy",
                 description="Assigned secret value",
                 context_keywords=SECRET_CONTEXT,
@@ -565,14 +638,7 @@ class SharedConfig(CountryConfig):
                 pattern=r"\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b",
                 validator=None,
                 description="Date in DD/MM/YYYY format (EU standard) — requires context",
-                context_keywords=[
-                    "geboren", "geboortedatum", "date de naissance", "né le", "née le",
-                    "né(e) le", "nee le", "nee(e) le",
-                    "date of birth", "DOB", "Geburtsdatum", "geboren am", "geboren op",
-                    "nascido", "nacido", "data di nascita", "nato il", "nata il",
-                    "geb.", "geb.datum", "geb ", "birth date", "birthday",
-                    "naissance", "geboorte", "geburtstag",
-                ],
+                context_keywords=DOB_CONTEXT,
                 requires_context=True,
             ),
             # --- Date of Death (requires context) ---
@@ -594,12 +660,7 @@ class SharedConfig(CountryConfig):
                 pattern=r"\b(?:19|20)\d{2}[/.\-](?:0[1-9]|1[0-2])[/.\-](?:0[1-9]|[12][0-9]|3[01])\b",
                 validator=None,
                 description="Date in YYYY-MM-DD format (ISO) — requires context",
-                context_keywords=[
-                    "geboren", "geboortedatum", "date de naissance", "né le", "née le",
-                    "né(e) le", "nee le",
-                    "date of birth", "DOB", "Geburtsdatum", "geboren am", "geboren op",
-                    "geb.", "birth date", "birthday", "naissance", "geboorte",
-                ],
+                context_keywords=DOB_CONTEXT,
                 requires_context=True,
             ),
         ]

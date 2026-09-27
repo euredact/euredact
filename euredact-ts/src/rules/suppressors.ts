@@ -372,7 +372,11 @@ function suppressSequential(_text: string, match: RawMatch): boolean {
 // Only real entity-type names count. Guarding any bracketed upper-case token
 // would be simpler and wrong: `[AKIAIOSFODNN7EXAMPLE]` is one, and also a live
 // AWS key. A placeholder for a *custom* pattern is therefore not covered.
-const PLACEHOLDER = /^(?:\[([A-Z][A-Z0-9_]*)\]|([A-Z][A-Z0-9_]*?)_(?:\d+|[A-HJ-NP-Z2-9]{4}))$/;
+// The closing bracket is optional: another pattern's span need not agree with
+// this one about where the marker ends. The assigned-secret rule stops before
+// sentence punctuation (rules-engine#35), so it claims "[POSTAL_CODE" without
+// the "]". The opening bracket is still required.
+const PLACEHOLDER = /^(?:\[([A-Z][A-Z0-9_]*)\]?|([A-Z][A-Z0-9_]*?)_(?:\d+|[A-HJ-NP-Z2-9]{4}))$/;
 
 const KNOWN_TYPE_NAMES: ReadonlySet<string> = new Set(Object.values(EntityType));
 

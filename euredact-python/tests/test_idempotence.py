@@ -76,3 +76,31 @@ class TestIdempotence:
         for marker in ("[DOB]", "[NATIONAL_ID]", "[EMAIL]", "[POSTAL_CODE]"):
             assert marker in once, marker
         assert "[SECRET]" not in once.split("VALUES")[1]
+
+
+class TestTheGuardSurvivesOtherPatternsSpans:
+    """A placeholder is engine output whatever span another pattern gives it.
+
+    The assigned-secret rule stops before sentence punctuation
+    (rules-engine#35), so it claims ``[POSTAL_CODE`` without the closing
+    bracket. A guard that required the ``]`` let that straight through, and the
+    two fixes only met when both landed on main -- 30 of these cases failed.
+    """
+
+    @pytest.mark.parametrize("type_name", ["POSTAL_CODE", "NATIONAL_ID", "BANK_ACCOUNT"])
+    def test_a_span_missing_the_closing_bracket_is_still_a_placeholder(
+        self, type_name: str
+    ) -> None:
+        from euredact.rules.suppressors import _PLACEHOLDER, _known_type_names
+
+        for span in (f"[{type_name}]", f"[{type_name}"):
+            found = _PLACEHOLDER.match(span)
+            assert found is not None, span
+            assert (found.group(1) or found.group(2)) in _known_type_names(), span
+
+    def test_a_bare_type_name_without_a_bracket_is_not_a_placeholder(self) -> None:
+        # The opening bracket stays required, so an ordinary word that happens
+        # to be a type name is still scanned normally.
+        from euredact.rules.suppressors import _PLACEHOLDER
+
+        assert _PLACEHOLDER.match("POSTAL_CODE") is None
