@@ -23,6 +23,13 @@ narrative lives. Sections here use that vocabulary
   parallelism, and real parallelism means `node:worker_threads`.
 - **A root [`CHANGELOG.md`](../CHANGELOG.md)** covering both SDKs in strict
   [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) form.
+- **43 new shared conformance vectors**, closing gaps where a change was applied
+  across many countries and pinned in only a few: one per changed VAT pattern
+  (22, from `rules-engine#30`), one per country whose birth-date keyword had no
+  vector (14, from `rules-engine#38` — `tests/test_dob_context.py` is
+  Python-only, so this SDK had no DOB coverage for them), the Belgian and French
+  national passport patterns, and two more for the account-run guard.
+  *(rules-engine#44)*
 
 ### Fixed
 

@@ -3524,6 +3524,564 @@
         "DOB"
       ],
       "notes": "Widening the keyword list must not make every date a birth date. requires_context=True is what bounds a shape this generic."
+    },
+    {
+      "id": "vat-spaced-at",
+      "text": "UID-Nummer: ATU 36438508",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "ATU 36438508"
+        ]
+      },
+      "notes": "Separator tolerance for AT. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-bg",
+      "text": "ДДС номер: BG 831917604",
+      "countries": [
+        "BG"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "BG 831917604"
+        ]
+      },
+      "notes": "Separator tolerance for BG. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-cy",
+      "text": "VAT: CY 90471835L",
+      "countries": [
+        "CY"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "CY 90471835L"
+        ]
+      },
+      "notes": "Separator tolerance for CY. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-cz",
+      "text": "DIČ: CZ 27082440",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "CZ 27082440"
+        ]
+      },
+      "notes": "Separator tolerance for CZ. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-ee",
+      "text": "KMKR: EE 100594103",
+      "countries": [
+        "EE"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "EE 100594103"
+        ]
+      },
+      "notes": "Separator tolerance for EE. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-el",
+      "text": "ΑΦΜ: EL 094014201",
+      "countries": [
+        "EL"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "EL 094014201"
+        ]
+      },
+      "notes": "Separator tolerance for EL. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-es",
+      "text": "NIF: ES A58818501",
+      "countries": [
+        "ES"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "ES A58818501"
+        ]
+      },
+      "notes": "Separator tolerance for ES. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-fi",
+      "text": "ALV-numero: FI 20671086",
+      "countries": [
+        "FI"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "FI 20671086"
+        ]
+      },
+      "notes": "Separator tolerance for FI. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-hr",
+      "text": "OIB: HR 38192148146",
+      "countries": [
+        "HR"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "HR 38192148146"
+        ]
+      },
+      "notes": "Separator tolerance for HR. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-hu",
+      "text": "Adószám: HU 10773381",
+      "countries": [
+        "HU"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "HU 10773381"
+        ]
+      },
+      "notes": "Separator tolerance for HU. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-ie",
+      "text": "VAT: IE 6388047V",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "IE 6388047V"
+        ]
+      },
+      "notes": "Separator tolerance for IE. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-it",
+      "text": "Partita IVA: IT 00743110157",
+      "countries": [
+        "IT"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "IT 00743110157"
+        ]
+      },
+      "notes": "Separator tolerance for IT. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-lt",
+      "text": "PVM kodas: LT 100001919010",
+      "countries": [
+        "LT"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "LT 100001919010"
+        ]
+      },
+      "notes": "Separator tolerance for LT. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-lv",
+      "text": "PVN: LV 40003521600",
+      "countries": [
+        "LV"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "LV 40003521600"
+        ]
+      },
+      "notes": "Separator tolerance for LV. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-mt",
+      "text": "VAT: MT 20521520",
+      "countries": [
+        "MT"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "MT 20521520"
+        ]
+      },
+      "notes": "Separator tolerance for MT. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-nl",
+      "text": "BTW-nummer: NL 820646660B01",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "NL 820646660B01"
+        ]
+      },
+      "notes": "Separator tolerance for NL. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-pl",
+      "text": "NIP: PL 5260250995",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "PL 5260250995"
+        ]
+      },
+      "notes": "Separator tolerance for PL. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-pt",
+      "text": "NIF: PT 502011378",
+      "countries": [
+        "PT"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "PT 502011378"
+        ]
+      },
+      "notes": "Separator tolerance for PT. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-ro",
+      "text": "CUI: RO 6860712",
+      "countries": [
+        "RO"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "RO 6860712"
+        ]
+      },
+      "notes": "Separator tolerance for RO. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-si",
+      "text": "DDV: SI 15012557",
+      "countries": [
+        "SI"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "SI 15012557"
+        ]
+      },
+      "notes": "Separator tolerance for SI. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-sk",
+      "text": "DIČ: SK 2020317068",
+      "countries": [
+        "SK"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "SK 2020317068"
+        ]
+      },
+      "notes": "Separator tolerance for SK. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "vat-spaced-uk",
+      "text": "VAT number: GB 412 8836 09",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "GB 412 8836 09"
+        ]
+      },
+      "notes": "Separator tolerance for UK. rules-engine#30 gave 22 VAT patterns the space that invoices print, and only three were pinned -- the same '31 countries, 4 tested' gap that rules-engine#23 was about. One vector per changed pattern, so narrowing one fails a named test."
+    },
+    {
+      "id": "dob-at",
+      "text": "Sache betreffend Hans Meyer, geboren 14.08.1997",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14.08.1997"
+        ]
+      },
+      "notes": "Pins geboren. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-de",
+      "text": "Sache betreffend Hans Meyer, geboren 14.08.1997",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14.08.1997"
+        ]
+      },
+      "notes": "Pins geboren. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-ch",
+      "text": "Sache betreffend Hans Meyer, geboren 14.08.1997",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14.08.1997"
+        ]
+      },
+      "notes": "Pins geboren. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-nl",
+      "text": "Betreft Jan de Vries, geboren 14-08-1997",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14-08-1997"
+        ]
+      },
+      "notes": "Pins geboren, DD-MM-YYYY. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-be",
+      "text": "Betreft Jan Peeters, geboortedatum 14-08-1997",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14-08-1997"
+        ]
+      },
+      "notes": "Pins geboortedatum. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-fr",
+      "text": "Dossier de Marie Dubois, né le 12.06.1958",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "Pins né le. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-lu",
+      "text": "Dossier de Marie Krier, date de naissance 12.06.1958",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "Pins date de naissance. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-es",
+      "text": "Expediente de Ana Garcia, nacido 12.06.1958",
+      "countries": [
+        "ES"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "Pins nacido. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-pt",
+      "text": "Processo de Ana Silva, nascido 12.06.1958",
+      "countries": [
+        "PT"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "Pins nascido. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-ie",
+      "text": "Record: Sean Murphy, born 11/02/1988",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "11/02/1988"
+        ]
+      },
+      "notes": "Pins bare 'born'. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-bg",
+      "text": "Дело: Иван Петров, роден 12.06.1958",
+      "countries": [
+        "BG"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "Pins Bulgarian. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-cy",
+      "text": "Record: Sophia Petrou, γεννηθείς/είσα 14/03/1970",
+      "countries": [
+        "CY"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14/03/1970"
+        ]
+      },
+      "notes": "Pins Greek in Cyprus. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-si",
+      "text": "Zadeva: Janez Novak, rojen 12.06.1958",
+      "countries": [
+        "SI"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "Pins Slovenian. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "dob-sk",
+      "text": "Vec: Jan Novak, narodený 12.06.1958",
+      "countries": [
+        "SK"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "Pins Slovak. rules-engine#38's keyword list is shared across all 31 countries, but tests/test_dob_context.py is Python-only -- without a vector the TypeScript SDK had no DOB coverage for this country."
+    },
+    {
+      "id": "passport-national-be-nl",
+      "text": "paspoort: EM123456",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "EM123456"
+        ]
+      },
+      "notes": "Pins the Belgian national pattern, Dutch label. rules-engine#23 added 27 vectors for the shared label-gated rule and four boundary cases, but left the Belgian and French national patterns unpinned."
+    },
+    {
+      "id": "passport-national-be-fr",
+      "text": "passeport: AX983697",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "AX983697"
+        ]
+      },
+      "notes": "Pins the Belgian national pattern, French label. rules-engine#23 added 27 vectors for the shared label-gated rule and four boundary cases, but left the Belgian and French national patterns unpinned."
+    },
+    {
+      "id": "passport-national-fr-1",
+      "text": "passeport: 12AB34567",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "12AB34567"
+        ]
+      },
+      "notes": "Pins the French national pattern. rules-engine#23 added 27 vectors for the shared label-gated rule and four boundary cases, but left the Belgian and French national patterns unpinned."
+    },
+    {
+      "id": "passport-national-fr-2",
+      "text": "numéro de passeport : 15CD67890",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "15CD67890"
+        ]
+      },
+      "notes": "Pins the French pattern behind the full label. rules-engine#23 added 27 vectors for the shared label-gated rule and four boundary cases, but left the Belgian and French national patterns unpinned."
+    },
+    {
+      "id": "account-run-not-a-phone-ie",
+      "text": "IBAN: IE29 AIBK 9311 5212 3456 99",
+      "countries": [
+        "IE"
+      ],
+      "mustNotDetect": [
+        "PHONE",
+        "POSTAL_CODE"
+      ],
+      "notes": "This IBAN fails its checksum, so declining it is correct -- but the generic phone pattern must not then harvest a digit group from the middle (rules-engine#30)."
+    },
+    {
+      "id": "account-run-not-a-phone-de",
+      "text": "Konto: DE89 3704 0044 0532 0130 00",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "DE89 3704 0044 0532 0130 00"
+        ]
+      },
+      "notes": "A checksum-valid IBAN is claimed whole; the generic phone pattern must not take a digit group out of it (rules-engine#30)."
+    },
+    {
+      "id": "account-run-not-a-phone-nl",
+      "text": "Rekening: NL91 ABNA 0417 1643 00",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "NL91 ABNA 0417 1643 00"
+        ]
+      },
+      "notes": "A checksum-valid IBAN is claimed whole; the generic phone pattern must not take a digit group out of it (rules-engine#30)."
     }
   ]
 }

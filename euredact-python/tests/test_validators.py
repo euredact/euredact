@@ -3,6 +3,7 @@
 import pytest
 
 from euredact.rules.validators import (
+    VALIDATORS,
     validate_belgian_nn,
     validate_belgian_vat,
     validate_bic,
@@ -231,3 +232,82 @@ class TestCzechBirthNumberDate:
         # Pre-1954 numbers carry no check digit, so only the date gates them.
         assert validate_czech_birth_number("560101123") is True
         assert validate_czech_birth_number("566601123") is False
+
+
+class TestNoDateBearingValidatorAcceptsAnImpossibleDate:
+    """A property over the whole table, not one validator at a time.
+
+    `czech_birth_number` computed its mod-11 remainder and never looked at the
+    date, so it accepted month 66 and 284 Czech mobile numbers per corpus pass
+    were typed NATIONAL_ID at `confidence="high"` (rules-engine#37). A checksum
+    is a one-in-eleven filter; the date is what separates an identifier from a
+    coincidence.
+
+    Written as a property because running this check by hand immediately found
+    the same defect in three more validators (rules-engine#43). The membership
+    test below is the point: a new validator must be classified, so the next one
+    cannot slip in untested.
+
+    The lists are explicit rather than derived from the names. A substring
+    heuristic got this wrong in both directions -- it matched `german_tax_id`
+    and `finnish_business_id`, which carry no date, and missed `belgian_nn`,
+    `finnish_hetu`, `icelandic_kt`, `polish_pesel` and `swedish_pnr`, which do.
+    """
+
+    #: Validators whose identifier embeds a birth date.
+    DATE_BEARING = [
+        "austrian_svnr", "belgian_nn", "bulgarian_egn", "czech_birth_number",
+        "danish_cpr", "estonian_id", "finnish_hetu", "french_nir",
+        "greek_amka", "icelandic_kt", "italian_cf", "norwegian_fnr",
+        "polish_pesel", "romanian_cnp", "slovenian_emso", "swedish_pnr",
+    ]
+
+    #: Validators with no date component, so nothing here to check.
+    NO_DATE = [
+        "belgian_vat", "bic", "bsn", "croatian_oib", "danish_vat", "e164",
+        "finnish_business_id", "german_tax_id", "greek_afm", "high_entropy",
+        "hungarian_taj", "iban", "imei", "irish_pps", "kvk", "luhn",
+        "norwegian_org", "polish_nip", "portuguese_nif", "spanish_dni",
+        "spanish_nie", "swiss_ahv", "uk_nhs", "vat_de", "vat_fr", "vat_lu",
+        "vat_nl", "vin",
+    ]
+
+    #: Impossible dates by length, so each validator sees the right shape.
+    #: Every month is outside 1-12 and every day outside 1-31 under any of the
+    #: +20/+50/+70 conventions.
+    IMPOSSIBLE = [
+        "606666032", "778836400", "998899001",
+        "8066660321", "9088990011",
+        "80666603210", "90889900112",
+        "806666032109", "908899001123",
+        "8066660321098", "9088990011234",
+        "666066", "806666",
+    ]
+
+    #: Known-failing, tracked in rules-engine#43. `strict=True` so fixing one
+    #: becomes an unexpected pass and forces this list to shrink.
+    KNOWN_BAD = {"polish_pesel", "romanian_cnp", "slovenian_emso"}
+
+    def test_every_validator_is_classified(self) -> None:
+        classified = set(self.DATE_BEARING) | set(self.NO_DATE)
+        missing = set(VALIDATORS) - classified
+        assert not missing, (
+            f"new validator(s) {sorted(missing)} must be added to DATE_BEARING "
+            f"or NO_DATE — a date-bearing one needs the check below"
+        )
+        stale = classified - set(VALIDATORS)
+        assert not stale, f"these are no longer registered: {sorted(stale)}"
+
+    @pytest.mark.parametrize("name", DATE_BEARING)
+    def test_an_impossible_date_is_rejected(self, name: str) -> None:
+        if name in self.KNOWN_BAD:
+            pytest.xfail(f"{name} does not check the date — rules-engine#43")
+        validator = VALIDATORS[name]
+        accepted = []
+        for value in self.IMPOSSIBLE:
+            try:
+                if validator(value):
+                    accepted.append(value)
+            except Exception:  # noqa: BLE001 — a raise is a rejection here
+                pass
+        assert accepted == [], f"{name} accepted impossible dates: {accepted}"
