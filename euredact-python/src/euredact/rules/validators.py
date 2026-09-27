@@ -621,9 +621,24 @@ def validate_portuguese_nif(candidate: str) -> bool:
 
 
 def validate_polish_pesel(candidate: str) -> bool:
-    """Polish PESEL: 11 digits, weights 1,3,7,9,1,3,7,9,1,3; check=(10-sum%10)%10."""
+    """Polish PESEL: YYMMDD + serial + check digit, weights 1,3,7,9,...
+
+    The date is checked, not only the checksum. Without it the validator
+    accepted ``80666603210`` -- month 66, day 66 -- and the engine reported it
+    as ``NATIONAL_ID`` at ``confidence="high"`` even behind the word "Telefon"
+    (rules-engine#43, the same class as rules-engine#37).
+
+    The century lives in the month field: +0 is the 1900s, +20 the 2000s, +40
+    the 2100s, +60 the 2200s and +80 the 1800s. So a legal month field is one of
+    01-12, 21-32, 41-52, 61-72 or 81-92, and anything else is not a date.
+    """
     clean = re.sub(r"[\s\-]", "", candidate)
     if len(clean) != 11 or not clean.isdigit():
+        return False
+    raw_month = int(clean[2:4])
+    month = next((raw_month - off for off in (0, 20, 40, 60, 80)
+                  if 1 <= raw_month - off <= 12), None)
+    if month is None or not _is_real_day(month, int(clean[4:6])):
         return False
     d = [int(c) for c in clean]
     weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3]
@@ -647,6 +662,16 @@ def validate_polish_nip(candidate: str) -> bool:
 #: century is not recoverable from a two-digit year, so a leap year cannot be
 #: ruled out -- being permissive by one day is the right direction here.
 _RC_DAYS = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+
+def _is_real_day(month: int, day: int) -> bool:
+    """Whether `day` exists in `month`, with February permissive at 29.
+
+    The century is not recoverable from a two-digit year, so a leap year cannot
+    be ruled out; being permissive by one day is the right direction for a
+    validator that gates masking.
+    """
+    return 1 <= month <= 12 and 1 <= day <= _RC_DAYS[month - 1]
 
 
 def _czech_month(raw: int) -> int | None:
@@ -695,11 +720,18 @@ def validate_czech_birth_number(candidate: str) -> bool:
 
 
 def validate_romanian_cnp(candidate: str) -> bool:
-    """Romanian CNP: 13 digits, control key 279146358279."""
+    """Romanian CNP: S YY MM DD JJ NNN C, control key 279146358279.
+
+    The date is checked, not only the checksum: ``8066660321098`` has month 66
+    and day 60 and was accepted (rules-engine#43). The leading S already
+    carries the century, so the month needs no offset convention here.
+    """
     clean = re.sub(r"[\s\-]", "", candidate)
     if len(clean) != 13 or not clean.isdigit():
         return False
     if clean[0] not in "12345678":
+        return False
+    if not _is_real_day(int(clean[3:5]), int(clean[5:7])):
         return False
     key = "279146358279"
     total = sum(int(a) * int(b) for a, b in zip(clean[:12], key))
@@ -750,9 +782,17 @@ def validate_croatian_oib(candidate: str) -> bool:
 
 
 def validate_slovenian_emso(candidate: str) -> bool:
-    """Slovenian EMŠO: 13 digits, weights 7,6,5,4,3,2,7,6,5,4,3,2; 11-sum%11."""
+    """Slovenian EMŠO: DD MM YYY RR BBB K, weights 7,6,5,4,3,2,...
+
+    The date is checked, not only the checksum: ``8066660321098`` reads as day
+    80 of month 66 and was accepted (rules-engine#43). Note the order -- EMŠO
+    opens with the day, where the Czech, Polish and Romanian forms open with the
+    year or a century digit.
+    """
     clean = re.sub(r"[\s\-]", "", candidate)
     if len(clean) != 13 or not clean.isdigit():
+        return False
+    if not _is_real_day(int(clean[2:4]), int(clean[0:2])):
         return False
     d = [int(c) for c in clean]
     weights = [7, 6, 5, 4, 3, 2, 7, 6, 5, 4, 3, 2]

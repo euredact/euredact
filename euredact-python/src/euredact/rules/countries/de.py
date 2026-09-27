@@ -119,7 +119,16 @@ class DEConfig(CountryConfig):
             # --- Handelsregisternummer (Commercial Register) ---
             PatternDef(
                 entity_type=EntityType.CHAMBER_OF_COMMERCE,
-                pattern=r"\bHR[AB]\s?\d{4,6}\b",
+                # The court-register letter is part of the number as the register
+                # writes it -- "HRA 391538 B" is one identifier. Without it the
+                # span stopped a token short and the output read
+                # "[CHAMBER_OF_COMMERCE] B" (rules-engine#42).
+                #
+                # The suffix is a single capital followed by a boundary, so it
+                # cannot swallow the next word: " B beim Amtsgericht" matches
+                # the B and stops, and " Berlin" matches nothing because the
+                # boundary fails after the B.
+                pattern=r"\bHR[AB]\s?\d{4,6}(?:\s[A-Z]\b)?",
                 validator=None,
                 description="German Handelsregisternummer — HRA/HRB + digits",
             ),

@@ -404,9 +404,19 @@ export function validatePortugueseNif(candidate: string): boolean {
   return parseInt(c[8]) === check;
 }
 
+// PESEL carries the century in the month field: +0 is the 1900s, +20 the 2000s,
+// +40 the 2100s, +60 the 2200s, +80 the 1800s. Without a date check this
+// accepted 80666603210 -- day 66 -- as NATIONAL_ID at high confidence
+// (rules-engine#43).
 export function validatePolishPesel(candidate: string): boolean {
   const c = candidate.replace(/[\s\-]/g, "");
   if (c.length !== 11 || !/^\d{11}$/.test(c)) return false;
+  const rawMonth = parseInt(c.slice(2, 4), 10);
+  let month: number | null = null;
+  for (const off of [0, 20, 40, 60, 80]) {
+    if (rawMonth - off >= 1 && rawMonth - off <= 12) { month = rawMonth - off; break; }
+  }
+  if (month === null || !isRealDay(month, parseInt(c.slice(4, 6), 10))) return false;
   const d = c.split("").map(Number);
   const weights = [1,3,7,9,1,3,7,9,1,3];
   let total = 0; for (let i = 0; i < 10; i++) total += d[i] * weights[i];
@@ -430,6 +440,12 @@ const RC_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 // The calendar month a rodné číslo month field encodes, or null. Four ranges
 // are legal: 1-12 is a man, +50 a woman, and since 2004 +20 marks a birth on a
 // day whose sequence numbers were exhausted (so +70 is a woman on such a day).
+// Whether `day` exists in `month`, February permissive at 29 because a
+// two-digit year does not reveal the century.
+function isRealDay(month: number, day: number): boolean {
+  return month >= 1 && month <= 12 && day >= 1 && day <= RC_DAYS[month - 1];
+}
+
 function czechMonth(raw: number): number | null {
   for (const offset of [0, 20, 50, 70]) {
     if (raw - offset >= 1 && raw - offset <= 12) return raw - offset;
@@ -454,9 +470,12 @@ export function validateCzechBirthNumber(candidate: string): boolean {
   return true;
 }
 
+// S YY MM DD JJ NNN C -- the leading S carries the century, so the month needs
+// no offset convention here (rules-engine#43).
 export function validateRomanianCnp(candidate: string): boolean {
   const c = candidate.replace(/[\s\-]/g, "");
   if (c.length !== 13 || !/^\d{13}$/.test(c) || !"12345678".includes(c[0])) return false;
+  if (!isRealDay(parseInt(c.slice(3, 5), 10), parseInt(c.slice(5, 7), 10))) return false;
   const key = "279146358279";
   let total = 0; for (let i = 0; i < 12; i++) total += parseInt(c[i]) * parseInt(key[i]);
   const remainder = total % 11;
@@ -496,9 +515,12 @@ export function validateCroatianOib(candidate: string): boolean {
   return check === parseInt(c[10]);
 }
 
+// DD MM YYY RR BBB K -- note EMSO opens with the *day*, where the Czech, Polish
+// and Romanian forms open with the year or a century digit (rules-engine#43).
 export function validateSlovenianEmso(candidate: string): boolean {
   const c = candidate.replace(/[\s\-]/g, "");
   if (c.length !== 13 || !/^\d{13}$/.test(c)) return false;
+  if (!isRealDay(parseInt(c.slice(2, 4), 10), parseInt(c.slice(0, 2), 10))) return false;
   const d = c.split("").map(Number);
   const weights = [7,6,5,4,3,2,7,6,5,4,3,2];
   let total = 0; for (let i = 0; i < 12; i++) total += d[i] * weights[i];

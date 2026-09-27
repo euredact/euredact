@@ -332,7 +332,7 @@ const BE: CountryConfig = {
     p(EntityType.PASSPORT, String.raw`\b[A-Z]{2}\d{6}\b`, null, "", PASSPORT_CONTEXT, true),
     p(EntityType.DRIVERS_LICENSE, String.raw`\b\d{10}\b`, null, "", ["rijbewijs", "permis de conduire", "driving licence", "driving license", "rijbewijsnummer"], true),
     p(EntityType.LICENSE_PLATE, String.raw`\b[12][\-\s]?[A-Z]{3}[\-\s]?\d{3}\b`),
-    p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{3}\b`, null, "", ["postcode", "code postal", "postnummer", "postal code", "zip", "B-", "adres", "adresse", "wonende", "woonplaats", "rue", "straat", "laan", "avenue", "boulevard", "plein", "steenweg", "chaussée", "domicilié", "gedomicilieerd", "Levering:", "siège"], true),
+    p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{3}\b`, null, "", ["postcode", "code postal", "postnummer", "postal code", "zip", "B-", "adres", "adresse", "wonende", "woonplaats", "domicile", "rue", "straat", "laan", "avenue", "boulevard", "plein", "steenweg", "chaussée", "domicilié", "gedomicilieerd", "Levering:", "siège"], true),
     p(EntityType.POSTAL_CODE, String.raw`(?<=, )[1-9]\d{3}(?= [A-Z])`),
     p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{1}[\-.]?\d{5}[\-.]?\d{2}[\-.]?\d{3}\b`, null, "", ["RIZIV", "INAMI", "arts", "médecin", "zorgverlener", "prestataire", "dokter", "doctor"], true),
   ],
@@ -358,7 +358,7 @@ const DE: CountryConfig = {
     // separates the city code: "B-AB 1234", "M-XY 99".
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-ZÄÖÜ]{1,3}[\s\-][A-Z]{1,2}[\s\-]?\d{1,4}[EH]?\b`),
     p(EntityType.POSTAL_CODE, String.raw`\b\d{5}\b`, null, "", ["PLZ", "Postleitzahl", "postal code", "postcode", "Anschrift", "Adresse", "Wohnort", "Ort", "Stadt", "wohnt", "wohnhaft", "Straße", "Str.", "Weg", "Platz", "Allee", "Ring"], true),
-    p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\bHR[AB]\s?\d{4,6}\b`),
+    p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\bHR[AB]\s?\d{4,6}(?:\s[A-Z]\b)?`),
     p(EntityType.SSN, String.raw`\b\d{2}[\s]?\d{6}[\s]?[A-Z][\s]?\d{3}\b`, null, "", ["Rentenversicherung", "RV-Nummer", "Sozialversicherung", "SV-Nummer", "Versicherungsnummer", "Rentenversicherungsnummer", "Sozialversicherungsnummer", "SVNR", "SV-Nr", "RVNR"], true),
     p(EntityType.TAX_ID, String.raw`\b\d{2,3}/\d{3,4}/\d{4,5}\b`, null, "", ["Steuernummer", "St.-Nr", "StNr", "Finanzamt", "Steuer"], true),
     p(EntityType.TAX_ID, String.raw`\b\d{13}\b`, null, "", ["Steuernummer", "St.-Nr", "StNr", "Finanzamt", "Steuer"], true),
@@ -415,7 +415,7 @@ const FR: CountryConfig = {
     p(EntityType.PHONE, String.raw`\+33\s?[1-9][\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}`),
     p(EntityType.PASSPORT, String.raw`\b\d{2}[A-Z]{2}\d{5}\b`, null, "", PASSPORT_CONTEXT, true),
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z]{2}[\-\s]?\d{3}[\-\s]?[A-Z]{2}\b`),
-    p(EntityType.POSTAL_CODE, String.raw`\b(?:0[1-9]|[1-8]\d|9[0-5]|97[1-6])\d{3}\b`, null, "", ["code postal", "CP", "postal code", "postcode", "adresse", "domicilié", "résidant", "rue", "avenue", "boulevard", "place", "chemin", "allée", "impasse", "ville"], true),
+    p(EntityType.POSTAL_CODE, String.raw`\b(?:0[1-9]|[1-8]\d|9[0-5]|97[1-6])\d{3}\b`, null, "", ["code postal", "CP", "postal code", "postcode", "adresse", "domicile", "domicilié", "résidant", "rue", "avenue", "boulevard", "place", "chemin", "allée", "impasse", "ville"], true),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b\d{3}\s?\d{3}\s?\d{3}\b`, null, "", ["SIREN", "siren", "RCS", "entreprise", "immatricul", "numéro d'entreprise", "registre du commerce"], true),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b`, null, "", ["SIRET", "siret", "établissement", "immatricul"], true),
     p(EntityType.TAX_ID, String.raw`\b\d{13}\b`, null, "", ["numéro fiscal", "SPI", "référence fiscale", "avis d'impôt", "impôt sur le revenu", "déclaration fiscale", "fiscal"], true),
@@ -450,9 +450,9 @@ const SE: CountryConfig = {
     p(EntityType.PHONE, String.raw`\b0\d{1,3}[\-\s]?\d{2,3}[\s]?\d{2,3}[\s]?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\+46\s?\d{1,3}[\s\-]?\d{2,3}[\s\-]?\d{2,3}[\s\-]?\d{2}`),
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z]{3}\s?\d{2}[A-Z0-9]\b`),
-    p(EntityType.POSTAL_CODE, String.raw`\b\d{3}\s?\d{2}\b`, null, "", ["postnummer", "postort", "postkod", "adress", "bostadsadress", "gatuadress", "boende", "gatan", "vägen", "gata", "väg", "allé", "plats", "torg", "stigen", "Bostadsadress"], true),
-    p(EntityType.POSTAL_CODE, String.raw`\b\d{4}\s\d{2}\b`, null, "", ["postnummer", "postort", "postkod", "adress", "bostadsadress", "gatuadress", "boende", "gatan", "vägen", "gata", "väg", "allé"], true),
-    p(EntityType.POSTAL_CODE, String.raw`\b\d{6}\b`, null, "", ["postnummer", "postort", "postkod", "adress", "bostadsadress", "gatuadress", "boende", "gatan", "vägen", "gata", "väg", "allé"], true),
+    p(EntityType.POSTAL_CODE, String.raw`\b\d{3}\s?\d{2}\b`, null, "", ["postnummer", "postort", "postkod", "adress", "Postal:", "Address:", "bostadsadress", "gatuadress", "boende", "gatan", "vägen", "gata", "väg", "allé", "plats", "torg", "stigen", "Bostadsadress"], true),
+    p(EntityType.POSTAL_CODE, String.raw`\b\d{4}\s\d{2}\b`, null, "", ["postnummer", "postort", "postkod", "adress", "Postal:", "Address:", "bostadsadress", "gatuadress", "boende", "gatan", "vägen", "gata", "väg", "allé"], true),
+    p(EntityType.POSTAL_CODE, String.raw`\b\d{6}\b`, null, "", ["postnummer", "postort", "postkod", "adress", "Postal:", "Address:", "bostadsadress", "gatuadress", "boende", "gatan", "vägen", "gata", "väg", "allé"], true),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b\d{6}-?\d{4}\b`, null, "", ["organisationsnummer", "org.nr", "org nr", "Bolagsverket", "registreringsnummer"], true),
   ],
 };
@@ -469,7 +469,7 @@ const NO: CountryConfig = {
     p(EntityType.PHONE, String.raw`\b[2-9]\d\s?\d{2}\s?\d{2}\s?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\+47\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{2}`),
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z]{2}\s?\d{5}\b`),
-    p(EntityType.POSTAL_CODE, String.raw`\b\d{4}\b`, null, "", ["postnummer", "poststed", "postnr", "adresse", "bostedsadresse", "gate", "vei", "veien", "gata", "plass", "stien", "allé"], true),
+    p(EntityType.POSTAL_CODE, String.raw`\b\d{4}\b`, null, "", ["postnummer", "poststed", "postnr", "adresse", "bostedsadresse", "gate", "vei", "veien", "gata", "plass", "stien", "allé", "Postal:", "Address:"], true),
   ],
 };
 
@@ -498,7 +498,7 @@ const IS: CountryConfig = {
     p(EntityType.PHONE, String.raw`\b[3-9]\d{6}\b`, null, "", ["sími", "símanúmer", "farsími", "gsm", "phone", "tel", "hringja", "hringdu", "ná í", "nás á", "nás", "SMS", "sent to"], true),
     p(EntityType.PHONE, String.raw`\+354\s?\d{3}\s?\d{4}`),
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z]{2}\s?\d{3}\b`, null, "", ["skráningarnúmer", "bílnúmer", "ökutæki", "bifreið", "plata"], true),
-    p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{2}\b`, null, "", ["póstnúmer", "póstfang", "staður", "heimilisfang"], true),
+    p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{2}\b`, null, "", ["póstnúmer", "póstfang", "staður", "heimilisfang", "Postal:", "Address:"], true),
   ],
 };
 

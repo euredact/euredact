@@ -68,6 +68,36 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **Postal codes were unmasked in five countries, for two different reasons.**
+  `POSTAL_CODE` recall was 98.07% overall but 63.15% for France — 1,035 unmasked
+  codes across FR, IS, NO, SE and, latent, DK and FI.
+
+  **A missing inflection.** The French keyword list held the participle
+  `domicilié` but not the noun `domicile`, and neither contains the other, so
+  `Domicile : Lille, 77249.` matched nothing while `adresse :` worked in the
+  same sentence. Belgium had the same gap, where French is an official language.
+  Same class as `#38`.
+
+  **A label suppressing its own value.** `suppress_postal_in_longer_identifier`
+  drops a digit run introduced by a record-number label, and its cue is *any*
+  word ending in `Nummer`, `Nr`, `Numero` or `Numéro` — the wildcard is
+  `[\w\-]*`. So it matched `postnummer`, `postnr` and `postinumero`, the
+  canonical postal labels of Norway, Denmark and Finland. Those countries write
+  a bare four- or five-digit code, which passes the `isdigit()` guard, so
+  `postnummer: 5020 Bergen` produced **nothing at all**. Sweden escaped only
+  because it spaces its code, and Germany and Iceland because `Postleitzahl` and
+  `póstnúmer` do not end in any of those four words. A cue beginning `post` is
+  now treated as a postal label rather than a record-number label.
+
+  Iceland, Norway and Sweden also lacked the generic `Postal:` label that twenty
+  other countries carry. Sweden keeps three copies of its keyword list, one per
+  postal pattern, so it had to be added to all three — that duplication is worth
+  removing separately.
+
+  **`POSTAL_CODE` recall 98.07% → 99.99%** (52,872 → 53,907 of 53,914). Ten
+  vectors, including two that pin the suppressor still firing for a genuine
+  record-number label, since that is the case it exists for. *(rules-engine#41)*
+
 - **A space inside a VAT number made it a phone number.** `ATU 36438508` was
   typed `PHONE` with the `ATU` prefix left in the clear, while the unspaced
   `ATU36438508` was already correct. Attributing the span explained why: the

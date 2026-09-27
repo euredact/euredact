@@ -75,7 +75,7 @@ class SEConfig(CountryConfig):
                 validator=None,
                 description="Swedish postal code — 5 digits (XXX XX)",
                 context_keywords=[
-                    "postnummer", "postort", "postkod", "adress",
+                    "postnummer", "postort", "postkod", "adress", "Postal:", "Address:",
                     "bostadsadress", "gatuadress", "boende",
                     # Street indicators
                     "gatan", "vägen", "gata", "väg", "allé", "plats",
@@ -90,7 +90,7 @@ class SEConfig(CountryConfig):
                 validator=None,
                 description="Swedish postal code — XXXX XX variant",
                 context_keywords=[
-                    "postnummer", "postort", "postkod", "adress",
+                    "postnummer", "postort", "postkod", "adress", "Postal:", "Address:",
                     "bostadsadress", "gatuadress", "boende",
                     "gatan", "vägen", "gata", "väg", "allé",
                 ],
@@ -102,7 +102,7 @@ class SEConfig(CountryConfig):
                 validator=None,
                 description="Swedish postal code — 6-digit compact",
                 context_keywords=[
-                    "postnummer", "postort", "postkod", "adress",
+                    "postnummer", "postort", "postkod", "adress", "Postal:", "Address:",
                     "bostadsadress", "gatuadress", "boende",
                     "gatan", "vägen", "gata", "väg", "allé",
                 ],

@@ -14,6 +14,9 @@ from euredact.rules.validators import (
     validate_iban,
     validate_kvk,
     validate_luhn,
+    validate_polish_pesel,
+    validate_romanian_cnp,
+    validate_slovenian_emso,
     validate_vat_de,
     validate_vat_nl,
     validate_vin,
@@ -284,9 +287,10 @@ class TestNoDateBearingValidatorAcceptsAnImpossibleDate:
         "666066", "806666",
     ]
 
-    #: Known-failing, tracked in rules-engine#43. `strict=True` so fixing one
-    #: becomes an unexpected pass and forces this list to shrink.
-    KNOWN_BAD = {"polish_pesel", "romanian_cnp", "slovenian_emso"}
+    #: Empty, and it should stay that way. It held `polish_pesel`,
+    #: `romanian_cnp` and `slovenian_emso` until rules-engine#43 gave all three
+    #: a date check. A new entry here is a regression, not a todo.
+    KNOWN_BAD: set[str] = set()
 
     def test_every_validator_is_classified(self) -> None:
         classified = set(self.DATE_BEARING) | set(self.NO_DATE)
@@ -311,3 +315,62 @@ class TestNoDateBearingValidatorAcceptsAnImpossibleDate:
             except Exception:  # noqa: BLE001 — a raise is a rejection here
                 pass
         assert accepted == [], f"{name} accepted impossible dates: {accepted}"
+
+
+class TestTheDateChecksAddedInIssue43:
+    """Each of the three validators, and the convention it has to honour.
+
+    All three computed a checksum and never looked at the date, so all three
+    accepted `8066660321098` / `80666603210` and the engine reported
+    NATIONAL_ID at `confidence="high"` even behind the word "Telefon"
+    (rules-engine#43, the same class as rules-engine#37).
+    """
+
+    # PESEL carries the century in the month field: +0 is the 1900s, +20 the
+    # 2000s, +40 the 2100s, +60 the 2200s, +80 the 1800s.
+    PESEL_WEIGHTS = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3]
+
+    @classmethod
+    def _pesel(cls, first_ten: str) -> str:
+        total = sum(int(a) * b for a, b in zip(first_ten, cls.PESEL_WEIGHTS))
+        return first_ten + str((10 - total % 10) % 10)
+
+    @pytest.mark.parametrize("offset", [0, 20, 40, 60, 80])
+    def test_pesel_accepts_every_century_convention(self, offset: int) -> None:
+        value = self._pesel(f"80{offset + 5:02d}151234")
+        assert validate_polish_pesel(value) is True, value
+
+    @pytest.mark.parametrize("raw_month", [0, 13, 20, 33, 40, 53, 73, 93, 99])
+    def test_pesel_rejects_a_month_field_outside_every_convention(
+        self, raw_month: int
+    ) -> None:
+        value = self._pesel(f"80{raw_month:02d}151234")
+        assert validate_polish_pesel(value) is False, value
+
+    @pytest.mark.parametrize("day", [0, 32, 45, 66])
+    def test_pesel_rejects_an_impossible_day(self, day: int) -> None:
+        value = self._pesel(f"8005{day:02d}1234")
+        assert validate_polish_pesel(value) is False, value
+
+    def test_pesel_month_66_is_legal_with_a_real_day(self) -> None:
+        # 66 is month 06 in the 2200s. The reported value 80666603210 is
+        # rejected on its *day* (66), not its month -- worth pinning so the
+        # month rule is not tightened on a misreading of that case.
+        assert validate_polish_pesel(self._pesel("8066151234")) is True
+        assert validate_polish_pesel("80666603210") is False
+
+    @pytest.mark.parametrize("value", ["8066660321098", "1806660221144"])
+    def test_cnp_rejects_an_impossible_date(self, value: str) -> None:
+        assert validate_romanian_cnp(value) is False
+
+    def test_cnp_accepts_a_real_one(self) -> None:
+        assert validate_romanian_cnp("1800101221144") is True
+
+    @pytest.mark.parametrize("value", ["8066660321098", "9988006500006"])
+    def test_emso_rejects_an_impossible_date(self, value: str) -> None:
+        assert validate_slovenian_emso(value) is False
+
+    def test_emso_accepts_a_real_one(self) -> None:
+        # EMŠO opens with the *day*, unlike the Czech, Polish and Romanian
+        # forms, which open with the year or a century digit.
+        assert validate_slovenian_emso("0101006500006") is True

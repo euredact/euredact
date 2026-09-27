@@ -95,7 +95,7 @@ class FRConfig(CountryConfig):
                 description="French postal code — 5 digits (department prefix)",
                 context_keywords=[
                     "code postal", "CP", "postal code", "postcode",
-                    "adresse", "domicilié", "résidant", "rue",
+                    "adresse", "domicile", "domicilié", "résidant", "rue",
                     "avenue", "boulevard", "place", "chemin",
                     "allée", "impasse", "ville",
                 ],

@@ -78,7 +78,7 @@ class NOConfig(CountryConfig):
                 context_keywords=[
                     "postnummer", "poststed", "postnr", "adresse",
                     "bostedsadresse", "gate", "vei", "veien",
-                    "gata", "plass", "stien", "allé",
+                    "gata", "plass", "stien", "allé", "Postal:", "Address:",
                 ],
                 requires_context=True,
             ),

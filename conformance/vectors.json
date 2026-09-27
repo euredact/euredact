@@ -4082,6 +4082,256 @@
         ]
       },
       "notes": "A checksum-valid IBAN is claimed whole; the generic phone pattern must not take a digit group out of it (rules-engine#30)."
+    },
+    {
+      "id": "pl-pesel-impossible-day-is-not-a-national-id",
+      "text": "Telefon 80666603210",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "Day 66. The PESEL validator checked its weighted checksum and never the date, so this was NATIONAL_ID at confidence=high even behind 'Telefon' (rules-engine#43)."
+    },
+    {
+      "id": "ro-cnp-impossible-date-is-not-a-national-id",
+      "text": "Contact: 8066660321098",
+      "countries": [
+        "RO"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "Month 66, day 60. Same defect in the Romanian CNP validator."
+    },
+    {
+      "id": "si-emso-impossible-date-is-not-a-national-id",
+      "text": "Contact: 8066660321098",
+      "countries": [
+        "SI"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "EMSO opens with the day, so this reads as day 80 of month 66."
+    },
+    {
+      "id": "pl-pesel-still-detected",
+      "text": "PESEL 44051401359",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "44051401359"
+        ]
+      },
+      "notes": "A real PESEL must survive the date check."
+    },
+    {
+      "id": "ro-cnp-still-detected",
+      "text": "CNP 1800101221144",
+      "countries": [
+        "RO"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "1800101221144"
+        ]
+      },
+      "notes": "A real CNP must survive the date check."
+    },
+    {
+      "id": "si-emso-still-detected",
+      "text": "EMSO 0101006500006",
+      "countries": [
+        "SI"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "0101006500006"
+        ]
+      },
+      "notes": "A real EMSO must survive the date check."
+    },
+    {
+      "id": "de-handelsregister-court-suffix",
+      "text": "eingetragen im Handelsregister unter HRA 391538 B beim Amtsgericht Charlottenburg",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "HRA 391538 B"
+        ]
+      },
+      "notes": "The court-register letter is part of the number as the register writes it. Without it the span stopped a token short and the output read '[CHAMBER_OF_COMMERCE] B' -- 162 of 710 German values per corpus pass (rules-engine#42)."
+    },
+    {
+      "id": "de-handelsregister-suffix-k",
+      "text": "Handelsregister HRA 21108 K",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "HRA 21108 K"
+        ]
+      },
+      "notes": "The other suffix the corpus carries."
+    },
+    {
+      "id": "de-handelsregister-without-a-suffix",
+      "text": "Handelsregister HRB 123456",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "HRB 123456"
+        ]
+      },
+      "notes": "The suffix is optional, so the plain form must be unaffected."
+    },
+    {
+      "id": "de-handelsregister-does-not-eat-the-city",
+      "text": "Handelsregister HRA 391538 Berlin",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "HRA 391538"
+        ]
+      },
+      "notes": "The suffix is a single capital followed by a boundary, so it cannot swallow the next word -- 'Berlin' stays outside the span. This is the guard against re-introducing the class the fix belongs to (rules-engine#3, #35)."
+    },
+    {
+      "id": "postal-fr-domicile-noun",
+      "text": "Domicile : Lille, 77249.",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "77249"
+        ]
+      },
+      "notes": "The keyword list held the participle 'domicilié' but not the noun 'domicile', and neither contains the other. 839 of 2,277 French postal codes per corpus pass (rules-engine#41)."
+    },
+    {
+      "id": "postal-be-domicile-noun",
+      "text": "Domicile : Bruxelles, 1000.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1000"
+        ]
+      },
+      "notes": "The same gap in Belgium, where French is an official language."
+    },
+    {
+      "id": "postal-is-generic-label",
+      "text": "Postal: 417 Selfoss",
+      "countries": [
+        "IS"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "417"
+        ]
+      },
+      "notes": "Iceland, Norway and Sweden lacked the generic 'Postal:' label that twenty other countries carry."
+    },
+    {
+      "id": "postal-no-generic-label",
+      "text": "Postal: 0477 Ålesund",
+      "countries": [
+        "NO"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "0477"
+        ]
+      },
+      "notes": "Same for Norway."
+    },
+    {
+      "id": "postal-se-generic-label",
+      "text": "Postal: 3742 94 Västerås",
+      "countries": [
+        "SE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "3742 94"
+        ]
+      },
+      "notes": "Same for Sweden, which keeps three copies of its keyword list -- one per postal pattern -- so the label had to be added to all three."
+    },
+    {
+      "id": "postal-no-own-label-is-not-an-identifier-label",
+      "text": "postnummer: 5020 Bergen",
+      "countries": [
+        "NO"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "5020"
+        ]
+      },
+      "notes": "The suppressor that drops a digit run behind an identifier label matched 'postnummer' itself, because its cue is any word ending in 'Nummer'. Norway writes a bare four-digit code, so its postal pattern was dead behind its own canonical label (rules-engine#41)."
+    },
+    {
+      "id": "postal-dk-own-label-is-not-an-identifier-label",
+      "text": "postnr: 2100 København",
+      "countries": [
+        "DK"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2100"
+        ]
+      },
+      "notes": "Denmark, via the 'Nr' cue."
+    },
+    {
+      "id": "postal-fi-own-label-is-not-an-identifier-label",
+      "text": "postinumero: 00100 Helsinki",
+      "countries": [
+        "FI"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "00100"
+        ]
+      },
+      "notes": "Finland, via the 'Numero' cue."
+    },
+    {
+      "id": "postal-a-real-identifier-label-still-suppresses",
+      "text": "SV-Nummer: 1268 040390",
+      "countries": [
+        "AT"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ],
+      "notes": "The exemption is for labels beginning 'post'. A genuine record-number label must still suppress the digit run -- this is the case the suppressor exists for, and leaving half an Austrian social-security number exposed is what it prevents."
+    },
+    {
+      "id": "postal-policy-number-still-suppresses",
+      "text": "Policen-Nr. 4471",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ],
+      "notes": "Ditto for a policy number."
     }
   ]
 }
