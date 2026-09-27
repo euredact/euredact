@@ -1,5 +1,37 @@
 # Changelog
 
+Changes to this SDK, with the reasoning behind them: the measurement that
+motivated a fix, what a wider pattern cost in false positives, the alternative
+that was rejected.
+
+For a scannable, strictly categorised view of **both** SDKs in one place, see
+the [root CHANGELOG.md](../CHANGELOG.md). It follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this file is where the
+narrative lives. Sections here use that vocabulary
+(`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
+0.5.2 onward; earlier releases keep the headings they were written with.
+
+## Unreleased
+
+### Added
+
+- **Documentation: what `countries` actually controls**, **batch processing and
+  concurrency**, **what leaves your machine in cloud mode**, and **keeping
+  identifiers local** — the same four sections as the Python SDK, with this
+  SDK's semantics: `redactBatch` is synchronous by design because the engine is
+  CPU-bound, `redactAsync` exists for the cloud tier rather than for
+  parallelism, and real parallelism means `node:worker_threads`.
+- **A root [`CHANGELOG.md`](../CHANGELOG.md)** covering both SDKs in strict
+  [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) form.
+
+### Fixed
+
+- **A stale duplicate `## Performance` section** in the README quoted 0.02 ms
+  per redaction and an 86 KB package. Both were wrong — the measured figures are
+  154 µs median for a short record and a 150 kB tarball — and the two
+  `## Performance` headings collided as anchors. Removed, with the package
+  figures folded into the measured section.
+
 ## 0.5.1 (2026-09-25)
 
 ### Added

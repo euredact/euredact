@@ -118,6 +118,20 @@ employer, a diagnosis, a job title. The cloud tier sends the document to the
 euRedact inference service, which runs the same deterministic rules engine and
 then asks a fine-tuned model only *what did the rules miss?*
 
+**What leaves your machine.** In `mode="cloud"` the whole document is sent to the
+service over TLS. The local rules engine does not run first and nothing is
+stripped before the request — the service runs its own rules engine and the
+model, which is why cloud results are a superset of rules results. The local SDK
+touches the response, not the request: it rebuilds the masked text from the
+returned spans when `tokenize` or an `allowlist` is set.
+
+If your requirement is that structured identifiers never leave your
+infrastructure, compose the local engine with a model of your choice instead —
+`tokenize=True`, send `redacted_text`, then `restore()`. Note the trade-off: the
+local engine cannot mask a name or a diagnosis, because it cannot find them.
+[Python](euredact-python/README.md#keeping-identifiers-local) ·
+[TypeScript](euredact-ts/README.md#keeping-identifiers-local).
+
 ### Python
 
 ```bash
@@ -260,6 +274,32 @@ Both SDKs take `mode="rules"` (default) or `mode="cloud"` — see
 [Cloud tier](#cloud-tier). In TypeScript the cloud path is `redactAsync()`,
 because `redact()` is synchronous and a network call cannot be.
 
+### `countries` scores, it does not filter
+
+The parameter most often misread. `countries` decides how a detection is
+**attributed and scored**; it does **not** decide what gets **found**. Every
+country's patterns run on every document, so declaring `countries=["NL"]` does
+not switch the Belgian patterns off — a Belgian national number in that document
+is still detected and still masked, and is flagged `out_of_scope` instead.
+
+A redaction library that hid a Belgian identifier because you told it the
+document was Dutch would have failed at the only job it has, so scoping is a
+reporting concern and masking is not. Do not use `countries` as a filter; filter
+on `detection.country` or `detection.out_of_scope` after the call.
+
+Worked example with output, plus `country_hint` and country inference:
+[Python](euredact-python/README.md#what-countries-actually-controls) ·
+[TypeScript](euredact-ts/README.md#what-countries-actually-controls).
+
+### Batch and concurrency
+
+`redact_batch()` / `redactBatch()` load the country configurations once rather
+than per document. Python adds `aredact_batch(..., max_concurrency=n)` and a
+lazy `redact_iter()`; TypeScript's batch is synchronous by design, because the
+engine is CPU-bound and a promise would add scheduling without parallelism.
+Guides: [Python](euredact-python/README.md#batch-processing-and-concurrency) ·
+[TypeScript](euredact-ts/README.md#batch-processing-and-concurrency).
+
 Every option is documented in full in the package READMEs, each of which opens
 its reference with a **Which option do I need?** table:
 
@@ -361,9 +401,19 @@ Run `make help` for the full list.
 ## Repository Structure
 
 ```
+CHANGELOG.md        Both SDKs, strictly categorised (Keep a Changelog)
+conformance/        Shared test vectors, run by both SDKs
 euredact-python/    Python SDK (pip install euredact)
 euredact-ts/        TypeScript/Node.js SDK (npm install euredact)
 ```
+
+## Changelog
+
+[`CHANGELOG.md`](CHANGELOG.md) covers **both** SDKs in one place, following
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and marks any entry
+that applies to only one of them. The per-package changelogs carry the reasoning
+behind each change at length:
+[Python](euredact-python/CHANGELOG.md) · [TypeScript](euredact-ts/CHANGELOG.md).
 
 ## License
 

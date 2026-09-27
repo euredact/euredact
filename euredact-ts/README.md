@@ -370,6 +370,85 @@ masked is unchanged either way.
 
 For custom patterns, `entityType` is a plain string (e.g. `"EMPLOYEE_ID"`).
 
+## Batch processing and concurrency
+
+`redactBatch` loads the country configurations once instead of per document,
+which is the whole reason to prefer it to a loop:
+
+```ts
+import { redactBatch } from "euredact";
+
+const docs = ["Mijn BSN is 111222333.", "IBAN NL91ABNA0417164300."];
+
+redactBatch(docs, { countries: ["NL"] }).map((r) => r.redactedText);
+// [ 'Mijn BSN is [NATIONAL_ID].', 'IBAN [BANK_ACCOUNT].' ]
+```
+
+`redactBatch` is **synchronous**, and deliberately so: the rules engine is
+CPU-bound, so wrapping it in a promise would add scheduling without adding
+parallelism. There is no `redactBatchAsync`. Where the Python SDK offers
+`aredact_batch(..., max_concurrency=n)` — it can offload to a thread pool —
+this SDK has one thread, so the honest equivalent is either `redactBatch` on the
+main thread or real workers:
+
+```ts
+// Keep the event loop responsive across a large batch.
+import { redactBatch } from "euredact";
+
+async function* redactInChunks(docs: string[], size = 200) {
+  for (let i = 0; i < docs.length; i += size) {
+    yield redactBatch(docs.slice(i, i + size), { countries: ["NL"] });
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+```
+
+For genuine parallelism use `node:worker_threads` and give each worker its own
+`EuRedact`; for true throughput at scale that is the only thing that helps,
+because the cost is regex matching rather than waiting.
+
+`redactAsync` is for the **cloud tier**, not for parallelism — it exists because
+a network call cannot be synchronous. With `mode: "rules"` it resolves
+immediately with exactly what `redact()` returns. Cloud calls *are* I/O, so
+those parallelise properly:
+
+```ts
+import { redactAsync } from "euredact";
+
+const results = await Promise.all(
+  docs.map((d) => redactAsync(d, { countries: ["BE"], mode: "cloud" })),
+);
+```
+
+Bound that yourself if the batch is large — the service enforces quotas and will
+answer `429`, which the client honours via `Retry-After`.
+
+### Reuse one instance
+
+The module-level functions share a single hidden instance, which is usually what
+you want. Construct your own when the configuration must be per-tenant: custom
+patterns, an allowlist and the result cache all live on the instance.
+
+```ts
+import { EuRedact } from "euredact";
+
+const engine = new EuRedact({ allowlist: ["ACME Corporation"] });
+engine.addCustomPattern("CASE_REF", String.raw`CASE-\d{8}`);
+
+engine.redactBatch(
+  ["ACME Corporation, ref CASE-20260401, BSN 111222333."],
+  { countries: ["NL"] },
+)[0].redactedText;
+// 'ACME Corporation, ref [CASE_REF], BSN [NATIONAL_ID].'
+```
+
+### Tokens and referential labels do not span a batch
+
+`tokenize: true` mints tokens **per call**, so item 3 of a batch does not share a
+token with item 1 even for the same value. If two documents must agree on a
+label, redact them as one text, or use `referentialIntegrity: true`, whose
+`TYPE_n` numbering is per instance rather than per call.
+
 ## Cloud tier
 
 > **Status: private alpha.** The cloud tier is in closed testing — it is **not**
@@ -419,6 +498,72 @@ The package stays **zero-dependency** — the client uses the platform's own
 `fetch`. Node 18+ provides one; on Node 16 the rules engine is unaffected and a
 `fetchImpl` can be supplied.
 
+### What leaves your machine
+
+Be precise about this, because it is the question a security review asks first
+and the answer is not "only the leftovers".
+
+In `mode: "cloud"` the **whole document** is sent to the service over TLS. The
+local rules engine does not run first and nothing is stripped before the
+request: the cloud path is taken before normalisation, and the request body is
+the text you passed in.
+
+```
+mode: "cloud"     your text ──TLS──▶ service (its own rules engine + model)
+                  masked text ◀────── spans + redactedText
+```
+
+The service runs the same rules engine server-side and adds the model, which is
+why cloud results are a superset of rules results rather than a different
+answer. The local SDK touches the response, not the request: when `tokenize` or
+an `allowlist` is set it rebuilds the masked text from the spans the service
+returned, and it verifies every span still matches the document first — which is
+load-bearing here, because service offsets are code points and JavaScript slices
+UTF-16 units.
+
+`detectDates` is the one option not forwarded: the service always runs with
+dates on, because that is what the model was trained against. It can only cause
+more to be detected, never less.
+
+### Keeping identifiers local
+
+If your requirement is that structured identifiers **never leave your
+infrastructure**, do not use `mode: "cloud"` for that — compose the local engine
+with whatever model you like instead. This is what `tokenize` is for:
+
+```ts
+import { redact, restore } from "euredact";
+
+const prompt = "Stuur een mail naar Bas Verhoeven (bas@example.nl) over NL91ABNA0417164300.";
+
+// 1. Mask locally. Nothing has left the process.
+const local = redact(prompt, { countries: ["NL"], tokenize: true });
+local.redactedText;
+// 'Stuur een mail naar Bas Verhoeven (EMAIL_S5SH) over BANK_ACCOUNT_5XXR.'
+local.tokens;
+// { BANK_ACCOUNT_5XXR: 'NL91ABNA0417164300', EMAIL_S5SH: 'bas@example.nl' }
+
+// 2. Send only the masked text to any model, ours or someone else's.
+const answer = await callYourModel(local.redactedText);
+
+// 3. Put the real values back locally.
+restore(answer, local.tokens);
+```
+
+The token suffixes are random per call, so yours will differ.
+
+**Read that output carefully: `Bas Verhoeven` is still there.** That is the whole
+trade-off and it is why the cloud tier exists. The local engine masks what has a
+shape — the IBAN and the address — and cannot mask a name, an employer or a
+diagnosis, because it cannot find them. So this pattern keeps every structured
+identifier inside your process and sends the prose, names included.
+`mode: "cloud"` sends everything and gets both back.
+
+These are different trust boundaries, not two speeds of the same thing. If names
+must be masked *and* identifiers must not leave your infrastructure, neither
+option does that today; run the model yourself against `local.redactedText`.
+
+
 ## `NAME` is now `PERSON_NAME`
 
 The canonical type name is `PERSON_NAME`; `NAME` is a legacy alias, exactly as
@@ -430,6 +575,82 @@ cloud tier was stubbed until this release, so it was never emitted. Code
 matching the *string* `"NAME"` should be updated; `LEGACY_TYPE_ALIASES`
 publishes the mapping, and `STREET_ADDRESS` → `ADDRESS` and
 `NATIONALITY_ETHNICITY` → `SENSITIVE_ATTRIBUTE` are recognised the same way.
+
+## What `countries` actually controls
+
+This is the parameter most often misread, and reading it wrongly leads to
+under-redaction in exactly the case you care about — a foreign identifier in a
+domestic document. So, precisely:
+
+> `countries` decides how a detection is **attributed and scored**.
+> It does **not** decide what gets **found**.
+
+Country-specific patterns for every supported country run on every document,
+whatever you declare. Declaring `countries: ["NL"]` does not switch the Belgian
+patterns off; it says "this document is Dutch", and anything Belgian that turns
+up is still detected and still masked — it is just flagged as sitting outside
+what you declared.
+
+The same Belgian national number, under four different calls:
+
+```ts
+import { redact } from "euredact";
+
+const text = "Rijksregisternummer 85.07.30-033.61 van onze klant.";
+
+for (const options of [{ countries: ["NL"] },
+                       { countries: ["BE"] },
+                       {},
+                       { countries: ["NL"], countryHint: ["BE"] }]) {
+  const result = redact(text, options);
+  const [detection] = result.detections;
+  console.log(result.redactedText, "|", result.detectionMode,
+              "| country:", detection.country,
+              "| countryConfidence:", detection.countryConfidence,
+              "| outOfScope:", detection.outOfScope);
+}
+```
+
+```
+Rijksregisternummer [NATIONAL_ID] van onze klant. | declared | country: BE | countryConfidence: 0 | outOfScope: true
+Rijksregisternummer [NATIONAL_ID] van onze klant. | declared | country: BE | countryConfidence: 0.8807970779778823 | outOfScope: false
+Rijksregisternummer [NATIONAL_ID] van onze klant. | inferred | country: BE | countryConfidence: 0 | outOfScope: false
+Rijksregisternummer [NATIONAL_ID] van onze klant. | declared | country: BE | countryConfidence: 0.8807970779778823 | outOfScope: true
+```
+
+**The masked output is byte-identical in all four.** What moved is the metadata.
+
+| You pass | Effect on what is found | Effect on labelling |
+|---|---|---|
+| `countries: ["NL"]` | None — every country's patterns still run | Attributed normally; a non-Dutch hit gets `outOfScope: true` and `countryConfidence: 0` |
+| `countries: ["BE"]` | None | The Belgian hit is corroborated: `countryConfidence` ~0.88, `outOfScope: false` |
+| `countries` omitted | None | `detectionMode: "inferred"`; the country is inferred from the document and nothing is out of scope, because nothing was declared |
+| `countryHint: ["BE"]` | None | A *prior*: it corroborates Belgian attribution **without** widening or narrowing scope, so `out_of_scope` still reflects `countries` alone |
+
+### How to use each one
+
+- **`countries: [...]`** — you know where the document is from. Use it. It
+  improves attribution and makes `out_of_scope` meaningful, and it is the
+  cheapest path because country inference is skipped.
+- **`countries` omitted** — you do not know. The engine infers from the document
+  and reports `inferredCountries` with confidences.
+- **`countryHint: [...]`** — you have a weak signal (the customer's billing
+  country, the mailbox a document arrived in) that should resolve ambiguity
+  without declaring scope. Added in 0.3.2 precisely so that a hint could not be
+  mistaken for a scope restriction.
+
+### Why it works this way
+
+Until 0.3.2, `countries` *did* gate detection, and 0.3.3 fixed the remaining
+case where it "could change which spans were found, not just how they were
+labelled". Both were changed deliberately: a redaction library that hides a
+Belgian national number because you told it the document was Dutch has failed
+at the only job it has. Scoping is a reporting concern; masking is not.
+
+The practical consequence: **do not use `countries` as a filter.** If you only
+want Dutch detections in your output, filter on
+`detection.country === "NL"` or on `detection.outOfScope` after the call —
+the value was still masked in the text either way.
 
 ## Country codes
 
@@ -926,19 +1147,21 @@ Measured on the same 611 documents, this SDK runs about 6–7× faster than the
 accelerated Python path, so adding a native addon — and with it the loss of
 bundler, edge-runtime and Deno compatibility — would buy nothing.
 
+| Package | |
+|---|---:|
+| Tarball | 150 kB |
+| Unpacked | 629 kB |
+| Runtime dependencies | **0** |
+
+Measured with `npm pack --dry-run` at 0.5.1. A stale duplicate of this section
+previously quoted 0.02 ms and 86 KB; both were wrong, and the figures above are
+the measured ones.
+
 ## CommonJS
 
 ```js
 const { redact } = require("euredact");
 ```
-
-## Performance
-
-| Metric | Value |
-|---|---|
-| Latency per redaction | ~0.02 ms |
-| Package size | ~86 KB |
-| Runtime dependencies | 0 |
 
 ## License
 

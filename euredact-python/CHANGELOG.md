@@ -1,5 +1,43 @@
 # Changelog
 
+Changes to this SDK, with the reasoning behind them: the measurement that
+motivated a fix, what a wider pattern cost in false positives, the alternative
+that was rejected.
+
+For a scannable, strictly categorised view of **both** SDKs in one place, see
+the [root CHANGELOG.md](../CHANGELOG.md). It follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this file is where the
+narrative lives. Sections here use that vocabulary
+(`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
+0.5.2 onward; earlier releases keep the headings they were written with.
+
+## Unreleased
+
+### Added
+
+- **Documentation: what `countries` actually controls.** It decides how a
+  detection is attributed and scored, not what is found — every country's
+  patterns run on every document, so a Belgian identifier in a document declared
+  `countries=["NL"]` is still masked and merely flagged `out_of_scope`. The new
+  section shows the output of all four call shapes side by side, because the
+  masked text is byte-identical in each and only the metadata moves. Misreading
+  this parameter as a filter is the most likely route to under-redaction.
+- **Documentation: batch processing and concurrency.** `redact_batch`,
+  `aredact_batch(max_concurrency=...)` and `redact_iter` in one place, with what
+  each costs in memory, why reusing an instance matters for the cache, and the
+  fact that tokens do not span a batch.
+- **Documentation: what leaves your machine in cloud mode.** In `mode="cloud"`
+  the whole document is sent; the local rules engine does not run first and
+  nothing is stripped before the request. Written because the opposite was
+  believed. The `tokenize` → model → `restore` composition is documented beside
+  it as the local-first alternative, including what it cannot do — it masks the
+  IBAN and leaves the name, because the rules engine cannot find a name.
+- **A root [`CHANGELOG.md`](../CHANGELOG.md)** covering both SDKs in strict
+  [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) form, and
+  `tests/test_changelog.py` to keep it that way: sixteen distinct section names
+  had accumulated across the two package changelogs because nothing enforced a
+  vocabulary.
+
 ## 0.5.1 (2026-09-25)
 
 ### Added
