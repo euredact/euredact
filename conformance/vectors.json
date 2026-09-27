@@ -4082,6 +4082,78 @@
         ]
       },
       "notes": "A checksum-valid IBAN is claimed whole; the generic phone pattern must not take a digit group out of it (rules-engine#30)."
+    },
+    {
+      "id": "pl-pesel-impossible-day-is-not-a-national-id",
+      "text": "Telefon 80666603210",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "Day 66. The PESEL validator checked its weighted checksum and never the date, so this was NATIONAL_ID at confidence=high even behind 'Telefon' (rules-engine#43)."
+    },
+    {
+      "id": "ro-cnp-impossible-date-is-not-a-national-id",
+      "text": "Contact: 8066660321098",
+      "countries": [
+        "RO"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "Month 66, day 60. Same defect in the Romanian CNP validator."
+    },
+    {
+      "id": "si-emso-impossible-date-is-not-a-national-id",
+      "text": "Contact: 8066660321098",
+      "countries": [
+        "SI"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "EMSO opens with the day, so this reads as day 80 of month 66."
+    },
+    {
+      "id": "pl-pesel-still-detected",
+      "text": "PESEL 44051401359",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "44051401359"
+        ]
+      },
+      "notes": "A real PESEL must survive the date check."
+    },
+    {
+      "id": "ro-cnp-still-detected",
+      "text": "CNP 1800101221144",
+      "countries": [
+        "RO"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "1800101221144"
+        ]
+      },
+      "notes": "A real CNP must survive the date check."
+    },
+    {
+      "id": "si-emso-still-detected",
+      "text": "EMSO 0101006500006",
+      "countries": [
+        "SI"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "0101006500006"
+        ]
+      },
+      "notes": "A real EMSO must survive the date check."
     }
   ]
 }
