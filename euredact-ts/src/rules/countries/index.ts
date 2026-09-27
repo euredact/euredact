@@ -275,7 +275,7 @@ const SHARED: CountryConfig = {
     // ten-character span "CA1234567." -- a passport number plus the sentence's
     // period, masked as a credential because a "credentials" word sat within
     // the context window (rules-engine#35).
-    p(EntityType.SECRET, String.raw`(?<=[:=] )\S{7,}[^\s.,;:!?)\]}'"]|(?<=[:=])\S{7,}[^\s.,;:!?)\]}'"]`, "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
+    p(EntityType.SECRET, String.raw`(?<=[:=] )\S{7,}[^\s.,;:!?)'"]|(?<=[:=])\S{7,}[^\s.,;:!?)'"]`, "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
     // --- Secret / API Key (entropy-based fallback for longer tokens) ---
     // Only the *trailing* \b is replaced. It could not match when the token run
     // ended on "-", "+" or "/", so the engine backtracked across two

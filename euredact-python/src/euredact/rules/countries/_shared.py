@@ -589,8 +589,17 @@ class SharedConfig(CountryConfig):
                 # Widening a span over its neighbour's punctuation is the same
                 # class as the phone pattern absorbing a trailing ")" in
                 # rules-engine#3 (rules-engine#35).
-                pattern=r"(?<=[:=] )[^\s]{7,}[^\s.,;:!?)\]}'\"]"
-                        r"|(?<=[:=])[^\s]{7,}[^\s.,;:!?)\]}'\"]",
+                #
+                # "]" and "}" are *allowed* as the final character, and ")" is
+                # not. The span begins immediately after the ": ", so an opening
+                # bracket is inside it and its closer balances -- excluding "]"
+                # turned "[AKIA...]" into a span missing its bracket, which
+                # masked to "[SECRET]]" and, worse, slipped past the
+                # placeholder guard for "[POSTAL_CODE" (rules-engine#33). A
+                # parenthesis is the other way round: "(secret: x)" opens
+                # before the colon, so its ")" would be unbalanced.
+                pattern=r"(?<=[:=] )[^\s]{7,}[^\s.,;:!?)'\"]"
+                        r"|(?<=[:=])[^\s]{7,}[^\s.,;:!?)'\"]",
                 validator="high_entropy",
                 description="Assigned secret value",
                 context_keywords=SECRET_CONTEXT,
