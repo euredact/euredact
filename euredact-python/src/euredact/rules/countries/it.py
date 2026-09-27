@@ -37,7 +37,7 @@ class ITConfig(CountryConfig):
             # --- VAT (Partita IVA) ---
             PatternDef(
                 entity_type=EntityType.VAT,
-                pattern=r"\bIT\d{11}\b",
+                pattern=r"\bIT[\s.]?\d{11}\b",
                 validator=None,
                 description="Italian Partita IVA — IT + 11 digits",
             ),

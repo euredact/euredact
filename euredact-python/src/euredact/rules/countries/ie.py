@@ -21,7 +21,7 @@ class IEConfig(CountryConfig):
                        pattern=r"\bIE\d{2}[A-Z]{4}\d{14}\b",
                        validator="iban", description="Irish IBAN — compact"),
             PatternDef(entity_type=EntityType.VAT,
-                       pattern=r"\bIE\d{7}[A-Z]\b",
+                       pattern=r"\bIE[\s.]?\d{7}[A-Z]\b",
                        validator=None, description="Irish VAT — IE + 7 digits + letter"),
             # Mobile: 08X/09X
             PatternDef(entity_type=EntityType.PHONE,

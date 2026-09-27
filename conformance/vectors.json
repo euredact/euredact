@@ -2768,6 +2768,375 @@
       ],
       "expectRedactedText": "Steuerliche Identifikationsnummer siehe beiliegendes Schreiben vom Amt 63 841 720 395",
       "notes": "Widening CUE_WINDOW to 44 must not turn a distant label into a licence for every number after it -- the postal-code year defect. The label is there but a sentence away, the value fails the German tax checksum, and nothing else claims it, so it is correctly declined."
+    },
+    {
+      "id": "vat-at-uid-with-a-space",
+      "text": "UID-Nummer: ATU 36438508",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "ATU 36438508"
+        ]
+      },
+      "notes": "A space after the country prefix is how a UID is printed on an invoice. Without separator tolerance there was no VAT candidate at all, so the Danish eight-digit phone pattern took the digits and left 'ATU' visible (rules-engine#30)."
+    },
+    {
+      "id": "vat-at-uid-without-a-space",
+      "text": "UID-Nummer: ATU36438508",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "ATU36438508"
+        ]
+      },
+      "notes": "The form that already worked, pinned so adding separator tolerance cannot regress it."
+    },
+    {
+      "id": "vat-at-uid-in-a-company-line",
+      "text": "Kapsch TrafficCom AG (ATU 36438508), Am Europlatz 2, 1120 Wien",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "ATU 36438508"
+        ],
+        "POSTAL_CODE": [
+          "1120"
+        ]
+      },
+      "notes": "The reported document line: the VAT is whole and the postal code is still found."
+    },
+    {
+      "id": "vat-uk-grouped-digits",
+      "text": "VAT number: GB 412 8836 09",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "VAT": [
+          "GB 412 8836 09"
+        ]
+      },
+      "notes": "A UK VAT number is printed grouped 3-4-2. Previously the Icelandic phone pattern took '412 8836', leaving 'GB' and '09' in the clear."
+    },
+    {
+      "id": "phone-not-taken-from-a-rejected-account-run",
+      "text": "Compte: FR76 3000 4008 0300 0109 5374",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE",
+        "SECRET",
+        "LICENSE_PLATE",
+        "NATIONAL_ID"
+      ],
+      "notes": "This IBAN fails its checksum, so declining it is correct -- but a generic phone pattern must not then harvest two digit groups out of the middle of it."
+    },
+    {
+      "id": "phone-dk-eight-digits-still-detected",
+      "text": "Telefon: 32 14 56 78",
+      "countries": [
+        "DK"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "32 14 56 78"
+        ]
+      },
+      "notes": "The Danish eight-digit shape is legitimate in a Danish document. The account-run guard must not cost it."
+    },
+    {
+      "id": "bank-account-valid-iban-still-detected",
+      "text": "Compte: FR14 2004 1010 0505 0001 3M02 606",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "FR14 2004 1010 0505 0001 3M02 606"
+        ]
+      },
+      "notes": "A checksum-valid IBAN, spaced, is unaffected by the guard."
+    },
+    {
+      "id": "postal-not-the-tail-of-a-case-reference-lu",
+      "text": "Rapport de police: PV-2026-LU-09143 (établi par la Police Grand-Ducale)",
+      "countries": [
+        "LU"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE",
+        "SECRET",
+        "LICENSE_PLATE",
+        "NATIONAL_ID"
+      ],
+      "notes": "'LU' sits mid-chain in a hyphenated reference, so it is not a country prefix. Previously the German five-digit postal pattern kept '09143' and the rest of the file number stayed visible (rules-engine#31)."
+    },
+    {
+      "id": "postal-not-the-tail-of-a-case-reference-ch",
+      "text": "Rapport de police: PV-2026-GE-09143.",
+      "countries": [
+        "CH"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE",
+        "SECRET",
+        "LICENSE_PLATE",
+        "NATIONAL_ID"
+      ],
+      "notes": "The same reference in a Swiss document."
+    },
+    {
+      "id": "postal-country-prefixed-lu-still-detected",
+      "text": "Adresse: L-1234 Luxembourg.",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "L-1234"
+        ]
+      },
+      "notes": "A real country prefix opens its token, so it must still be read as an address."
+    },
+    {
+      "id": "postal-country-prefixed-de-still-detected",
+      "text": "Anschrift: D-10115 Berlin.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "10115"
+        ]
+      },
+      "notes": "Ditto for Germany."
+    },
+    {
+      "id": "postal-country-prefixed-be-still-detected",
+      "text": "Adres: B-2000 Antwerpen.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2000"
+        ]
+      },
+      "notes": "Ditto for Belgium."
+    },
+    {
+      "id": "postal-year-in-next-paragraph-is-not-an-address",
+      "text": "Wohnhaft: Am Europlatz 2, 1120 Wien.\n\nIm Großteil des Jahres 2025 beschäftigt.",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1120"
+        ]
+      },
+      "notes": "One real address used to license every later four-digit run in the document. The year is in the next paragraph and an address is a contiguous block (rules-engine#32)."
+    },
+    {
+      "id": "postal-year-in-a-law-citation-is-not-an-address",
+      "text": "Wohnhaft: Am Europlatz 2, 1120 Wien.\n\ndem Börsegesetz 2018 (BörseG 2018) entsprechend.",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1120"
+        ]
+      },
+      "notes": "Masking a law citation as an address makes the document unreadable and the redaction report wrong."
+    },
+    {
+      "id": "postal-cv-year-range-is-not-an-address",
+      "text": "Wohnhaft: Am Europlatz 2, 1120 Wien.\n\n2000 — 2008 / AHS-Matura",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1120"
+        ]
+      },
+      "notes": "A CV date range, in a document whose header carries a real address."
+    },
+    {
+      "id": "postal-in-the-year-range-beside-a-city",
+      "text": "Adres: Grote Markt 1, 2000 Antwerpen.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2000"
+        ]
+      },
+      "notes": "2000 is both a plausible year and Antwerp's real postal code. Beside its city it is an address, and the narrowed rescue must keep it."
+    },
+    {
+      "id": "postal-in-the-year-range-nl",
+      "text": "Adres: Kerkstraat 5, 2011 Haarlem.",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2011"
+        ]
+      },
+      "notes": "Same for a Dutch code inside the year range."
+    },
+    {
+      "id": "postal-on-its-own-line-in-an-address-block",
+      "text": "Adresse:\nAm Europlatz 2\n1120 Wien",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1120"
+        ]
+      },
+      "notes": "The rescue may cross a single newline, because a postal code legitimately sits on its own line in an address block -- only a blank line ends it."
+    },
+    {
+      "id": "placeholder-postal-code-is-not-a-secret",
+      "text": "credentials: [POSTAL_CODE] rotated.",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE",
+        "SECRET",
+        "LICENSE_PLATE",
+        "NATIONAL_ID"
+      ],
+      "notes": "The engine's own output marker. Thirteen characters of mixed case with an underscore read as a high-entropy credential, so a second pass replaced it with [SECRET] (rules-engine#33)."
+    },
+    {
+      "id": "placeholder-national-id-is-not-a-secret",
+      "text": "credentials: [NATIONAL_ID] rotated.",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE",
+        "SECRET",
+        "LICENSE_PLATE",
+        "NATIONAL_ID"
+      ],
+      "notes": "Same for another long type name."
+    },
+    {
+      "id": "placeholder-bank-account-is-not-a-secret",
+      "text": "credentials: [BANK_ACCOUNT] rotated.",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE",
+        "SECRET",
+        "LICENSE_PLATE",
+        "NATIONAL_ID"
+      ],
+      "notes": "Same for the longest."
+    },
+    {
+      "id": "secret-in-brackets-is-still-a-secret",
+      "text": "credentials: [AKIAIOSFODNN7EXAMPLE] rotated.",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "[AKIAIOSFODNN7EXAMPLE]"
+        ]
+      },
+      "notes": "The guard is restricted to real entity-type names for this reason: a bracketed upper-case token can also be a live AWS key, and a redaction library may not trade a false negative for tidiness."
+    },
+    {
+      "id": "postal-year-and-address-in-different-sentences",
+      "text": "Déclaration de revenus 2022. Laurent Leroy. Numéro fiscal : 1167724166806. Adresse : rue du Commerce 130, 89654 Angers.",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "89654"
+        ],
+        "TAX_ID": [
+          "1167724166806"
+        ]
+      },
+      "notes": "The dominant corpus shape: the year and a real address sit on one line, so no blank line separates them and 'Adresse' is 60 characters away. Only the address's own code is a postal code. 47 of 81 POSTAL_CODE false positives were bare years like this (rules-engine#32)."
+    },
+    {
+      "id": "postal-year-shaped-code-followed-by-its-city",
+      "text": "De betrokkene is wonende te 2000 Antwerpen.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2000"
+        ]
+      },
+      "notes": "A capitalised place name immediately after is address structure, so a year-shaped value is kept even in prose."
+    },
+    {
+      "id": "postal-label-touching-a-year-shaped-code",
+      "text": "PLZ: 2011",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2011"
+        ]
+      },
+      "notes": "A postal label with nothing but punctuation between it and the value."
+    },
+    {
+      "id": "postal-year-shaped-code-in-a-street-sentence",
+      "text": "Te huur: Lange Nieuwstraat 12, rustige ligging in 2018, vlakbij openbaar vervoer.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2018"
+        ]
+      },
+      "notes": "2018 is Antwerp's real postal code and the street is the evidence. The value's own sentence is what separates this from the false positives, where the address is in a later sentence."
+    },
+    {
+      "id": "postal-dob-year-is-not-the-address-code",
+      "text": "Navn: Marit Eriksen\nFodselsdato: 11.03.1970\nAdresse: Torggata 76, 1970 Alesund",
+      "countries": [
+        "NO"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1970"
+        ]
+      },
+      "notes": "The same four digits appear as a birth year and as the postal code. Only the one in address structure is a postal code, and the span must be the second occurrence. (Dates are off unless detect_dates is set, so the birth date itself is not expected here.)"
     }
   ]
 }

@@ -37,7 +37,7 @@ class PTConfig(CountryConfig):
             # --- VAT ---
             PatternDef(
                 entity_type=EntityType.VAT,
-                pattern=r"\bPT\d{9}\b",
+                pattern=r"\bPT[\s.]?\d{9}\b",
                 validator=None,
                 description="Portuguese VAT — PT + 9 digits",
             ),

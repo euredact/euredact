@@ -16,7 +16,7 @@ class SKConfig(CountryConfig):
                        validator="iban", description="Slovak IBAN — grouped"),
             PatternDef(entity_type=EntityType.IBAN, pattern=r"\bSK\d{22}\b",
                        validator="iban", description="Slovak IBAN — compact"),
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bSK\d{10}\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bSK[\s.]?\d{10}\b",
                        validator=None, description="Slovak VAT — SK + 10 digits"),
             PatternDef(entity_type=EntityType.PHONE, pattern=r"\b0?9\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b",
                        validator=None, description="Slovak phone — 09XX XXX XXX"),

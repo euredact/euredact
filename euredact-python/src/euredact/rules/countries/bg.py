@@ -14,7 +14,7 @@ class BGConfig(CountryConfig):
                        validator="bulgarian_egn", description="Bulgarian EGN — 10 digits"),
             PatternDef(entity_type=EntityType.IBAN, pattern=r"\bBG\d{2}\s?[A-Z]{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b",
                        validator="iban", description="Bulgarian IBAN — spaced/compact"),
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bBG\d{9,10}\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bBG[\s.]?\d{9,10}\b",
                        validator=None, description="Bulgarian VAT — BG + 9/10 digits"),
             PatternDef(entity_type=EntityType.PHONE, pattern=r"\b0?[89][789][\s\-]?\d{3}[\s\-]?\d{3,4}\b",
                        validator=None, description="Bulgarian phone — 08X/09X XXX XXX(X)"),

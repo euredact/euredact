@@ -18,7 +18,7 @@ class HRConfig(CountryConfig):
                        validator="iban", description="Croatian IBAN — 4+4+4+5 grouped"),
             PatternDef(entity_type=EntityType.IBAN, pattern=r"\bHR\d{19}\b",
                        validator="iban", description="Croatian IBAN — compact"),
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bHR\d{11}\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bHR[\s.]?\d{11}\b",
                        validator=None, description="Croatian PDV — HR + 11 digits"),
             PatternDef(entity_type=EntityType.PHONE, pattern=r"\b0?9[12579][\s\-]?\d{3}[\s\-]?\d{3,4}\b",
                        validator=None, description="Croatian phone — 09X XXX XXX(X)"),

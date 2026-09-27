@@ -21,7 +21,7 @@ class EEConfig(CountryConfig):
                        pattern=r"\bEE\d{18}\b",
                        validator="iban", description="Estonian IBAN — compact"),
             PatternDef(entity_type=EntityType.VAT,
-                       pattern=r"\bEE\d{9}\b",
+                       pattern=r"\bEE[\s.]?\d{9}\b",
                        validator=None, description="Estonian VAT (KMKR) — EE + 9 digits"),
             PatternDef(entity_type=EntityType.PHONE,
                        pattern=r"\b5\d{3}[\s\-]?\d{4}\b",

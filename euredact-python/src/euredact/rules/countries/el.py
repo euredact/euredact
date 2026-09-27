@@ -25,7 +25,7 @@ class ELConfig(CountryConfig):
             PatternDef(entity_type=EntityType.IBAN, pattern=r"\bGR\d{25}\b",
                        validator="iban", description="Greek IBAN — compact"),
             # VAT
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bEL\d{9}\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bEL[\s.]?\d{9}\b",
                        validator=None, description="Greek VAT — EL + 9 digits"),
             # Phone (mobile 69X, landline 2XX)
             PatternDef(entity_type=EntityType.PHONE,

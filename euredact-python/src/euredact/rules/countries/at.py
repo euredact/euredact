@@ -30,7 +30,7 @@ class ATConfig(CountryConfig):
             # --- VAT (UID) ---
             PatternDef(
                 entity_type=EntityType.VAT,
-                pattern=r"\bATU\d{8}\b",
+                pattern=r"\bATU[\s.]?\d{8}\b",
                 validator=None,
                 description="Austrian VAT (UID) — ATU + 8 digits",
             ),
