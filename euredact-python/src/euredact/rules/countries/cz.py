@@ -16,7 +16,7 @@ class CZConfig(CountryConfig):
                        validator="iban", description="Czech IBAN — grouped"),
             PatternDef(entity_type=EntityType.IBAN, pattern=r"\bCZ\d{22}\b",
                        validator="iban", description="Czech IBAN — compact"),
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bCZ\d{8,10}\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bCZ[\s.]?\d{8,10}\b",
                        validator=None, description="Czech DIČ — CZ + 8-10 digits"),
             PatternDef(entity_type=EntityType.PHONE, pattern=r"\b[67]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b",
                        validator=None, description="Czech phone — 9 digits"),

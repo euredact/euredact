@@ -14,7 +14,7 @@ class ROConfig(CountryConfig):
                        validator="romanian_cnp", description="Romanian CNP — 13 digits"),
             PatternDef(entity_type=EntityType.IBAN, pattern=r"\bRO\d{2}[A-Z]{4}\d{16}\b",
                        validator="iban", description="Romanian IBAN — RO + 4 letters + 16 digits"),
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bRO\d{2,10}\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bRO[\s.]?\d{2,10}\b",
                        validator=None, description="Romanian CUI — RO + 2-10 digits"),
             PatternDef(entity_type=EntityType.PHONE, pattern=r"\b0?7[2-9]\d{1}[\s\-]?\d{3}[\s\-]?\d{3,4}\b",
                        validator=None, description="Romanian phone — 07XX XXX XXX(X)"),

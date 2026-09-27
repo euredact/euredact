@@ -38,6 +38,86 @@ narrative lives. Sections here use that vocabulary
   had accumulated across the two package changelogs because nothing enforced a
   vocabulary.
 
+### Fixed
+
+- **A space inside a VAT number made it a phone number.** `ATU 36438508` was
+  typed `PHONE` with the `ATU` prefix left in the clear, while the unspaced
+  `ATU36438508` was already correct. Attributing the span explained why: the
+  digits were claimed by the **Danish** eight-digit phone pattern -- the most
+  permissive shape in the engine -- in a call that declared `countries=["AT"]`,
+  with `country_confidence` 0.0 and `out_of_scope` true. Every Austrian phone
+  pattern requires a leading `0` or `+43`, so nothing Austrian matched; and
+  because `\bATU\d{8}\b` had no separator tolerance there was no VAT candidate
+  for it to lose to.
+
+  Separator tolerance after the country prefix is now consistent across all 22
+  VAT patterns that lacked it -- `BE`, `DK`, `DE`, `FR`, `LU`, `NO` and `CH`
+  already had it -- and the UK's nine digits accept their official 3-4-2
+  grouping. A related case is fixed by `suppress_phone_inside_account_run`: in
+  `FR76 3000 4008 0300 0109 5374`, which fails its IBAN checksum, the phone
+  pattern took two digit groups out of the middle and left the rest visible.
+  0.3.3 fixed that shape of defect for the cases reachable then; a spaced
+  account run was not one of them. *(rules-engine#30)*
+
+- **The tail of a hyphenated reference was masked as a postal code.**
+  `PV-2026-LU-09143` became `PV-2026-LU-[POSTAL_CODE]` -- an address claimed
+  where there was none, with the rest of a police file number left in the
+  clear. The Luxembourg and Swiss postal patterns were not at fault; the value
+  was claimed by the German five-digit pattern, and the guard that should have
+  stopped it has an escape hatch for country-prefixed codes (`A-1010 Wien`,
+  `L-1234`) that accepted **any** one or two capitals before a hyphen. In
+  `PV-2026-LU-09143` the `LU` is itself preceded by a hyphen, so it is a
+  segment rather than a prefix; the boundary now excludes a hyphen, which is
+  what distinguishes the two. *(rules-engine#31)*
+
+- **One address in a document made every later four-digit year a postal code.**
+  Law citations (`dem Börsegesetz 2018`), CV date ranges (`2000 -- 2008`) and
+  ordinary prose (`seit Herbst 2024`) were masked as addresses, which makes the
+  document unreadable and the redaction report wrong.
+
+  `suppress_year_as_postal` already suppresses years, unless address context
+  appears nearby -- and "nearby" was `_CONTEXT_CHARS`, 150 characters either
+  side. Its own docstring recorded the consequence: "'Adresse', 'rue' and
+  'Str.' appear in the header of essentially every business letter."
+
+  Narrowing the window is not enough, and measuring said so. In
+
+      Déclaration de revenus 2022. Laurent Leroy. Numéro fiscal :
+      1167724166806. Adresse : rue du Commerce 130, 89654 Angers.
+
+  the year and a real address share one line, so no paragraph separates them
+  and "Adresse" sits 60 characters away. 47 of the 81 `POSTAL_CODE` false
+  positives on the 152,300-record corpus were bare years of this shape.
+
+  So a year-shaped value is now kept only when it sits in address *structure*,
+  which is local to it rather than somewhere in a window: after the comma of an
+  address line (`Amsterdam, 2026`), behind a postal label with nothing but
+  punctuation between (`PLZ: 2011`), before a capitalised place name
+  (`wonende te 2000 Antwerpen`), or with an address word in its **own
+  sentence** -- which is what keeps `Te huur: Lange Nieuwstraat 12, rustige
+  ligging in 2018` (2018 is Antwerp) while dropping the cases above, where the
+  address is in a later sentence and carries its own code. All 47 are resolved
+  and the general `_CONTEXT_CHARS` window is untouched for every other
+  suppressor, so the blast radius is this rescue only. *(rules-engine#32)*
+
+- **The engine's own placeholders are no longer detected.** `[POSTAL_CODE]` is
+  thirteen characters of mixed case with an underscore, so the entropy-based
+  `SECRET` rule read it as a credential: a second pass turned it into
+  `[SECRET]`, corrupting the first pass's output and reporting a credential
+  that never existed. Reported as irreducible over a 68-line document; it is
+  one line -- `credentials: [POSTAL_CODE] rotated.` -- and what looked
+  cumulative was the ±150-character keyword window cutting differently from the
+  ±20-*line* windows that had been tried.
+
+  All three emitted forms are guarded, since all three come back as input in a
+  re-processing pipeline: `[TYPE]`, `TYPE_1` (`referential_integrity`) and
+  `TYPE_K7Q2` (`tokenize`, where a false detection breaks `restore()`). Only
+  real entity-type names count: guarding any bracketed upper-case token would
+  also swallow `[AKIAIOSFODNN7EXAMPLE]`, a live AWS key, and a redaction
+  library may not trade a false negative for tidiness. Idempotence is asserted
+  as a property in `tests/test_idempotence.py` rather than as a single case.
+  *(rules-engine#33)*
+
 ## 0.5.1 (2026-09-25)
 
 ### Added

@@ -18,7 +18,7 @@ class HUConfig(CountryConfig):
                        validator=None, description="Hungarian tax ID — 10 digits starting with 8",
                        context_keywords=["adóazonosító", "adószám", "adóazonosító jel"],
                        requires_context=True),
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bHU\d{8,11}\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bHU[\s.]?\d{8,11}\b",
                        validator=None, description="Hungarian VAT — HU + 8-11 digits",
                        context_keywords=["adószám", "ÁFA"]),
             PatternDef(entity_type=EntityType.IBAN, pattern=r"\bHU\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b",

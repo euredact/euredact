@@ -37,7 +37,7 @@ class ESConfig(CountryConfig):
             # --- VAT (NIF/CIF) ---
             PatternDef(
                 entity_type=EntityType.VAT,
-                pattern=r"\bES[A-Z0-9]\d{7}[A-Z0-9]\b",
+                pattern=r"\bES[\s.]?[A-Z0-9]\d{7}[A-Z0-9]\b",
                 validator=None,
                 description="Spanish VAT (NIF/CIF) — ES + letter/digit + 7 digits + letter/digit",
             ),

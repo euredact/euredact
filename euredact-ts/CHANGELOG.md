@@ -32,6 +32,22 @@ narrative lives. Sections here use that vocabulary
   `## Performance` headings collided as anchors. Removed, with the package
   figures folded into the measured section.
 
+- **The same four fixes as the Python SDK**, and by the same mechanisms: VAT
+  separator tolerance across 22 patterns plus the UK's 3-4-2 grouping
+  (*rules-engine#30*); `suppressPhoneInsideAccountRun`, so a generic phone
+  pattern cannot take digit groups out of a checksum-rejected IBAN
+  (*rules-engine#30*); `COUNTRY_PREFIXED` no longer treats a hyphen-joined
+  segment as a country prefix, so the tail of `PV-2026-LU-09143` is not an
+  address (*rules-engine#31*); `yearSitsInAddressStructure`, which keeps a
+  year-shaped postal candidate only when it sits in address structure -- after
+  an address comma, behind a touching postal label, before a capitalised place
+  name, or with an address word in its own sentence (*rules-engine#32*); and `suppressRedactionPlaceholder`, so the engine's own
+  `[TYPE]`, `TYPE_1` and `TYPE_K7Q2` markers are never detected
+  (*rules-engine#33*).
+
+  All 22 new conformance vectors run in both SDKs, so the two engines are held
+  to the same answers on every case above.
+
 ## 0.5.1 (2026-09-25)
 
 ### Added

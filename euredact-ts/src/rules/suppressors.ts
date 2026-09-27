@@ -357,9 +357,84 @@ function suppressSequential(_text: string, match: RawMatch): boolean {
   return SEQUENTIAL_PATTERNS.test(clean);
 }
 
+// ── The engine's own output ───────────────────────────────────────────────
+//
+// Redaction has to be idempotent: running it over a document it already
+// produced must leave the placeholders it wrote alone. It did not.
+// `[POSTAL_CODE]` is thirteen characters of mixed case with an underscore, so
+// the entropy-based SECRET rule read it as a credential and a second pass
+// replaced it with `[SECRET]` (rules-engine#33).
+//
+// All three emitted forms are guarded, because all three come back as input in
+// a re-processing pipeline: `[TYPE]`, `TYPE_1` (referentialIntegrity) and
+// `TYPE_K7Q2` (tokenize -- where a false detection breaks restore()).
+//
+// Only real entity-type names count. Guarding any bracketed upper-case token
+// would be simpler and wrong: `[AKIAIOSFODNN7EXAMPLE]` is one, and also a live
+// AWS key. A placeholder for a *custom* pattern is therefore not covered.
+const PLACEHOLDER = /^(?:\[([A-Z][A-Z0-9_]*)\]|([A-Z][A-Z0-9_]*?)_(?:\d+|[A-HJ-NP-Z2-9]{4}))$/;
+
+const KNOWN_TYPE_NAMES: ReadonlySet<string> = new Set(Object.values(EntityType));
+
+function suppressRedactionPlaceholder(_text: string, match: RawMatch): boolean {
+  const found = PLACEHOLDER.exec(match.text);
+  if (found === null) return false;
+  const name = found[1] ?? found[2];
+  return KNOWN_TYPE_NAMES.has(name);
+}
+
 const RECENT_YEAR = /^(?:19[5-9]\d|20[0-3]\d)$/;
 const POSTAL_CONTEXT_NEAR = /(?:postcode|postal|code\s*postal|PLZ|Postleitzahl|postnummer|postinumero|póstnúmer|zip|straat|straße|strasse|rue\s|via\s|calle\s|rua\s|ulica|utca|street|avenue|laan\s|weg\s|plein|adres|adresse|address|woonplaats|wonende|woonachtig|gevestigd|domicili|demeurant|résidant|residant|bosatt|bopæl|wohnhaft|ansässig|stad\b|ville\b|city\b|Stadt|città|ciudad|cidade|miasto|město|város)/i;
 const DATE_KEYWORD_NEAR = /(?:født|fødselsdato|fødsel|Fødselsdato|född|födelsedatum|födelsedag|syntynyt|syntymäaika|fæddur|fæðingardagur|geboren|geboortedatum|Geburtsdatum|nascido|nacido|data di nascita|nato il|nata il|Tiltr[æa]delsesdato|Tiltredelsesdato|datum|date\b|Datum|jaar|year|année|Jahr|since|sinds|depuis|seit|\d{2}\.\d{2}\.|(?:januar|februar|marts|april|maj|juni|juli|august|september|oktober|november|december|januari|februari|mars|mei|juin|juillet|août))/i;
+
+// A sentence boundary: a full stop, question or exclamation mark followed by
+// space, or a line break. Written so it cannot fire inside "11.03.1970", where
+// the periods are not followed by whitespace -- that date is one of the false
+// positives this gate has to reject.
+const SENTENCE_BREAK = /[.!?][ \t\n]|\n/;
+const SENTENCE_BREAK_G = /[.!?][ \t\n]|\n/g;
+
+// The value's own sentence, bounded either side.
+function sentenceAround(text: string, start: number, end: number, reach = 160): string {
+  let before = text.slice(Math.max(0, start - reach), start);
+  let after = text.slice(end, end + reach);
+  let lastEnd = -1;
+  SENTENCE_BREAK_G.lastIndex = 0;
+  for (let m = SENTENCE_BREAK_G.exec(before); m !== null; m = SENTENCE_BREAK_G.exec(before)) {
+    lastEnd = m.index + m[0].length;
+  }
+  if (lastEnd >= 0) before = before.slice(lastEnd);
+  const found = SENTENCE_BREAK.exec(after);
+  if (found !== null) after = after.slice(0, found.index);
+  return before + after;
+}
+
+// A postal label whose only distance from the value is punctuation:
+// "PLZ: 2011", "code postal : 2011", "Woonplaats: 1950".
+const POSTAL_LABEL_TOUCHING = new RegExp(
+  `(?:${POSTAL_CONTEXT_NEAR.source})[\\s:.\\-]{0,4}$`, "i");
+
+// A capitalised place name after the code: "2000 Antwerpen". A following label
+// ("1970 Fødselsnummer:") is excluded by the colon.
+const CITY_AFTER = /^[ \t](?!\w+\s*:)[A-ZÀ-ÞŁŠŽ][\w\-']{2,}/u;
+
+// Every position is local to the value or inside its own sentence. Proximity to
+// an address *word* anywhere in a 300-character window is what the old rescue
+// asked, and that is a neighbourhood rather than a position (rules-engine#32).
+function yearSitsInAddressStructure(text: string, start: number, end: number): boolean {
+  const before = text.slice(Math.max(0, start - 28), start);
+  // "Amsterdam, 2026" -- the comma of an address line.
+  if (/,[ \t]*$/.test(before)) return true;
+  // "PLZ: 2011" -- a postal label with nothing but punctuation between.
+  if (POSTAL_LABEL_TOUCHING.test(before)) return true;
+  // A capitalised place name immediately after.
+  if (CITY_AFTER.test(text.slice(end, end + 24))) return true;
+  // An address word in the value's own sentence. "Te huur: Lange Nieuwstraat
+  // 12, rustige ligging in 2018, vlakbij openbaar vervoer." is an Antwerp
+  // postal code in prose; the false positives put the year and the address in
+  // different sentences.
+  return POSTAL_CONTEXT_NEAR.test(sentenceAround(text, start, end));
+}
 
 function suppressYearAsPostal(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
@@ -376,8 +451,10 @@ function suppressYearAsPostal(text: string, match: RawMatch): boolean {
 
   const [before, after] = getContext(text, match.start, match.end);
   const context = before + after;
-  // Keep as postal code if postal/address context nearby
-  if (POSTAL_CONTEXT_NEAR.test(context)) return false;
+  // Keep as postal code only when the value sits in address *structure* --
+  // see yearSitsInAddressStructure for why a 300-character window of address
+  // words was the defect rather than the keyword list.
+  if (yearSitsInAddressStructure(text, match.start, match.end)) return false;
   // Keep if preceded by comma+space (address pattern: "Amsterdam, 2026")
   const immediateBefore = text.slice(Math.max(0, match.start - 3), match.start);
   if (/,\s*$/.test(immediateBefore)) return false;
@@ -546,6 +623,35 @@ function suppressPostalInsideIban(text: string, match: RawMatch): boolean {
   if (match.start >= 5) {
     const prefix = text.slice(match.start - 5, match.start);
     if (/[A-Z]{2}\d{2}\s$/.test(prefix)) return true;
+  }
+  return false;
+}
+
+// An IBAN-shaped run: two letters, two check digits, then grouped
+// alphanumerics. Deliberately not checksum-gated -- the point is to describe the
+// run a human wrote as one account number, including the ones that fail their
+// checksum, because those are exactly the ones no structured detector claims.
+const ACCOUNT_RUN = /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){2,8}\b/g;
+
+// "Compte: FR76 3000 4008 0300 0109 5374" fails the IBAN checksum, so no
+// BANK_ACCOUNT candidate survives and the Danish eight-digit phone pattern took
+// "3000 4008" out of the middle of it, leaving the rest in the clear
+// (rules-engine#30). POSTAL_CODE has carried its own version of this guard
+// since 0.3.3, in suppressPostalInsideIban.
+function suppressPhoneInsideAccountRun(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.PHONE) return false;
+  const lineStart = text.lastIndexOf("\n", match.start) + 1;
+  let lineEnd = text.indexOf("\n", match.end);
+  if (lineEnd < 0) lineEnd = text.length;
+  const line = text.slice(lineStart, lineEnd);
+  ACCOUNT_RUN.lastIndex = 0;
+  for (let m = ACCOUNT_RUN.exec(line); m !== null; m = ACCOUNT_RUN.exec(line)) {
+    const runStart = lineStart + m.index;
+    const runEnd = runStart + m[0].length;
+    if (runStart <= match.start && match.end <= runEnd
+        && runEnd - runStart > match.end - match.start) {
+      return true;
+    }
   }
   return false;
 }
@@ -788,7 +894,12 @@ const ID_CUE_BEFORE = /(?:[\w\-]*(?:Nr|N[°ºo]|Nummer|Numero|Numéro)|No|number
 const DIALLING_PREFIX_BEFORE = /\+\d{1,3}[\d\s\-().]*$/;
 
 // A country prefix on a postal code — "A-1010 Wien", "B-2000", "L-1234".
-const COUNTRY_PREFIXED = /(?:^|[^A-Za-z0-9])[A-Z]{1,2}$/;
+// The boundary excludes a hyphen, which is what makes this a *prefix* rather
+// than a segment. It did not, so any `XX-NNNNN` tail of a hyphenated reference
+// read as a country-prefixed address: in "PV-2026-LU-09143" the `LU` is
+// preceded by `-` and the German five-digit postal pattern kept `09143`
+// (rules-engine#31).
+const COUNTRY_PREFIXED = /(?:^|[^A-Za-z0-9\-])[A-Z]{1,2}$/;
 
 /**
  * Suppress bare digit runs that belong to a longer number, not an address.
@@ -887,7 +998,7 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
 type Suppressor = (text: string, match: RawMatch, scratch?: SuppressionScratch) => boolean;
 
 const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
-  [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneServiceNumber, suppressPhoneDateOverlap, suppressPhoneAsNumberRange],
+  [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneServiceNumber, suppressPhoneInsideAccountRun, suppressPhoneDateOverlap, suppressPhoneAsNumberRange],
   [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressNatidAsPassport, suppressSeNatidAsOrg],
   [EntityType.SSN]: [suppressCurrency, suppressUnits, suppressReference, suppressMath],
   [EntityType.TAX_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressTaxidAsIpAddress],
@@ -901,6 +1012,7 @@ const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
 
 export function shouldSuppress(text: string, match: RawMatch, scratch?: SuppressionScratch): boolean {
   if (suppressSequential(text, match)) return true;
+  if (suppressRedactionPlaceholder(text, match)) return true;
   const typeSups = TYPE_SUPPRESSORS[match.patternDef.entityType];
   if (typeSups) {
     for (const s of typeSups) {

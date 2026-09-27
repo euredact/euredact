@@ -22,7 +22,7 @@ class LTConfig(CountryConfig):
                        pattern=r"\bLT\d{18}\b",
                        validator="iban", description="Lithuanian IBAN — compact"),
             PatternDef(entity_type=EntityType.VAT,
-                       pattern=r"\bLT\d{9,12}\b",
+                       pattern=r"\bLT[\s.]?\d{9,12}\b",
                        validator=None, description="Lithuanian VAT (PVM) — LT + 9 or 12 digits"),
             PatternDef(entity_type=EntityType.PHONE,
                        pattern=r"\b6\d{2}[\s\-]?\d{2}[\s\-]?\d{3}\b",

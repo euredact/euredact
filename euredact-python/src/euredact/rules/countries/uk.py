@@ -31,7 +31,7 @@ class UKConfig(CountryConfig):
                        validator="iban", description="UK IBAN — compact"),
             # VAT
             PatternDef(entity_type=EntityType.VAT,
-                       pattern=r"\bGB\d{9}\b",
+                       pattern=r"\bGB[\s.]?\d{3}[\s.]?\d{4}[\s.]?\d{2}\b",
                        validator=None, description="UK VAT — GB + 9 digits"),
             # Phone (mobile: 07XXX XXXXXX)
             PatternDef(entity_type=EntityType.PHONE,

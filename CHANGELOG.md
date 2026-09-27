@@ -35,10 +35,16 @@ which both test suites run.
 - `What leaves your machine` in both package READMEs: in `mode="cloud"` the whole document is sent, and the local engine does not run first.
 - `Keeping identifiers local`: the `tokenize` → model → `restore` composition, including the part it cannot do.
 - `tests/test_changelog.py`, which holds this file to its declared vocabulary. *(Python only)*
+- Separator tolerance in 22 VAT patterns, so the spaced form printed on invoices is recognised.
+- `tests/test_idempotence.py` — redaction over already-redacted text is a no-op on its own markers. *(Python only)*
 
 ### Fixed
 
 - A stale duplicate `## Performance` section in the TypeScript README quoted 0.02 ms latency and an 86 KB package; both were wrong. Removed, with the measured figures (150 kB tarball) kept in the real section. *(TypeScript only)*
+- A space inside a VAT number made it `PHONE`: `ATU 36438508` was typed `PHONE` with `ATU` left in the clear, because no VAT pattern tolerated the separator and Denmark's eight-digit phone shape did. *(rules-engine#30)*
+- The tail of a hyphenated case reference was masked as a postal code — `PV-2026-LU-09143` became `PV-2026-LU-[POSTAL_CODE]`. *(rules-engine#31)*
+- One address in a document made every later four-digit year a postal code, including law citations and CV date ranges. *(rules-engine#32)*
+- The engine's own `[POSTAL_CODE]` marker was detected as `SECRET` on a second pass, corrupting the first pass's output. *(rules-engine#33)*
 
 ## [0.5.1] - 2026-09-25
 

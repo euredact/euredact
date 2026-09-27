@@ -38,7 +38,7 @@ class NLConfig(CountryConfig):
             # --- VAT (BTW) ---
             PatternDef(
                 entity_type=EntityType.VAT,
-                pattern=r"\bNL\d{9}B\d{2}\b",
+                pattern=r"\bNL[\s.]?\d{9}B\d{2}\b",
                 validator="vat_nl",
                 description="Dutch VAT number — NL + 9 digits + B + 2 digits",
             ),

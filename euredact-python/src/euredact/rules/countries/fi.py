@@ -31,7 +31,7 @@ class FIConfig(CountryConfig):
             # --- VAT ---
             PatternDef(
                 entity_type=EntityType.VAT,
-                pattern=r"\bFI\d{8}\b",
+                pattern=r"\bFI[\s.]?\d{8}\b",
                 validator=None,
                 description="Finnish VAT — FI + 8 digits",
             ),

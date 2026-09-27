@@ -21,7 +21,7 @@ class CYConfig(CountryConfig):
             PatternDef(entity_type=EntityType.IBAN, pattern=r"\bCY\d{26}\b",
                        validator="iban", description="Cypriot IBAN — compact"),
             # VAT
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bCY\d{8}[A-Z]\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bCY[\s.]?\d{8}[A-Z]\b",
                        validator=None, description="Cypriot VAT — CY + 8 digits + letter"),
             # Phone (8 digits: mobile 9X, landline 2X — various groupings)
             PatternDef(entity_type=EntityType.PHONE,

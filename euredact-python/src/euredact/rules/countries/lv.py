@@ -28,7 +28,7 @@ class LVConfig(CountryConfig):
                        pattern=r"\bLV\d{2}[A-Z]{4}\d{13}\b",
                        validator="iban", description="Latvian IBAN — compact"),
             PatternDef(entity_type=EntityType.VAT,
-                       pattern=r"\bLV\d{11}\b",
+                       pattern=r"\bLV[\s.]?\d{11}\b",
                        validator=None, description="Latvian VAT (PVN) — LV + 11 digits"),
             PatternDef(entity_type=EntityType.PHONE,
                        pattern=r"\b[2]\d{3}[\s\-]?\d{4}\b",

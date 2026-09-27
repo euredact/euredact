@@ -173,7 +173,17 @@ _DIALLING_PREFIX_BEFORE = re.compile(r"\+\d{1,3}[\d\s\-().]*$")
 
 # A country prefix on a postal code — "A-1010 Wien", "B-2000", "L-1234",
 # "CH-8000", "D-10115". One or two letters before the hyphen, at a boundary.
-_COUNTRY_PREFIXED = re.compile(r"(?:^|[^A-Za-z0-9])[A-Z]{1,2}$")
+#
+# The boundary excludes a hyphen, which is what makes this a *prefix* rather
+# than a segment. It did not, so any `XX-NNNNN` tail of a hyphenated reference
+# read as a country-prefixed address: in "PV-2026-LU-09143" the `LU` is
+# preceded by `-`, the escape hatch below fired, and the German five-digit
+# postal pattern kept `09143` — a police file number masked as an address, with
+# the rest of the reference left in the clear (rules-engine#31).
+#
+# A real prefix opens its token: it follows the start of the text, whitespace,
+# or punctuation that is not a hyphen joining it to a previous segment.
+_COUNTRY_PREFIXED = re.compile(r"(?:^|[^A-Za-z0-9\-])[A-Z]{1,2}$")
 
 # ── Phone: preceded by ID/tax label ────────────────────────────────────
 #
@@ -282,6 +292,47 @@ def _get_context(text: str, start: int, end: int) -> tuple[str, str]:
     ctx_start = max(0, start - _CONTEXT_CHARS)
     ctx_end = min(len(text), end + _CONTEXT_CHARS)
     return (text[ctx_start:start], text[end:ctx_end])
+
+
+#: How far the address rescue in `suppress_year_as_postal` may look. Much
+#: shorter than `_CONTEXT_CHARS`, and stopped by a blank line.
+_ADDRESS_BLOCK_CHARS = 60
+
+#: A paragraph break. An address is a contiguous block: its postal code sits
+#: beside its street and city, possibly on the next line, never in the next
+#: paragraph.
+_BLANK_LINE = re.compile(r"\n[ \t]*\n")
+
+
+def _address_block_context(text: str, start: int, end: int) -> str:
+    """Context for the address rescue: near, and within the same block.
+
+    `_get_context` reads 150 characters either side, which crosses paragraphs.
+    That is how one real address in a document licensed every later four-digit
+    run as a postal code -- a year in a law citation, a CV date range, a
+    narrative sentence -- because the rescue below only asks whether an address
+    word appears *somewhere* in the window (rules-engine#32).
+
+    The window is narrowed and clamped at a blank line on each side. A single
+    newline is still crossed, because a postal code legitimately sits on its own
+    line inside an address block:
+
+        Adresse:
+        Am Europlatz 2
+        1120 Wien
+    """
+    lo = max(0, start - _ADDRESS_BLOCK_CHARS)
+    hi = min(len(text), end + _ADDRESS_BLOCK_CHARS)
+    before = text[lo:start]
+    after = text[end:hi]
+    # Keep only what is on this side of the nearest paragraph break.
+    breaks = list(_BLANK_LINE.finditer(before))
+    if breaks:
+        before = before[breaks[-1].end():]
+    found = _BLANK_LINE.search(after)
+    if found:
+        after = after[:found.start()]
+    return before + after
 
 
 # ── Date adjacency, for the postal-code year gate ───────────────────────
@@ -656,6 +707,109 @@ def suppress_sequential(text: str, match: RawMatch) -> bool:
     return bool(_SEQUENTIAL_PATTERNS.match(clean))
 
 
+# ── The engine's own output ─────────────────────────────────────────────
+#
+# Redaction has to be idempotent: running it over a document it already
+# produced must leave the placeholders it wrote alone. It did not.
+# `[POSTAL_CODE]` is thirteen characters of mixed case with an underscore, so
+# the entropy-based SECRET rule read it as a credential and a second pass
+# replaced it with `[SECRET]` -- corrupting the first pass's output and
+# reporting a credential that never existed (rules-engine#33).
+#
+# Three forms are emitted, and all three are guarded because all three come
+# back as input in a re-processing pipeline:
+#
+#   [TYPE]        the default mask
+#   TYPE_1        referential_integrity=True
+#   TYPE_K7Q2     tokenize=True -- and here a false detection is worse than
+#                 cosmetic, because it breaks restore()
+#
+# Only names that are real entity types count. Guarding any bracketed
+# upper-case token would be simpler and wrong: `[AKIAIOSFODNN7EXAMPLE]` is a
+# bracketed upper-case token and also a live AWS key, and a redaction library
+# may not trade a false negative for tidiness. A placeholder for a *custom*
+# pattern is therefore not covered -- the suppressor cannot know which names
+# were registered.
+_PLACEHOLDER = re.compile(
+    r"\A(?:\[([A-Z][A-Z0-9_]*)\]"          # [TYPE]
+    r"|([A-Z][A-Z0-9_]*?)_(?:\d+|[A-HJ-NP-Z2-9]{4}))\Z"   # TYPE_1 / TYPE_K7Q2
+)
+
+
+def _known_type_names() -> frozenset[str]:
+    return frozenset(e.value for e in EntityType)
+
+
+def suppress_redaction_placeholder(text: str, match: RawMatch) -> bool:
+    """Suppress a span that is entirely one of the engine's own placeholders."""
+    found = _PLACEHOLDER.match(match.text)
+    if found is None:
+        return False
+    name = found.group(1) or found.group(2)
+    return name in _known_type_names()
+
+
+#: A postal label whose only distance from the value is punctuation:
+#: "PLZ: 2011", "code postal : 2011", "Woonplaats: 1950".
+_POSTAL_LABEL_TOUCHING = re.compile(
+    r"(?:" + _POSTAL_CONTEXT_NEAR.pattern + r")[\s:.\-]{0,4}$", re.IGNORECASE)
+
+#: A capitalised place name after the code: "2000 Antwerpen", "2011 Haarlem".
+#: A following label ("1970 Fødselsnummer:") is excluded by the colon.
+_CITY_AFTER = re.compile(r"^[ \t](?!\w+\s*:)[A-ZÀ-ÞŁŠŽ][\w\-']{2,}")
+
+
+#: A sentence boundary: a full stop, question or exclamation mark followed by
+#: space, or a line break. Written so it cannot fire inside "11.03.1970", where
+#: the periods are not followed by whitespace -- that date is one of the
+#: false positives this gate has to reject.
+_SENTENCE_BREAK = re.compile(r"[.!?][ \t\n]|\n")
+
+
+def _sentence_around(text: str, start: int, end: int, reach: int = 160) -> str:
+    """The value's own sentence, bounded by `reach` characters either side."""
+    before = text[max(0, start - reach):start]
+    after = text[end:end + reach]
+    last = None
+    for found in _SENTENCE_BREAK.finditer(before):
+        last = found
+    if last is not None:
+        before = before[last.end():]
+    found = _SENTENCE_BREAK.search(after)
+    if found is not None:
+        after = after[:found.start()]
+    return before + after
+
+
+def _year_sits_in_address_structure(text: str, start: int, end: int) -> bool:
+    """True when a year-shaped value is positioned as a postal code.
+
+    Every position is local to the value or inside its own sentence. Proximity
+    to an address *word* anywhere in a 300-character window is what the old
+    rescue asked, and that is a neighbourhood rather than a position.
+    """
+    before = text[max(0, start - 28):start]
+    # "Amsterdam, 2026" — the comma of an address line.
+    if re.search(r",[ \t]*$", before):
+        return True
+    # "PLZ: 2011" — a postal label with nothing but punctuation between.
+    if _POSTAL_LABEL_TOUCHING.search(before):
+        return True
+    # A capitalised place name immediately after: "2000 Antwerpen",
+    # "B-2000 Antwerpen", "wonende te 2000 Antwerpen". A following *label* is
+    # excluded by the colon in `_CITY_AFTER`, so "1970 Fødselsnummer:" is not
+    # an address.
+    if _CITY_AFTER.match(text[end:end + 24]):
+        return True
+    # An address word in the value's own sentence. "Te huur: Lange Nieuwstraat
+    # 12, rustige ligging in 2018, vlakbij openbaar vervoer." is an Antwerp
+    # postal code in prose, and the street is the evidence. The sentence is what
+    # separates it from the false positives: there the year and the address sit
+    # in different sentences ("... revenus 2022. ... Adresse : rue du Commerce
+    # 130, 89654 Angers.") and the address carries its own code.
+    return bool(_POSTAL_CONTEXT_NEAR.search(_sentence_around(text, start, end)))
+
+
 def suppress_year_as_postal(text: str, match: RawMatch) -> bool:
     """Suppress year-like numbers (1950-2039) misidentified as postal codes.
 
@@ -678,10 +832,24 @@ def suppress_year_as_postal(text: str, match: RawMatch) -> bool:
     if _DATE_AFTER.match(text[match.end:match.end + 8]):
         return True
 
-    # Keep as postal code if postal/address context nearby
-    before, after = _get_context(text, match.start, match.end)
-    context = before + after
-    if _POSTAL_CONTEXT_NEAR.search(context):
+    # Keep as postal code only when the value sits in address *structure*.
+    #
+    # The old rescue asked whether an address word appeared anywhere in a
+    # 300-character window, which is an address *neighbourhood* and not the
+    # same thing. Narrowing the window was not enough: in
+    #
+    #   "Déclaration de revenus 2022. Laurent Leroy. Numéro fiscal :
+    #    1167724166806. Adresse : rue du Commerce 130, 89654 Angers."
+    #
+    # the real postal code and the year are on one line, so no blank line
+    # separates them and "Adresse" sits 60 characters from "2022". 47 of the 81
+    # POSTAL_CODE false positives on the 152,300-record corpus were bare years
+    # of this shape (rules-engine#32).
+    #
+    # What separates the two is local: "89654" follows ", " and precedes a
+    # capitalised city, while "2022" follows "revenus " and precedes ". ".
+    # So a year is rescued only by structure that touches it.
+    if _year_sits_in_address_structure(text, match.start, match.end):
         return False
     # Keep if preceded by comma+space (address pattern: "Amsterdam, 2026")
     immediate_before = text[max(0, match.start - 3):match.start]
@@ -889,6 +1057,48 @@ def suppress_postal_inside_iban(text: str, match: RawMatch) -> bool:
         prefix = text[start - 5:start]
         if re.search(r"[A-Z]{2}\d{2}\s$", prefix):
             return True
+    return False
+
+
+#: An IBAN-shaped run: two letters, two check digits, then grouped
+#: alphanumerics. Deliberately *not* checksum-gated -- the point is to describe
+#: the run a human wrote as one account number, including the ones that fail
+#: their checksum, because those are exactly the ones no structured detector
+#: claims and a generic digit pattern is therefore free to cut into.
+_ACCOUNT_RUN = re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){2,8}\b")
+
+
+def suppress_phone_inside_account_run(text: str, match: RawMatch) -> bool:
+    """Suppress a phone match that lies inside an IBAN-shaped run.
+
+    "Compte: FR76 3000 4008 0300 0109 5374" fails the IBAN checksum, so no
+    BANK_ACCOUNT candidate survives and the span is unclaimed. The Danish
+    eight-digit phone pattern -- the most permissive shape in the engine, and
+    one that ran because `countries` scores rather than gates -- then took
+    "3000 4008" out of the middle of it, producing
+    "FR76 [PHONE] 0300 0109 5374": two digit groups masked under a type the
+    document never mentioned and the rest of the account number in the clear
+    (rules-engine#30).
+
+    0.3.3 fixed the same shape of defect ("the generic phone pattern claimed
+    fragments of rejected identifiers") for the cases reachable then; a spaced
+    account run was not one of them. POSTAL_CODE has carried its own version of
+    this guard since then, in ``suppress_postal_inside_iban``.
+
+    Scoped to the match's own line: an account number is not written across a
+    line break, and scanning the line rather than the document keeps this O(line).
+    """
+    if match.pattern_def.entity_type != EntityType.PHONE:
+        return False
+    line_start = text.rfind("\n", 0, match.start) + 1
+    line_end = text.find("\n", match.end)
+    if line_end < 0:
+        line_end = len(text)
+    for run in _ACCOUNT_RUN.finditer(text, line_start, line_end):
+        if run.start() <= match.start and match.end <= run.end():
+            # The run must be longer than the match, or it *is* the match.
+            if run.end() - run.start() > match.end - match.start:
+                return True
     return False
 
 
@@ -1201,13 +1411,13 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
 # ── Dispatch table: entity type → applicable suppressors ────────────────
 # This avoids calling 16 functions that each start with "if type != X: return False"
 
-_UNIVERSAL = [suppress_sequential]  # Applies to all types
+_UNIVERSAL = [suppress_sequential, suppress_redaction_placeholder]  # Applies to all types
 _CONTEXT_ONLY = [suppress_requires_context]  # Always last
 
 _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
     EntityType.PHONE: [
         suppress_currency, suppress_units, suppress_reference, suppress_math,
-        suppress_phone_service_number,
+        suppress_phone_service_number, suppress_phone_inside_account_run,
         suppress_phone_date_overlap, suppress_phone_as_number_range,
     ],
     EntityType.NATIONAL_ID: [

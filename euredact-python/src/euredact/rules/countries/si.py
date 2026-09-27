@@ -16,7 +16,7 @@ class SIConfig(CountryConfig):
                        validator="iban", description="Slovenian IBAN — grouped"),
             PatternDef(entity_type=EntityType.IBAN, pattern=r"\bSI\d{17}\b",
                        validator="iban", description="Slovenian IBAN — compact"),
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bSI\d{8}\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bSI[\s.]?\d{8}\b",
                        validator=None, description="Slovenian DDV — SI + 8 digits"),
             PatternDef(entity_type=EntityType.PHONE, pattern=r"\b0?[34567]\d{1}[\s\-]?\d{3}[\s\-]?\d{3}\b",
                        validator=None, description="Slovenian phone — 0XX XXX XXX"),

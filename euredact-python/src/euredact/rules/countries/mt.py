@@ -26,7 +26,7 @@ class MTConfig(CountryConfig):
                        pattern=r"\bMT\d{2}[A-Z]{4}\d{5}[A-Z0-9]{18}\b",
                        validator="iban", description="Maltese IBAN — compact"),
             # VAT
-            PatternDef(entity_type=EntityType.VAT, pattern=r"\bMT\d{8}\b",
+            PatternDef(entity_type=EntityType.VAT, pattern=r"\bMT[\s.]?\d{8}\b",
                        validator=None, description="Maltese VAT — MT + 8 digits"),
             # Phone (77/79/99 + 6 digits)
             PatternDef(entity_type=EntityType.PHONE,
