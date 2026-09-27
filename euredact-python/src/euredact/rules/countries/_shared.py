@@ -526,7 +526,16 @@ class SharedConfig(CountryConfig):
             # --- Secret / API Key (assignment-based: KEY=value or KEY: value) ---
             PatternDef(
                 entity_type=EntityType.SECRET,
-                pattern=r"(?<=[:=] )[^\s]{8,}|(?<=[:=])[^\s]{8,}",
+                # The final character may not be sentence punctuation. `[^\s]`
+                # does not stop at a full stop, so "Reisepass: CA1234567." was
+                # claimed as the ten-character span "CA1234567." -- a passport
+                # number plus the sentence's period, masked as a credential
+                # because a "credentials" word sat within the context window.
+                # Widening a span over its neighbour's punctuation is the same
+                # class as the phone pattern absorbing a trailing ")" in
+                # rules-engine#3 (rules-engine#35).
+                pattern=r"(?<=[:=] )[^\s]{7,}[^\s.,;:!?)\]}'\"]"
+                        r"|(?<=[:=])[^\s]{7,}[^\s.,;:!?)\]}'\"]",
                 validator="high_entropy",
                 description="Assigned secret value",
                 context_keywords=SECRET_CONTEXT,

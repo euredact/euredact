@@ -239,7 +239,12 @@ const SHARED: CountryConfig = {
     // --- Secret / API Key (connection strings with embedded credentials) ---
     p(EntityType.SECRET, String.raw`(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq):\/\/[^\s:]{1,256}:[^\s@]{1,256}@[^\s]+`, null, "Connection string with credentials"),
     // --- Secret / API Key (assignment-based: KEY=value or KEY: value) ---
-    p(EntityType.SECRET, String.raw`(?<=[:=] )\S{8,}|(?<=[:=])\S{8,}`, "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
+    // The final character may not be sentence punctuation. `\S` does not stop
+    // at a full stop, so "Reisepass: CA1234567." was claimed as the
+    // ten-character span "CA1234567." -- a passport number plus the sentence's
+    // period, masked as a credential because a "credentials" word sat within
+    // the context window (rules-engine#35).
+    p(EntityType.SECRET, String.raw`(?<=[:=] )\S{7,}[^\s.,;:!?)\]}'"]|(?<=[:=])\S{7,}[^\s.,;:!?)\]}'"]`, "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
     // --- Secret / API Key (entropy-based fallback for longer tokens) ---
     // Only the *trailing* \b is replaced. It could not match when the token run
     // ended on "-", "+" or "/", so the engine backtracked across two

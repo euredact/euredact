@@ -3227,6 +3227,71 @@
         ]
       },
       "notes": "Month field 21 is January with the post-2004 +20 marker for a day whose sequence numbers were exhausted."
+    },
+    {
+      "id": "secret-span-stops-before-a-full-stop",
+      "text": "credentials. Reisepass: CA1234567.",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "CA1234567"
+        ]
+      },
+      "notes": "The assignment SECRET pattern used [^\\s]{8,}, which does not stop at a full stop, so it claimed the ten-character span 'CA1234567.' -- a passport number plus the sentence's period, typed SECRET because a credential word sat within the context window. Fixing the span made it identical to PASSPORT's, and the cue table then resolved the type (rules-engine#35)."
+    },
+    {
+      "id": "passport-label-outranks-a-distant-credential-word",
+      "text": "api_key rotated. Reisepass: CA1234567.",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "CA1234567"
+        ]
+      },
+      "notes": "A label touching the value is the strongest statement a document makes about it; a credential word a sentence away is not."
+    },
+    {
+      "id": "assigned-secret-still-detected",
+      "text": "api_key = sk_live_4eC39HqLyjWDarjtT1zdp7dc",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "sk_live_4eC39HqLyjWDarjtT1zdp7dc"
+        ]
+      },
+      "notes": "The ordinary assigned-secret case must be unaffected."
+    },
+    {
+      "id": "assigned-secret-ending-a-sentence",
+      "text": "password: Tr0ub4dor&3xKcd.",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "Tr0ub4dor&3xKcd"
+        ]
+      },
+      "notes": "The secret is still found and the sentence's period stays outside the span."
+    },
+    {
+      "id": "assigned-secret-with-base64-padding",
+      "text": "secret: aGVsbG93b3JsZGFiY2RlZg==",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "aGVsbG93b3JsZGFiY2RlZg=="
+        ]
+      },
+      "notes": "Base64 padding is not sentence punctuation and stays inside the span."
     }
   ]
 }
