@@ -74,6 +74,7 @@ class ISConfig(CountryConfig):
                 description="Icelandic postal code — 3 digits",
                 context_keywords=[
                     "póstnúmer", "póstfang", "staður", "heimilisfang",
+                    "Postal:", "Address:",
                 ],
                 requires_context=True,
             ),

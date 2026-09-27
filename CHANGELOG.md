@@ -52,6 +52,9 @@ which both test suites run.
 - A Czech mobile number could be typed `NATIONAL_ID` at `confidence="high"`: the birth-number validator checked mod 11 but never the date, so an impossible month was accepted. 284 per corpus pass, the largest single false-positive bucket in the evaluation. *(rules-engine#37)*
 - **DOB recall 62.8% -> 100.0% in all 31 countries.** 33,441 birth dates were unmasked because the context list covered seven languages of thirty-one; per-country recall was bimodal, eleven countries at exactly 100% against twenty at 42-51%. DOB false positives did not move. *(rules-engine#38)*
 - An assigned secret's span swallowed the sentence's full stop, and with it the type: `credentials. Reisepass: CA1234567.` reported `SECRET 'CA1234567.'` instead of a `PASSPORT`. *(rules-engine#35)*
+- Postal codes were unmasked in five countries: a missing inflection in France and Belgium, a missing generic label in Iceland, Norway and Sweden, and — in Norway, Denmark and Finland — a suppressor whose identifier cue matched the postal label itself, so the pattern was dead behind `postnummer:`. Recall 98.07% → 99.99%. *(rules-engine#41)*
+- A Handelsregister number's court suffix was left outside the span, so the output read `[CHAMBER_OF_COMMERCE] B`. German recall 77.18% → 100.00%. *(rules-engine#42)*
+- `polish_pesel`, `romanian_cnp` and `slovenian_emso` accepted an impossible birth date, so a phone-shaped run could be typed `NATIONAL_ID` at high confidence. *(rules-engine#43)*
 
 ## [0.5.1] - 2026-09-25
 

@@ -110,7 +110,7 @@ class BEConfig(CountryConfig):
                 description="Belgian postal code — 4 digits (1000-9999)",
                 context_keywords=[
                     "postcode", "code postal", "postnummer", "postal code",
-                    "zip", "B-", "adres", "adresse", "wonende", "woonplaats",
+                    "zip", "B-", "adres", "adresse", "wonende", "woonplaats", "domicile",
                     "rue", "straat", "laan", "avenue", "boulevard", "plein",
                     "steenweg", "chaussée", "domicilié", "gedomicilieerd",
                     "Levering:", "siège",

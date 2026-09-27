@@ -891,6 +891,9 @@ function suppressBicWithoutEvidence(text: string, match: RawMatch, scratch?: Sup
 // Repeated per alternative, the engine retried the same unbounded prefix five
 // times per starting position — the most expensive single regex in the engine
 // at 197 ms per 1 MB document. Same language, 8x faster on the worst case.
+// An identifier cue that is really a postal label -- see the use below.
+const POSTAL_LABEL_CUE = /^post/i;
+
 const ID_CUE_BEFORE = /(?:[\w\-]*(?:Nr|N[°ºo]|Nummer|Numero|Numéro)|No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen)\.?\s*:?\s*$/i;
 
 // An international dialling prefix earlier on the same line, with nothing but
@@ -945,7 +948,16 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   if (/^[ \t]+\d/.test(text.slice(match.end, match.end + 4))) return true;
 
   // An identifier label introduces the digits: "DiNr. 4471", "Policen-Nr."
-  if (ID_CUE_BEFORE.test(text.slice(Math.max(0, match.start - 40), match.start))) return true;
+  // Unless the label is a *postal* one. ID_CUE_BEFORE matches any word ending
+  // in "Nummer", "Nr", "Numero" or "Numéro" -- the wildcard is `[\w\-]*` -- so
+  // it matches `postnummer`, `postnr` and `postinumero`, the canonical postal
+  // labels of Norway, Denmark and Finland. Those countries write a bare
+  // four- or five-digit code, so the isdigit() guard above lets this run and
+  // the code was suppressed by its own label: `postnummer: 5020 Bergen`
+  // produced nothing at all (rules-engine#41).
+  const before = text.slice(Math.max(0, match.start - 40), match.start);
+  const cue = ID_CUE_BEFORE.exec(before);
+  if (cue !== null && !POSTAL_LABEL_CUE.test(cue[0].trimStart())) return true;
 
   // Digits after an international dialling prefix belong to PHONE
   const [lineStart] = enclosingLine(text, match.start, match.end);

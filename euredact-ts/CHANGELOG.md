@@ -33,6 +33,14 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **Postal codes were unmasked in five countries**, identically to the Python
+  SDK: the French keyword list held `domicilié` but not `domicile`; `Postal:`
+  was missing from Iceland, Norway and Sweden; and `ID_CUE_BEFORE` matched
+  `postnummer`, `postnr` and `postinumero` — the canonical postal labels of
+  Norway, Denmark and Finland — so their postal patterns were dead behind their
+  own labels. A cue beginning `post` is now a postal label. Recall 98.07% →
+  99.99%. *(rules-engine#41)*
+
 - **A stale duplicate `## Performance` section** in the README quoted 0.02 ms
   per redaction and an 86 KB package. Both were wrong — the measured figures are
   154 µs median for a short record and a 150 kB tarball — and the two

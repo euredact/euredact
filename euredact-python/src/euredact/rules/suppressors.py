@@ -171,6 +171,10 @@ _ID_CUE_BEFORE = re.compile(
 # number punctuation in between: these digits belong to the phone detector.
 _DIALLING_PREFIX_BEFORE = re.compile(r"\+\d{1,3}[\d\s\-().]*$")
 
+#: An identifier cue that is really a postal label. See
+#: `suppress_postal_in_longer_identifier` for why this exemption exists.
+_POSTAL_LABEL_CUE = re.compile(r"post", re.IGNORECASE)
+
 # A country prefix on a postal code — "A-1010 Wien", "B-2000", "L-1234",
 # "CH-8000", "D-10115". One or two letters before the hyphen, at a boundary.
 #
@@ -1348,8 +1352,23 @@ def suppress_postal_in_longer_identifier(text: str, match: RawMatch) -> bool:
         return True
 
     # An identifier label introduces the digits: "DiNr. 4471", "Policen-Nr."
+    #
+    # Unless the label is a *postal* one. `_ID_CUE_BEFORE` matches any word
+    # ending in "Nummer", "Nr", "Numero" or "Numéro" -- the wildcards are
+    # `[\w\-]*` -- so it matches `postnummer`, `postnr` and `postinumero`,
+    # which are the canonical postal labels of Norway, Denmark and Finland.
+    # Those countries write a bare four- or five-digit code, so `isdigit()`
+    # above lets the check run and the code was suppressed by its own label:
+    # `postnummer: 5020 Bergen` produced nothing at all (rules-engine#41).
+    #
+    # Sweden escaped only because it spaces its code ("374 294"), which fails
+    # the `isdigit()` guard, and Germany and Iceland because "Postleitzahl" and
+    # "póstnúmer" do not end in any of those four words.
+    #
+    # A cue beginning "post" is a postal label, not a record-number label.
     before = text[max(0, match.start - 40):match.start]
-    if _ID_CUE_BEFORE.search(before):
+    cue = _ID_CUE_BEFORE.search(before)
+    if cue is not None and not _POSTAL_LABEL_CUE.match(cue.group(0).lstrip()):
         return True
 
     # Digits after an international dialling prefix belong to PHONE
