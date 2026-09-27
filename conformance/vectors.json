@@ -4154,6 +4154,58 @@
         ]
       },
       "notes": "A real EMSO must survive the date check."
+    },
+    {
+      "id": "de-handelsregister-court-suffix",
+      "text": "eingetragen im Handelsregister unter HRA 391538 B beim Amtsgericht Charlottenburg",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "HRA 391538 B"
+        ]
+      },
+      "notes": "The court-register letter is part of the number as the register writes it. Without it the span stopped a token short and the output read '[CHAMBER_OF_COMMERCE] B' -- 162 of 710 German values per corpus pass (rules-engine#42)."
+    },
+    {
+      "id": "de-handelsregister-suffix-k",
+      "text": "Handelsregister HRA 21108 K",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "HRA 21108 K"
+        ]
+      },
+      "notes": "The other suffix the corpus carries."
+    },
+    {
+      "id": "de-handelsregister-without-a-suffix",
+      "text": "Handelsregister HRB 123456",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "HRB 123456"
+        ]
+      },
+      "notes": "The suffix is optional, so the plain form must be unaffected."
+    },
+    {
+      "id": "de-handelsregister-does-not-eat-the-city",
+      "text": "Handelsregister HRA 391538 Berlin",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "HRA 391538"
+        ]
+      },
+      "notes": "The suffix is a single capital followed by a boundary, so it cannot swallow the next word -- 'Berlin' stays outside the span. This is the guard against re-introducing the class the fix belongs to (rules-engine#3, #35)."
     }
   ]
 }
