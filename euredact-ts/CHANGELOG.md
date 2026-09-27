@@ -48,6 +48,14 @@ narrative lives. Sections here use that vocabulary
   All 22 new conformance vectors run in both SDKs, so the two engines are held
   to the same answers on every case above.
 
+- **A Czech mobile number could be typed `NATIONAL_ID` at high confidence**,
+  identically to the Python SDK: `validateCzechBirthNumber` checked mod 11 and
+  never the date, so an impossible month was accepted and any nine-digit mobile
+  divisible by 11 became a national identity number. The date is now checked
+  with all four month conventions (`+20`, `+50`, `+70`), February capped at 29
+  since a two-digit year does not reveal the century. Six shared conformance
+  vectors run in both SDKs. *(rules-engine#37)*
+
 ## 0.5.1 (2026-09-25)
 
 ### Added

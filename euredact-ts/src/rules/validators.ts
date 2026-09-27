@@ -422,9 +422,34 @@ export function validatePolishNip(candidate: string): boolean {
   return total % 11 === d[9];
 }
 
+// Days per month for the rodné číslo date check. February is 29 because the
+// century is not recoverable from a two-digit year, so a leap year cannot be
+// ruled out -- being permissive by one day is the right direction here.
+const RC_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+// The calendar month a rodné číslo month field encodes, or null. Four ranges
+// are legal: 1-12 is a man, +50 a woman, and since 2004 +20 marks a birth on a
+// day whose sequence numbers were exhausted (so +70 is a woman on such a day).
+function czechMonth(raw: number): number | null {
+  for (const offset of [0, 20, 50, 70]) {
+    if (raw - offset >= 1 && raw - offset <= 12) return raw - offset;
+  }
+  return null;
+}
+
+// The date is checked, not only the checksum. Without it the validator accepted
+// an impossible month, and a Czech mobile number is the same shape -- nine
+// digits opening 6 or 7 -- so any mobile that happened to pass mod 11 was typed
+// NATIONAL_ID at high confidence: 606666032 (MM=66), 778836400 (MM=88),
+// 728990603 (MM=89). 284 per corpus pass, the largest single false-positive
+// bucket in the evaluation (rules-engine#37).
 export function validateCzechBirthNumber(candidate: string): boolean {
   const c = candidate.replace(/[/\s]/g, "");
   if (!/^\d+$/.test(c) || (c.length !== 9 && c.length !== 10)) return false;
+  const month = czechMonth(parseInt(c.slice(2, 4), 10));
+  if (month === null) return false;
+  const day = parseInt(c.slice(4, 6), 10);
+  if (day < 1 || day > RC_DAYS[month - 1]) return false;
   if (c.length === 10) return parseInt(c) % 11 === 0;
   return true;
 }
