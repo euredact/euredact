@@ -39,6 +39,8 @@ which both test suites run.
 - `tests/test_idempotence.py` — redaction over already-redacted text is a no-op on its own markers. *(Python only)*
 - `DOB_CONTEXT`, one shared birth-date keyword list covering all 31 countries, replacing two divergent copies. *(rules-engine#38)*
 - `tests/test_dob_context.py`, which asserts the substring screen that keeps a short keyword from hiding inside an unrelated word. *(Python only)*
+- 45 conformance vectors closing gaps where a change was pinned in fewer countries than it touched: one per changed VAT pattern, one per country whose birth-date keyword had none, the Belgian and French national passport patterns, and the account-run guard. *(rules-engine#44)*
+- `TestNoDateBearingValidatorAcceptsAnImpossibleDate`, a property over the whole validator table; it found three more validators with the `#37` defect. *(Python only)* *(rules-engine#44)*
 
 ### Fixed
 

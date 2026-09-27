@@ -37,6 +37,34 @@ narrative lives. Sections here use that vocabulary
   `tests/test_changelog.py` to keep it that way: sixteen distinct section names
   had accumulated across the two package changelogs because nothing enforced a
   vocabulary.
+- **A test for every rules-engine change, not most of them.** An audit of this
+  cycle's changes against the suite found three gaps, all of the same shape:
+  a change applied across many countries and pinned in only a few.
+
+  - `#30` gave **22** VAT patterns the separator that invoices print, and three
+    were pinned. There is now one vector per changed pattern.
+  - `#38`'s birth-date keywords are shared across all 31 countries, but
+    `tests/test_dob_context.py` is Python-only, so the **TypeScript** SDK had no
+    DOB coverage for 14 of them. Each now has a vector, which both SDKs run.
+  - `#23` added 27 passport vectors for the shared label-gated rule and four
+    boundary cases, but left the Belgian and French **national** patterns
+    unpinned. Both now have vectors.
+
+  43 vectors in total, plus two more for the account-run guard, which had one.
+
+- **`TestNoDateBearingValidatorAcceptsAnImpossibleDate`**, a property over the
+  whole validator table rather than one validator at a time. `#37` was a
+  checksum accepted as evidence that a date was real; running the same check
+  across every validator found it in three more — `polish_pesel`,
+  `romanian_cnp` and `slovenian_emso` — which are `xfail`ed against
+  `rules-engine#43` so the gap is visible rather than hidden.
+
+  `test_every_validator_is_classified` is the durable half: every name in
+  `VALIDATORS` must appear in `DATE_BEARING` or `NO_DATE`, so a new validator
+  cannot arrive untested. The lists are explicit because the name heuristic I
+  first used was wrong in both directions — it matched `german_tax_id`, which
+  has no date, and missed `polish_pesel`, which does. That blind spot is how
+  PESEL escaped the first pass. *(rules-engine#44)*
 
 ### Fixed
 
