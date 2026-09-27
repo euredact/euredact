@@ -37,6 +37,8 @@ which both test suites run.
 - `tests/test_changelog.py`, which holds this file to its declared vocabulary. *(Python only)*
 - Separator tolerance in 22 VAT patterns, so the spaced form printed on invoices is recognised.
 - `tests/test_idempotence.py` — redaction over already-redacted text is a no-op on its own markers. *(Python only)*
+- `DOB_CONTEXT`, one shared birth-date keyword list covering all 31 countries, replacing two divergent copies. *(rules-engine#38)*
+- `tests/test_dob_context.py`, which asserts the substring screen that keeps a short keyword from hiding inside an unrelated word. *(Python only)*
 
 ### Fixed
 
@@ -46,6 +48,8 @@ which both test suites run.
 - One address in a document made every later four-digit year a postal code, including law citations and CV date ranges. *(rules-engine#32)*
 - The engine's own `[POSTAL_CODE]` marker was detected as `SECRET` on a second pass, corrupting the first pass's output. *(rules-engine#33)*
 - A Czech mobile number could be typed `NATIONAL_ID` at `confidence="high"`: the birth-number validator checked mod 11 but never the date, so an impossible month was accepted. 284 per corpus pass, the largest single false-positive bucket in the evaluation. *(rules-engine#37)*
+- **DOB recall 62.8% -> 100.0% in all 31 countries.** 33,441 birth dates were unmasked because the context list covered seven languages of thirty-one; per-country recall was bimodal, eleven countries at exactly 100% against twenty at 42-51%. DOB false positives did not move. *(rules-engine#38)*
+- An assigned secret's span swallowed the sentence's full stop, and with it the type: `credentials. Reisepass: CA1234567.` reported `SECRET 'CA1234567.'` instead of a `PASSPORT`. *(rules-engine#35)*
 
 ## [0.5.1] - 2026-09-25
 

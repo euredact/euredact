@@ -3292,6 +3292,238 @@
         ]
       },
       "notes": "Base64 padding is not sentence punctuation and stays inside the span."
+    },
+    {
+      "id": "dob-da",
+      "text": "Sag vedrørende Camilla Pedersen, født 15/05/1994",
+      "countries": [
+        "DK"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "15/05/1994"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins fodt. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-no",
+      "text": "Sak vedrørende Per Olsen, født 14.08.1997",
+      "countries": [
+        "NO"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14.08.1997"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins fodt. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-sv",
+      "text": "Ärende för Anna Svensson, född 1958-04-23",
+      "countries": [
+        "SE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "1958-04-23"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins fodd (ISO format). One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-fi",
+      "text": "Asia koskien Mikko Korhonen, syntynyt 08.04.1994",
+      "countries": [
+        "FI"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "08.04.1994"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins syntynyt. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-is",
+      "text": "Mál varðandi Helga Einarsson, fæddur 12.06.1962",
+      "countries": [
+        "IS"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1962"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins faeddur. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-el",
+      "text": "Record: Maria Dimitriou, γεννηθείς/είσα 05/04/1965",
+      "countries": [
+        "EL"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "05/04/1965"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Greek. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-en-born",
+      "text": "Record: Charlotte Smith, born 07/05/1980",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "07/05/1980"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins bare 'born'. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-mt",
+      "text": "Rekord: Maria Borg, twieled 12.06.1958",
+      "countries": [
+        "MT"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Maltese. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-it-slash",
+      "text": "Fascicolo di Anna Mancini, nato/a il 13/06/1994",
+      "countries": [
+        "IT"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "13/06/1994"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins the slash form. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-pl",
+      "text": "Sprawa: Jan Kowalski, urodzony 12.06.1958",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Polish. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-cs",
+      "text": "Vec: Jan Novak, narozen 12.06.1958",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Czech. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-hu",
+      "text": "Ügy: Nagy Gabor, született 12.06.1958",
+      "countries": [
+        "HU"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Hungarian. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-ro",
+      "text": "Caz: Ion Popescu, născut 12.06.1958",
+      "countries": [
+        "RO"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Romanian. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-hr",
+      "text": "Predmet: Ivan Horvat, rođen 12.06.1958",
+      "countries": [
+        "HR"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Croatian. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-et",
+      "text": "Asi: Jaan Tamm, sündinud 12.06.1958",
+      "countries": [
+        "EE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Estonian. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-lv",
+      "text": "Lieta: Janis Berzins, dzimis 12.06.1958",
+      "countries": [
+        "LV"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Latvian. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-lt",
+      "text": "Byla: Jonas Petraitis, gimęs 12.06.1958",
+      "countries": [
+        "LT"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.06.1958"
+        ]
+      },
+      "notes": "DOB recall was 62.8% because the context list covered seven languages of thirty-one; this pins Lithuanian. One vector per language, so removing a keyword fails a named test rather than silently dropping a country (rules-engine#38)."
+    },
+    {
+      "id": "dob-a-bare-date-is-not-a-birth-date",
+      "text": "Het contract is ondertekend op 14-08-1997.",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ],
+      "notes": "Widening the keyword list must not make every date a birth date. requires_context=True is what bounds a shape this generic."
     }
   ]
 }
