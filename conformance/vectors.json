@@ -3137,6 +3137,96 @@
         ]
       },
       "notes": "The same four digits appear as a birth year and as the postal code. Only the one in address structure is a postal code, and the span must be the second occurrence. (Dates are off unless detect_dates is set, so the birth date itself is not expected here.)"
+    },
+    {
+      "id": "cz-mobile-is-not-a-birth-number",
+      "text": "Call me at 606666032.",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "606666032"
+        ]
+      },
+      "notes": "606666032 as a rodne cislo would be YY=60 MM=66 DD=60. The validator checked mod 11 and not the date, so this was NATIONAL_ID at confidence=high -- 284 per corpus pass, the largest false-positive bucket in the evaluation (rules-engine#37)."
+    },
+    {
+      "id": "cz-mobile-after-an-iban",
+      "text": "Payment to CZ5749609328081460303134. Call me at 778836400.",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "CZ5749609328081460303134"
+        ],
+        "PHONE": [
+          "778836400"
+        ]
+      },
+      "notes": "Month field 88. The IBAN is unaffected."
+    },
+    {
+      "id": "cz-birth-number-still-detected",
+      "text": "rodne cislo 561201/1812",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "561201/1812"
+        ]
+      },
+      "notes": "A real rodne cislo: month 12, day 01, mod 11 satisfied. The date check must not cost it."
+    },
+    {
+      "id": "cz-row-with-both-a-birth-number-and-a-phone",
+      "text": "Martin Vesely,561201/1812,24.07.1962,martinnemec@gmail.com,606666032,CZ2946297540307091719643",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "561201/1812"
+        ],
+        "EMAIL": [
+          "martinnemec@gmail.com"
+        ],
+        "PHONE": [
+          "606666032"
+        ],
+        "BANK_ACCOUNT": [
+          "CZ2946297540307091719643"
+        ]
+      },
+      "notes": "The corpus row that exposed it: the real rodne cislo is slashed and the phone sits in the phone column. Both are now typed correctly."
+    },
+    {
+      "id": "cz-woman-month-offset-fifty",
+      "text": "rodne cislo 805115/0008",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "805115/0008"
+        ]
+      },
+      "notes": "Month field 51 is January for a woman (+50). The date check must accept all four conventions."
+    },
+    {
+      "id": "cz-exhausted-day-month-offset-twenty",
+      "text": "rodne cislo 802115/0005",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "802115/0005"
+        ]
+      },
+      "notes": "Month field 21 is January with the post-2004 +20 marker for a day whose sequence numbers were exhausted."
     }
   ]
 }

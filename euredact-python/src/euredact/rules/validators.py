@@ -643,10 +643,51 @@ def validate_polish_nip(candidate: str) -> bool:
     return total % 11 == d[9]
 
 
+#: Days per month for the rodné číslo date check. February is 29 because the
+#: century is not recoverable from a two-digit year, so a leap year cannot be
+#: ruled out -- being permissive by one day is the right direction here.
+_RC_DAYS = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+
+def _czech_month(raw: int) -> int | None:
+    """The calendar month a rodné číslo month field encodes, or None.
+
+    Four ranges are legal, and the offsets are what make them unambiguous:
+    1-12 is a man, +50 is a woman, and since 2004 +20 marks a birth on a day
+    whose sequence numbers were already exhausted (so +70 is a woman on such a
+    day).
+    """
+    for offset in (0, 20, 50, 70):
+        if 1 <= raw - offset <= 12:
+            return raw - offset
+    return None
+
+
 def validate_czech_birth_number(candidate: str) -> bool:
-    """Czech/Slovak rodné číslo: YYMMDD/SSSC, 10 digits divisible by 11."""
+    """Czech/Slovak rodné číslo: YYMMDD/SSSC, 10 digits divisible by 11.
+
+    The date is checked, not only the checksum. Without it the validator
+    accepted an impossible month and a Czech mobile number is the same shape --
+    nine digits opening 6 or 7 -- so any mobile that happened to pass mod 11 was
+    typed NATIONAL_ID at ``confidence="high"``:
+
+        606666032   YY=60 MM=66 DD=60   ->  accepted
+        778836400   MM=88               ->  accepted
+        728990603   MM=89               ->  accepted
+
+    284 Czech phone numbers per corpus pass, the largest single false-positive
+    bucket in the evaluation (rules-engine#37). Nothing downstream had reason to
+    doubt them, which is what made a mistype at high confidence worse than an
+    ordinary one.
+    """
     clean = re.sub(r"[/\s]", "", candidate)
     if len(clean) not in (9, 10) or not clean.isdigit():
+        return False
+    month = _czech_month(int(clean[2:4]))
+    if month is None:
+        return False
+    day = int(clean[4:6])
+    if not 1 <= day <= _RC_DAYS[month - 1]:
         return False
     if len(clean) == 10:
         return int(clean) % 11 == 0

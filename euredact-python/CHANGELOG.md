@@ -118,6 +118,35 @@ narrative lives. Sections here use that vocabulary
   as a property in `tests/test_idempotence.py` rather than as a single case.
   *(rules-engine#33)*
 
+- **A Czech mobile number could be typed `NATIONAL_ID` at high confidence.**
+  `validate_czech_birth_number` checked the mod-11 remainder and never the date,
+  so it accepted an impossible month -- `606666032` reads as `YY=60 MM=66
+  DD=60`. A Czech mobile is nine digits opening `6` or `7`, which is exactly the
+  rodné číslo shape, so any mobile divisible by 11 was reported as a national
+  identity number with `confidence="high"` and `country_confidence=0.88`.
+  Nothing downstream had a reason to doubt it, which is what made this worse
+  than an ordinary mistype.
+
+  It was the largest single false-positive bucket in the evaluation: 427 of
+  1,230, of which 284 Czech and 21 Slovak (the validator is shared). The date is
+  now checked, with all four month conventions -- `1`-`12` for a man, `+50` for
+  a woman, and since 2004 `+20` for a birth on a day whose sequence numbers were
+  exhausted, so `+70` for a woman on such a day. February is capped at 29
+  because a two-digit year does not reveal the century, so a leap year cannot be
+  ruled out.
+
+  Measured over the 152,300-record corpus: false positives **1,230 -> 967**
+  with hints and **2,370 -> 1,940** blind, `NATIONAL_ID` false positives
+  **427 -> 164** (CZ 284 -> 38, SK 21 -> 4), precision **99.8% -> 99.9%**, and
+  blind recall **99.4% -> 99.5%** as the phone numbers return to `PHONE`.
+
+  The Portuguese (64) and Bulgarian (53) residue is deliberately untouched and
+  is not this defect: the Portuguese NIF is a nine-digit checksum with no date
+  component, so NIF and phone genuinely collide on shape. The 38 Czech cases
+  that remain are mobiles that also form a legal date, which the validator
+  cannot separate -- those need the phone cue, not the checksum.
+  *(rules-engine#37)*
+
 ## 0.5.1 (2026-09-25)
 
 ### Added

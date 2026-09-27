@@ -1,18 +1,21 @@
 """Tests for checksum validators."""
 
+import pytest
+
 from euredact.rules.validators import (
-    validate_bsn,
     validate_belgian_nn,
-    validate_iban,
-    validate_luhn,
     validate_belgian_vat,
-    validate_vat_nl,
-    validate_vat_de,
-    validate_german_tax_id,
-    validate_french_nir,
-    validate_vin,
     validate_bic,
+    validate_bsn,
+    validate_czech_birth_number,
+    validate_french_nir,
+    validate_german_tax_id,
+    validate_iban,
     validate_kvk,
+    validate_luhn,
+    validate_vat_de,
+    validate_vat_nl,
+    validate_vin,
 )
 
 
@@ -177,3 +180,54 @@ class TestKVK:
 
     def test_invalid_too_short(self):
         assert validate_kvk("1234567") is False
+
+
+class TestCzechBirthNumberDate:
+    """The date component, not only the checksum.
+
+    A Czech mobile number is nine digits opening 6 or 7, which is the rodné
+    číslo shape, so a validator that checks only mod 11 accepts any mobile that
+    happens to be divisible by 11 -- and the engine then types it NATIONAL_ID at
+    ``confidence="high"``. 284 per corpus pass, the largest single
+    false-positive bucket in the evaluation (rules-engine#37).
+    """
+
+    @pytest.mark.parametrize("value", [
+        "606666032",   # YY=60 MM=66 DD=60 -- month and day both impossible
+        "778836400",   # MM=88
+        "728990603",   # MM=89
+        "724556554",   # MM=45
+        "8002300009",  # 30 February
+        "8002310008",  # 31 February
+        "8002000006",  # day 00
+        "8013150004",  # month 13
+        "8033150002",  # month 33, past the +20 range
+        "8063150007",  # month 63, past the +50 range
+        "8083150005",  # month 83, past the +70 range
+    ])
+    def test_an_impossible_date_is_rejected(self, value: str) -> None:
+        assert validate_czech_birth_number(value) is False
+
+    @pytest.mark.parametrize("value", [
+        "561201/1812",   # a real corpus value
+        "001121/3367",   # a real corpus value
+        "8001150003",    # month field 01 -- man
+        "8021150005",    # month field 21 -- +20, exhausted day
+        "8051150008",    # month field 51 -- +50, woman
+        "8071150010",    # month field 71 -- +70, woman on an exhausted day
+        "8002290010",    # 29 February: the century is unknown, so it is allowed
+        "8002010005",    # day 01
+        "8002280000",    # day 28
+    ])
+    def test_a_legal_date_is_accepted(self, value: str) -> None:
+        assert validate_czech_birth_number(value) is True
+
+    def test_the_checksum_still_applies(self) -> None:
+        # A legal date does not excuse a failed mod 11.
+        assert validate_czech_birth_number("8001150004") is False
+        assert validate_czech_birth_number("8001150003") is True
+
+    def test_nine_digit_numbers_keep_having_no_checksum(self) -> None:
+        # Pre-1954 numbers carry no check digit, so only the date gates them.
+        assert validate_czech_birth_number("560101123") is True
+        assert validate_czech_birth_number("566601123") is False

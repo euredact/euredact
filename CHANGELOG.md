@@ -45,6 +45,7 @@ which both test suites run.
 - The tail of a hyphenated case reference was masked as a postal code — `PV-2026-LU-09143` became `PV-2026-LU-[POSTAL_CODE]`. *(rules-engine#31)*
 - One address in a document made every later four-digit year a postal code, including law citations and CV date ranges. *(rules-engine#32)*
 - The engine's own `[POSTAL_CODE]` marker was detected as `SECRET` on a second pass, corrupting the first pass's output. *(rules-engine#33)*
+- A Czech mobile number could be typed `NATIONAL_ID` at `confidence="high"`: the birth-number validator checked mod 11 but never the date, so an impossible month was accepted. 284 per corpus pass, the largest single false-positive bucket in the evaluation. *(rules-engine#37)*
 
 ## [0.5.1] - 2026-09-25
 
