@@ -578,6 +578,16 @@ export class EuRedact {
       );
     }
 
+    return this.redactRules(text, options, allowed, domains);
+  }
+
+  /** The local pipeline: normalise, detect, exempt, mask. */
+  private redactRules(
+    text: string,
+    options: RedactOptions,
+    allowed: Map<string, string>,
+    domains: Map<string, string>,
+  ): RedactResult {
     if (text.length > this.maxInputLength) {
       throw new Error(
         `Input text length (${text.length.toLocaleString()} chars) exceeds the maximum ` +
@@ -591,7 +601,6 @@ export class EuRedact {
       countryHint = null,
       context = null,
       chunkOffset = 0,
-      mode = "rules",
       referentialIntegrity = false,
       tokenize = false,
       detectDates = false,
@@ -615,7 +624,7 @@ export class EuRedact {
     // separator, and two different lists must never share a key.
     const allowKey = (allowed.size ? JSON.stringify([...allowed.keys()].sort()) : "")
       + (domains.size ? "|dom=" + JSON.stringify([...domains.keys()].sort()) : "");
-    const cacheMode = `${mode}|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}|tok=${tokenize}|allow=${allowKey}`;
+    const cacheMode = `rules|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}|tok=${tokenize}|allow=${allowKey}`;
 
     let cacheKey: string | undefined;
     if (cache) {

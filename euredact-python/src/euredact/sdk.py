@@ -483,6 +483,30 @@ class EuRedact:
             raise ValueError(
                 f"unknown mode {mode!r}: expected 'rules' or 'cloud'")
 
+        return self._redact_rules(
+            text, countries=countries, country_hint=country_hint,
+            context=context, chunk_offset=chunk_offset,
+            referential_integrity=referential_integrity, tokenize=tokenize,
+            allowed=allowed, domains=domains, detect_dates=detect_dates,
+            cache=cache,
+        )
+
+    def _redact_rules(
+        self,
+        text: str,
+        *,
+        countries: list[str] | None,
+        country_hint: list[str] | None,
+        context: DocumentContext | None,
+        chunk_offset: int,
+        referential_integrity: bool,
+        tokenize: bool,
+        allowed: dict[str, str],
+        domains: dict[str, str],
+        detect_dates: bool,
+        cache: bool,
+    ) -> RedactResult:
+        """The local pipeline: normalise, detect, exempt, mask."""
         if len(text) > self._max_input_length:
             raise ValueError(
                 f"Input text length ({len(text):,} chars) exceeds the maximum "
@@ -505,7 +529,7 @@ class EuRedact:
         allow_key = json.dumps(sorted(allowed)) if allowed else ""
         if domains:
             allow_key += "|dom=" + json.dumps(sorted(domains))
-        cache_mode = f"{mode}|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}|tok={tokenize}|allow={allow_key}"
+        cache_mode = f"rules|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}|tok={tokenize}|allow={allow_key}"
         # A context makes the result depend on evidence from other chunks, so
         # the text no longer identifies the result. Caching is disabled rather
         # than keyed on the context, whose contents change as chunks arrive.
