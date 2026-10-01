@@ -177,10 +177,10 @@ CLOUD_PAYLOAD = {
     "status": "succeeded",
     "redacted_text": "Patiënt [PERSON_NAME], mail [EMAIL]",
     "entities": [
+        # Relative to the text the service received, in which the address is
+        # already `[EMAIL]`: the rules ran locally (rules-engine#28).
         {"start": 8, "end": 21, "text": "Bas Verhoeven", "type": "PERSON_NAME",
          "source": "model", "match": "exact_body"},
-        {"start": 28, "end": 42, "text": "bas@example.be", "type": "EMAIL",
-         "source": "rules"},
     ],
     "unlocated": [],
 }
@@ -211,7 +211,7 @@ def cloud(monkeypatch):
 
 
 class TestCloud:
-    def test_without_tokenize_the_service_text_is_returned_verbatim(self, sdk, cloud):
+    def test_without_tokenize_the_labels_are_bracketed(self, sdk, cloud):
         result = sdk.redact(CLOUD_DOC, countries=["BE"], mode="cloud")
         assert result.redacted_text == CLOUD_PAYLOAD["redacted_text"]
         assert result.tokens == {}

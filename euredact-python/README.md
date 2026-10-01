@@ -153,7 +153,7 @@ The three output styles are mutually exclusive in practice — pick at most one.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `mode` | `"rules"` | `"rules"` runs locally. `"cloud"` sends the document to the euRedact service, which adds the model-only types (person names, organisations, job titles, diagnoses). See [Cloud tier](#cloud-tier). |
+| `mode` | `"rules"` | `"rules"` runs locally. `"cloud"` masks locally first, then sends the masked text to the euRedact service, which adds the model-only types (person names, organisations, job titles, diagnoses). See [Cloud tier](#cloud-tier). |
 | `context` | `None` | Share country evidence across the chunks of one document, so a chunk with no country signal of its own is still scored against the rest. Pass the same [`DocumentContext`](#documentcontext) to every chunk. Disables the cache. See [Chunked documents](#chunked-documents). |
 | `chunk_offset` | `0` | Where this chunk starts in the whole document. Used only to rebase spans recorded in `context`; returned detections are always relative to `text`. |
 | `cache` | `True` | Reuse the result for an identical input and configuration. Set `False` for one-off calls on sensitive text, or when timing the engine. |
@@ -540,14 +540,16 @@ It never falls back to rules-only output: a caller who believes names and
 diagnoses were checked, and ships a document that only had its phone numbers
 masked, is the one failure this library must not have.
 
-An async client is available for the same contract:
+`aredact()` takes the same arguments from async code:
 
 ```python
-from euredact.cloud import AsyncCloudClient
-
-async with AsyncCloudClient() as client:
-    result = await client.redact(text, country="BE")
+result = await euredact.aredact(text, countries=["BE"], mode="cloud")
 ```
+
+`CloudClient` and `AsyncCloudClient` in `euredact.cloud` are the transport
+underneath. They send exactly the text they are given and return spans relative
+to it: the local masking happens in `redact()`, not in the client. Use them
+directly only with text you have already masked.
 
 Retries carry an `Idempotency-Key`, so a retry after a timeout cannot bill
 twice. `Retry-After` is obeyed. A document that outlives the service's sync
@@ -557,34 +559,55 @@ chunking, because the model has never seen a chunk boundary.
 
 ### What leaves your machine
 
-Be precise about this, because it is the question a security review asks first
-and the answer is not "only the leftovers".
+Be precise about this, because it is the question a security review asks first.
 
-In `mode="cloud"` the **whole document** is sent to the service over TLS. The
-local rules engine does not run first and nothing is stripped before the
-request: `redact()` hands off to the cloud path before normalisation, and the
-request body is the text you passed in.
+In `mode="cloud"` the rules engine runs **on your machine first**, and only
+the text it leaves behind is sent to the service over TLS. Every value it finds
+is already a `[TYPE]` placeholder by the time the request is built:
 
 ```
-mode="cloud"      your text ──TLS──▶ service (its own rules engine + model)
-                  masked text ◀────── spans + redacted_text
+your text      IBAN NL91 ABNA 0417 1643 00 belongs to Nick Bols, tel +31 6 12345678
+                 │  rules engine, on your machine
+what is sent   IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]
+                 │  TLS ──▶ service (model) ──▶ spans relative to the masked text
+what you get   IBAN [BANK_ACCOUNT] belongs to [PERSON_NAME], tel [PHONE]
 ```
 
-The service runs the same rules engine server-side and adds the model, which is
-why cloud results are a superset of rules results rather than a different
-answer. The local SDK touches the response, not the request: when `tokenize` or
-an `allowlist` is set, it rebuilds the masked text from the spans the service
-returned, and it verifies every span still matches the document before doing so.
+The request body is that one `text` field plus the country. No list of types,
+no offsets and no original values travel beside it. The service answers with
+spans that index the masked text, and the SDK maps them back onto your
+original, so `detections` always index the document you passed in.
 
-`detect_dates` is the one option not forwarded — the service always runs with
-dates on, because that is what the model was trained against. It can only cause
-more to be detected, never less.
+**This is minimisation, not an exemption.** Three things still leave:
+
+- what the model is there to find — names, employers, job titles, diagnoses;
+- anything the rules engine missed, such as an identifier in a format it does
+  not know;
+- the surrounding prose.
+
+So the service still processes personal data on your behalf, and a DPIA should
+say so. What it no longer receives is every IBAN, national ID, phone number and
+email address the local engine could place.
+
+Three things behave differently here than in rules mode:
+
+- `detect_dates` has no effect. The local pass always runs with dates on,
+  because that is the rules output the model was trained against. It can only
+  cause more to be masked, never less.
+- `tokenize` and the allowlists are applied locally, after the response, and do
+  not change what is sent: placeholders on the wire are always `[TYPE]`, and an
+  allowlisted value is masked in the request and put back in your result.
+- [Custom patterns](#custom-patterns) run in the local pass, so a value only
+  you know how to recognise is masked before the request too.
+
+Every span the service returns is checked against the text that was sent. One
+that does not match raises `CloudError` rather than being placed by guesswork.
 
 ### Keeping identifiers local
 
-If your requirement is that structured identifiers **never leave your
-infrastructure**, do not use `mode="cloud"` for that — compose the local engine
-with whatever model you like instead. This is what `tokenize=True` is for:
+`mode="cloud"` does this for you with our model. The same pattern works with
+any other model — your own, or a general-purpose LLM — and that is what
+`tokenize=True` is for:
 
 ```python
 import euredact
@@ -610,13 +633,14 @@ The token suffixes are random per call, so yours will differ.
 **Read that output carefully: `Bas Verhoeven` is still there.** That is the
 whole trade-off and it is why the cloud tier exists. The local engine masks what
 has a shape — the IBAN and the address — and cannot mask a name, an employer or
-a diagnosis, because it cannot find them. So this pattern keeps every structured
-identifier inside your process and sends the prose, names included.
-`mode="cloud"` sends everything and gets both back.
+a diagnosis, because it cannot find them. So this pattern keeps every identifier
+the engine detects inside your process and sends the prose, names included.
+`mode="cloud"` sends that same masked prose to a model trained to find the
+names in it.
 
-These are different trust boundaries, not two speeds of the same thing. If names
-must be masked *and* identifiers must not leave your infrastructure, neither
-option does that today; run the model yourself against `local.redacted_text`.
+Either way the prose leaves. If names must not leave your infrastructure
+either, no hosted model can help; run one yourself against
+`local.redacted_text`.
 
 
 ### `euredact.configure()`
@@ -1141,8 +1165,9 @@ itself be redacted without `restore()` putting the wrong value back.
 `restore()` replaces every occurrence, including a token an LLM glued to other
 characters (`EMAIL_P4RTs`) — leaving a token behind is the worse failure.
 
-Works in cloud mode: the SDK rebuilds the text from the spans the service
-returns, which is exactly what the service built its own output from.
+Works in cloud mode: tokens are minted locally, after the response, over the
+local spans and the service's. What is sent to the service always carries
+`[TYPE]` placeholders, never tokens.
 
 ## Allowlist
 

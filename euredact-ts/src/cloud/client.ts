@@ -1,10 +1,14 @@
 /**
  * [CLOUD EXTENSION] The cloud client.
  *
- * Speaks to the euRedact inference service: a deterministic rules engine
- * followed by a fine-tuned model asked only *what did the rules miss?* The
- * service returns both the redacted document and located spans, so this
+ * Speaks to the euRedact inference service: a fine-tuned model asked only
+ * *what did the rules miss?* The service returns located spans, so this
  * module's job is transport and translation, not detection.
+ *
+ * It sends the text it is given, as given. `redactAsync(text, { mode: "cloud" })`
+ * is what runs the rules engine first and hands this client only the masked
+ * text; call the client directly and whatever you pass is what leaves the
+ * machine. The spans that come back index the text that was sent.
  *
  * Three things it hides from the caller:
  *
@@ -70,7 +74,6 @@ export interface CloudRedactOptions {
   country: string;
   language?: string;
   priority?: "interactive" | "batch";
-  rulesOnly?: boolean;
   idempotencyKey?: string;
   /** Injectable for tests. Defaults to the platform `fetch`. */
   fetchImpl?: typeof fetch;
@@ -210,7 +213,6 @@ export class CloudClient {
       country: options.country.toUpperCase(),
       language: options.language ?? "",
       priority: options.priority ?? "interactive",
-      rules_only: options.rulesOnly ?? false,
     });
 
     let attempt = 0;

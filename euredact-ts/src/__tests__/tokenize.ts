@@ -178,8 +178,9 @@ const CLOUD_PAYLOAD = {
   status: "succeeded",
   redacted_text: "Patiënt [PERSON_NAME], mail [EMAIL]",
   entities: [
+    // Relative to the text the service received, in which the address is
+    // already `[EMAIL]`: the rules ran locally (rules-engine#28).
     { start: 8, end: 21, text: "Bas Verhoeven", type: "PERSON_NAME", source: "model", match: "exact_body" },
-    { start: 28, end: 42, text: "bas@example.be", type: "EMAIL", source: "rules" },
   ],
   unlocated: [],
 };
@@ -198,7 +199,7 @@ async function withCloud(payload: unknown, fn: () => Promise<void>): Promise<voi
   }
 }
 
-testAsync("without tokenize the service text is returned verbatim", () =>
+testAsync("without tokenize the labels are bracketed", () =>
   withCloud(CLOUD_PAYLOAD, async () => {
     const r = await new EuRedact().redactAsync(CLOUD_DOC, { countries: ["BE"], mode: "cloud" });
     assert.equal(r.redactedText, CLOUD_PAYLOAD.redacted_text);

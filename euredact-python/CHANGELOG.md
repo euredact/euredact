@@ -26,12 +26,13 @@ narrative lives. Sections here use that vocabulary
   `aredact_batch(max_concurrency=...)` and `redact_iter` in one place, with what
   each costs in memory, why reusing an instance matters for the cache, and the
   fact that tokens do not span a batch.
-- **Documentation: what leaves your machine in cloud mode.** In `mode="cloud"`
-  the whole document is sent; the local rules engine does not run first and
-  nothing is stripped before the request. Written because the opposite was
-  believed. The `tokenize` → model → `restore` composition is documented beside
-  it as the local-first alternative, including what it cannot do — it masks the
-  IBAN and leaves the name, because the rules engine cannot find a name.
+- **Documentation: what leaves your machine in cloud mode.** Written first to
+  say that the whole document was sent, because the opposite was believed; then
+  rewritten in the same cycle when cloud mode became local-first (below). It now
+  shows the text as passed, as sent and as returned, and names what still
+  travels: names and diagnoses, the rules' misses, and the prose. The
+  `tokenize` → model → `restore` composition is documented beside it as the same
+  pattern with a model of your own. *(rules-engine#28)*
 - **A root [`CHANGELOG.md`](../CHANGELOG.md)** covering both SDKs in strict
   [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) form, and
   `tests/test_changelog.py` to keep it that way: sixteen distinct section names
@@ -65,6 +66,54 @@ narrative lives. Sections here use that vocabulary
   first used was wrong in both directions — it matched `german_tax_id`, which
   has no date, and missed `polish_pesel`, which does. That blind spot is how
   PESEL escaped the first pass. *(rules-engine#44)*
+
+### Changed
+
+- **Cloud mode is local-first: the rules run on the caller's machine and only
+  the masked text is sent.** *(Breaking for the cloud tier, which is in private
+  alpha.)* `redact(mode="cloud")` used to hand off to the cloud path before any
+  local work, so the request body was the document as passed in — a wire capture
+  on 0.5.1 shows `... to Nick Bols on NL91 ABNA 0417 1643 00` in `text`. It now
+  runs the local pipeline first and sends `... to Nick Bols on [BANK_ACCOUNT]`:
+  one `text` field, with no types, offsets or values beside it. The service
+  answers with spans relative to that masked text; `_onto_original` carries them
+  back across the labels, and the result is assembled here from the local
+  detections plus the service's.
+
+  Decisions that are not obvious from the diff:
+
+  - *The wire is always `[TYPE]`.* That is the placeholder syntax the model is
+    trained on, where it means "already handled". `tokenize` therefore does not
+    change what is sent; tokens are minted locally, after the response.
+  - *An allowlisted value is still masked in the request.* An exemption says
+    what the caller wants back, not what may leave. It is restored in the
+    result, and reported in `exempted`, as before.
+  - *Dates are always on in the local pass*, whatever `detect_dates` says. The
+    service ran its rules with dates on for the same reason: it is what the
+    model was trained against. It can only cause more to be masked.
+  - *A span that touches a label snaps outward.* An offset inside `[POSTAL_CODE]`
+    has no counterpart in the original, so an address the model reports around
+    one covers the whole postal code. A span wholly inside a label is dropped;
+    the local detection behind it stands.
+  - *A span that does not match the sent text raises `CloudError`*, now on every
+    cloud call. This check used to run only under `tokenize` or an allowlist,
+    because only then did the SDK place spans itself. It always does now.
+
+  Side effects: custom patterns apply in cloud mode (they never reached the
+  service), and a cloud result carries the local pass's country attribution,
+  `inferred_countries` and `evidence`.
+
+  This is minimisation, not an exemption. Names and diagnoses still travel, as
+  does anything the rules miss. It also needs the matching service: one that
+  reports spans relative to the text it received (euredact-inference#14).
+  *(rules-engine#28)*
+
+### Removed
+
+- **`rules_only` on `CloudClient.redact()` / `AsyncCloudClient.redact()`**, and
+  the field in the request body. `redact()` never exposed it, and from a
+  local-first client it means nothing: the rules have already run. The service
+  defaults it to false. *(rules-engine#28)*
 
 ### Fixed
 

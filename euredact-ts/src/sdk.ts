@@ -58,6 +58,114 @@ export function applyReplacements(text: string, detections: Detection[], labelFo
 }
 
 /**
+ * One label in the text sent to the cloud tier: where it sits in the masked
+ * text, and the extent of the original it replaced —
+ * `[maskedStart, maskedEnd, start, end]`.
+ */
+type WireLabel = [number, number, number, number];
+
+/**
+ * Bracket-mask `text` and record where each label landed.
+ *
+ * Returns what is sent to the cloud tier, plus one `WireLabel` per label.
+ * Everything between labels is copied unchanged, so the labels are all it
+ * takes to carry an offset from the masked text back to the original.
+ *
+ * Always `[TYPE]`, whatever label scheme the caller asked for. That is the
+ * syntax the model was trained on, where a placeholder means "already handled,
+ * do not list it". A token or a numbered label would be read as ordinary text,
+ * so the format on the wire is a model contract and not an output option.
+ */
+function maskForCloud(text: string, detections: Detection[]): [string, WireLabel[]] {
+  const parts: string[] = [];
+  const labels: WireLabel[] = [];
+  let pos = 0;
+  let out = 0;
+  for (const det of detections) {
+    const start = Math.max(det.start, pos);
+    if (det.end <= start) continue;
+    const label = `[${det.entityType}]`;
+    out += start - pos;
+    parts.push(text.slice(pos, start), label);
+    labels.push([out, out + label.length, start, det.end]);
+    out += label.length;
+    pos = det.end;
+  }
+  parts.push(text.slice(pos));
+  return [parts.join(""), labels];
+}
+
+/** Index of the last label starting at or before `offset` — strictly before
+ *  when `strict` — or -1. */
+function labelBefore(labels: WireLabel[], offset: number, strict: boolean): number {
+  let lo = 0;
+  let hi = labels.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (strict ? labels[mid][0] < offset : labels[mid][0] <= offset) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo - 1;
+}
+
+/**
+ * Carry the service's spans from the masked text onto the original.
+ *
+ * The service only ever saw `masked`, so its offsets index that. An offset in
+ * copied text shifts by whatever the labels before it added or removed. An
+ * offset inside a label has no counterpart in the original, so it snaps
+ * outward to the edge of the value the label replaced: an address the model
+ * reports around `[POSTAL_CODE]` covers the postal code, never half of it.
+ * Over-masking is the safe direction.
+ *
+ * A span lying wholly inside one label describes the label, not the document.
+ * It is dropped; the local detection behind the label stands.
+ *
+ * Throws `Unplaceable` when a span does not match the text that was sent. Such
+ * a span cannot be placed, and masking where it points would cover the wrong
+ * characters and leave the right ones in the clear.
+ */
+function ontoOriginal(
+  spans: Detection[],
+  masked: string,
+  text: string,
+  labels: WireLabel[],
+  Unplaceable: new (message: string) => Error,
+): Detection[] {
+  const placed: Detection[] = [];
+  for (const span of spans) {
+    if (
+      !(0 <= span.start && span.start <= span.end && span.end <= masked.length) ||
+      masked.slice(span.start, span.end) !== span.text
+    ) {
+      throw new Unplaceable(
+        "span offsets do not match the text that was sent; cannot place the " +
+        "service's detections in the document",
+      );
+    }
+    if (span.start === span.end) continue;
+
+    let start = span.start;
+    let at = labelBefore(labels, span.start, false);
+    if (at >= 0) {
+      const [, maskedEnd, origStart, origEnd] = labels[at];
+      if (span.end <= maskedEnd) continue;
+      start = span.start < maskedEnd ? origStart : origEnd + span.start - maskedEnd;
+    }
+
+    let end = span.end;
+    at = labelBefore(labels, span.end, true);
+    if (at >= 0) {
+      const [, maskedEnd, , origEnd] = labels[at];
+      end = origEnd + Math.max(0, span.end - maskedEnd);
+    }
+
+    placed.push({ ...span, start, end, text: text.slice(start, end) });
+  }
+  return placed;
+}
+
+/**
  * Characters a token suffix is drawn from. No vowels, so a suffix never spells
  * a word; no 0/1/I/O, so it survives being read back by a person; no
  * underscore, so the type prefix stays unambiguous.
@@ -477,7 +585,16 @@ export class EuRedact {
   }
 
   /**
-   * Send a document to the cloud tier.
+   * Run the rules here, then send what they left to the cloud tier.
+   *
+   * Local-first: the rules engine masks everything it can find on the caller's
+   * machine, and only that masked text is sent. The service looks for what has
+   * no shape to match on — names, employers, diagnoses — and answers with
+   * spans relative to the text it received, which are mapped back onto the
+   * original here.
+   *
+   * This is minimisation, not an exemption: what the rules miss, and the names
+   * and diagnoses the model is there to find, still travel.
    *
    * Options the service cannot honour throw rather than being ignored. Silently
    * dropping one would mean returning a result that does not match what was
@@ -486,6 +603,7 @@ export class EuRedact {
    */
   private async redactViaCloud(text: string, options: RedactOptions): Promise<RedactResult> {
     const { CloudClient } = await import("./cloud/client.js");
+    const { CloudError } = await import("./cloud/errors.js");
     const countries = options.countries ?? null;
 
     if (!countries || countries.length !== 1) {
@@ -509,48 +627,42 @@ export class EuRedact {
       throw new Error("referentialIntegrity is not supported in cloud mode");
     }
 
-    // detectDates is deliberately NOT forwarded. The service always runs its
-    // rules engine with dates on, because that is what the model was trained
-    // against; the caller's value cannot change that. It is the one ignored
-    // option that is safe to ignore — it can only cause MORE to be detected,
-    // never less, so it cannot produce under-redaction.
     const allowed = this.allowedFor(options);
     const domains = this.domainsFor(options);
-    const result = await new CloudClient().redact(text, { country: countries[0] });
-    if (options.tokenize || allowed.size > 0 || domains.size > 0) {
-      await this.remaskCloudResult(result, text, { tokenize: options.tokenize ?? false, allowed, domains });
-    }
-    return result;
-  }
+    const client = new CloudClient();
 
-  /**
-   * Rebuild the masked text from the service's spans, in place.
-   *
-   * The service masks with bracketed labels only. Any other output option is
-   * applied here, from its spans: the service builds its `redacted_text` from
-   * exactly the spans it returns (entities it reports but cannot place are
-   * listed separately and never applied), so nothing it masked is lost by
-   * masking again from the same spans.
-   *
-   * The service reports offsets in code points and this SDK slices UTF-16
-   * units, so the slice check is what stands between an emoji in the document
-   * and a rebuilt text with the wrong characters masked.
-   */
-  private async remaskCloudResult(
-    result: RedactResult,
-    text: string,
-    opts: { tokenize: boolean; allowed: Map<string, string>; domains: Map<string, string> },
-  ): Promise<void> {
-    const { CloudError } = await import("./cloud/errors.js");
-    for (const det of result.detections) {
-      if (text.slice(det.start, det.end) !== det.text) {
-        throw new CloudError("span offsets do not match the document; cannot apply tokenize/allowlist locally");
-      }
-    }
-    [result.detections, result.exempted] = applyAllowlist(text, result.detections, opts.allowed, opts.domains);
-    const tokenMapper = opts.tokenize ? new TokenMapper(text, result.detections) : null;
-    result.redactedText = applyReplacements(text, result.detections, this.labelFor(false, tokenMapper));
-    result.tokens = tokenMapper ? tokenMapper.tokens : {};
+    // Dates are always on, whatever detectDates says: that is the rules output
+    // the model was trained against, and a date of birth the rules can place
+    // has no reason to travel. It is the one ignored option that is safe to
+    // ignore — it can only cause MORE to be detected, never less.
+    //
+    // No allowlist and no tokens on this pass. An exemption says what the
+    // caller wants back, not what may leave; both are applied below, after the
+    // response, to the merged spans.
+    const local = this.redactRules(
+      text, { countries, detectDates: true, cache: options.cache }, new Map(), new Map(),
+    );
+    const [masked, labels] = maskForCloud(text, local.detections);
+    // The client converts the service's code-point offsets to UTF-16 units of
+    // the text it sent, so everything from here on is in one unit.
+    const remote = await client.redact(masked, { country: countries[0] });
+
+    // A new array throughout: `local` may be the cached rules result.
+    const [detections, exempted] = applyAllowlist(
+      text,
+      [...local.detections, ...ontoOriginal(remote.detections, masked, text, labels, CloudError)],
+      allowed, domains,
+    );
+    detections.sort((a, b) => a.start - b.start || b.end - a.end);
+    const tokenMapper = options.tokenize ? new TokenMapper(text, detections) : null;
+    return {
+      ...local,
+      redactedText: applyReplacements(text, detections, this.labelFor(false, tokenMapper)),
+      detections,
+      source: "cloud",
+      tokens: tokenMapper ? tokenMapper.tokens : {},
+      exempted,
+    };
   }
 
   redact(text: string, options: RedactOptions = {}): RedactResult {

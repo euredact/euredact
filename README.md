@@ -114,21 +114,26 @@ only checksum-backed types.
 
 The rule engine catches what has a shape: IBANs, national IDs, phone numbers,
 anything with a checksum. It cannot catch what does not — a person's name, an
-employer, a diagnosis, a job title. The cloud tier sends the document to the
-euRedact inference service, which runs the same deterministic rules engine and
-then asks a fine-tuned model only *what did the rules miss?*
+employer, a diagnosis, a job title. The cloud tier runs the rules engine on
+your machine, sends only the text it left behind to the euRedact inference
+service, and asks a fine-tuned model *what did the rules miss?*
 
-**What leaves your machine.** In `mode="cloud"` the whole document is sent to the
-service over TLS. The local rules engine does not run first and nothing is
-stripped before the request — the service runs its own rules engine and the
-model, which is why cloud results are a superset of rules results. The local SDK
-touches the response, not the request: it rebuilds the masked text from the
-returned spans when `tokenize` or an `allowlist` is set.
+**What leaves your machine.** In `mode="cloud"` the SDK masks locally first and
+sends only the masked text over TLS — `IBAN [BANK_ACCOUNT] belongs to Nick
+Bols, tel [PHONE]` — as one `text` field, with no list of types, offsets or
+original values beside it. The service answers with spans relative to that
+masked text and the SDK maps them back onto your original. `tokenize` and the
+allowlists are applied locally, after the response; neither changes what is
+sent.
 
-If your requirement is that structured identifiers never leave your
-infrastructure, compose the local engine with a model of your choice instead —
-`tokenize=True`, send `redacted_text`, then `restore()`. Note the trade-off: the
-local engine cannot mask a name or a diagnosis, because it cannot find them.
+This is minimisation, not an exemption. Names, employers and diagnoses still
+travel, because finding them is what the model is for, and so does anything the
+rules engine missed. The service still processes personal data on your behalf.
+[Python](euredact-python/README.md#what-leaves-your-machine) ·
+[TypeScript](euredact-ts/README.md#what-leaves-your-machine).
+
+The same pattern works with a model of your own: `tokenize=True`, send
+`redacted_text`, then `restore()`.
 [Python](euredact-python/README.md#keeping-identifiers-local) ·
 [TypeScript](euredact-ts/README.md#keeping-identifiers-local).
 
@@ -174,8 +179,8 @@ diagnoses were checked, and ships a document that only had its phone numbers
 masked, is the one failure this library must not have. Options the service
 cannot honour — multiple `countries`, `country_hint`, `context`/`chunk_offset`,
 `referential_integrity` — raise rather than being silently dropped. `tokenize`
-and `allowlist` are honoured: the SDK applies them to the spans the service
-returns and rebuilds the text from those.
+and `allowlist` are honoured: the SDK applies them locally, after the response,
+to its own spans and the service's.
 
 Retries carry an `Idempotency-Key`, so a retry after a timeout cannot bill
 twice; `Retry-After` is obeyed; a document that outlives the service's sync

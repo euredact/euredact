@@ -362,3 +362,239 @@ def test_missing_httpx_says_which_extra_to_install(monkeypatch):
     cloud_config.configure(api_key="erk_test")
     with pytest.raises(NotConfiguredError, match=r"euredact\[cloud\]"):
         CloudClient()
+
+
+# -- local-first: what is sent, and where the answer lands (rules-engine#28) --
+
+class _Wire:
+    """mode="cloud" through the real client and a scripted transport.
+
+    The stand-in service follows the local-first contract: it looks for
+    ``found`` in the text it *received* and answers with spans relative to
+    that text. It never sees the caller's original, so a test that passes
+    here cannot be relying on it.
+    """
+
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+        self.found: dict[str, str] = {}
+        self.entities: list[dict] | None = None
+
+    def handler(self, request):
+        body = json.loads(request.content)
+        self.sent.append(body)
+        text = body["text"]
+        entities = self.entities
+        if entities is None:
+            entities = []
+            for needle, type_ in self.found.items():
+                start = text.find(needle)
+                while start != -1:
+                    entities.append({
+                        "start": start, "end": start + len(needle), "text": needle,
+                        "type": type_, "source": "model", "match": "exact_body"})
+                    start = text.find(needle, start + 1)
+        return _response(200, {"job_id": "job-1", "status": "succeeded",
+                               "redacted_text": text, "entities": entities,
+                               "unlocated": []})
+
+    @property
+    def text(self) -> str:
+        assert len(self.sent) == 1, "exactly one request per document"
+        return self.sent[0]["text"]
+
+
+@pytest.fixture
+def wire(monkeypatch):
+    cloud_config.configure(api_key="erk_test", base_url="https://api.test")
+    w = _Wire()
+    monkeypatch.setattr(
+        "euredact.cloud.client.CloudClient",
+        lambda *a, **kw: CloudClient(
+            client=httpx.Client(transport=httpx.MockTransport(w.handler))))
+    return w
+
+
+PAYMENT = "Joren Janssens needs to pay 50EUR to Nick Bols on NL91 ABNA 0417 1643 00"
+LEDGER = "IBAN NL91 ABNA 0417 1643 00 belongs to Nick Bols, tel +31 6 12345678"
+VISIT = "Bezoekadres: Kerkstraat 12, 9000 Gent. Contact: jan@example.be"
+
+
+def test_cloud_mode_sends_only_the_locally_masked_text(wire):
+    """The claim the documentation makes: identifiers the rules engine can
+    find are replaced on the caller's machine, before the request exists."""
+    euredact.EuRedact().redact(PAYMENT, countries=["NL"], mode="cloud")
+    assert wire.text == (
+        "Joren Janssens needs to pay 50EUR to Nick Bols on [BANK_ACCOUNT]")
+    assert "NL91" not in json.dumps(wire.sent)
+
+
+def test_nothing_structured_travels_with_the_text(wire):
+    """One ``text`` field: no types list, no offsets, no values beside it."""
+    euredact.EuRedact().redact(PAYMENT, countries=["NL"], mode="cloud")
+    assert wire.sent[0] == {
+        "text": "Joren Janssens needs to pay 50EUR to Nick Bols on [BANK_ACCOUNT]",
+        "country": "NL", "language": "", "priority": "interactive"}
+
+
+def test_service_spans_are_mapped_back_onto_the_original(wire):
+    """The service indexes the masked text; the caller gets the original's."""
+    wire.found = {"Nick Bols": "PERSON_NAME"}
+    result = euredact.EuRedact().redact(LEDGER, countries=["NL"], mode="cloud")
+
+    assert wire.text == "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]"
+    assert result.source == "cloud"
+    assert result.redacted_text == (
+        "IBAN [BANK_ACCOUNT] belongs to [PERSON_NAME], tel [PHONE]")
+    assert [(d.entity_type, d.text, d.source) for d in result.detections] == [
+        (EntityType.BANK_ACCOUNT, "NL91 ABNA 0417 1643 00", DetectionSource.RULES),
+        (EntityType.PERSON_NAME, "Nick Bols", DetectionSource.CLOUD),
+        (EntityType.PHONE, "+31 6 12345678", DetectionSource.RULES),
+    ]
+    for d in result.detections:
+        assert LEDGER[d.start:d.end] == d.text
+
+
+def test_tokenize_does_not_change_what_is_sent(wire):
+    """The model was trained on ``[TYPE]``; a token on the wire would be read
+    as ordinary text. Tokens are minted locally, after the response."""
+    wire.found = {"Nick Bols": "PERSON_NAME"}
+    result = euredact.EuRedact().redact(
+        LEDGER, countries=["NL"], mode="cloud", tokenize=True)
+    assert wire.text == "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]"
+    assert len(result.tokens) == 3
+    assert "[" not in result.redacted_text
+    assert euredact.restore(result.redacted_text, result.tokens) == LEDGER
+
+
+def test_an_allowlisted_value_is_still_masked_on_the_wire(wire):
+    """An exemption says what the caller wants back, not what may leave."""
+    wire.found = {"Nick Bols": "PERSON_NAME"}
+    sdk = euredact.EuRedact(allowlist=["NL91ABNA0417164300"])
+    result = sdk.redact(LEDGER, countries=["NL"], mode="cloud")
+    assert wire.text == "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]"
+    assert result.redacted_text == (
+        "IBAN NL91 ABNA 0417 1643 00 belongs to [PERSON_NAME], tel [PHONE]")
+    assert [e.text for e in result.exempted] == ["NL91 ABNA 0417 1643 00"]
+
+
+def test_an_allowlisted_cloud_type_is_exempted_after_the_response(wire):
+    wire.found = {"Nick Bols": "PERSON_NAME"}
+    result = euredact.EuRedact().redact(
+        LEDGER, countries=["NL"], mode="cloud", allowlist=["Nick Bols"])
+    assert result.redacted_text == (
+        "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]")
+    assert [e.text for e in result.exempted] == ["Nick Bols"]
+
+
+def test_dates_are_masked_before_sending_whatever_detect_dates_says(wire):
+    """The model is trained against rules output with dates on, and a date of
+    birth the rules can place has no reason to travel."""
+    doc = "Mevrouw Peeters, geboren op 12/03/1985, woont in Gent."
+    result = euredact.EuRedact().redact(doc, countries=["BE"], mode="cloud")
+    assert wire.text == "Mevrouw Peeters, geboren op [DOB], woont in Gent."
+    assert [d.entity_type for d in result.detections] == [EntityType.DOB]
+
+
+def test_custom_patterns_are_masked_before_sending(wire):
+    """The service has never heard of the caller's own patterns."""
+    sdk = euredact.EuRedact()
+    sdk.add_custom_pattern("EMPLOYEE_ID", r"EMP-\d{6}")
+    wire.found = {"Nick Bols": "PERSON_NAME"}
+    result = sdk.redact("Badge EMP-004211 van Nick Bols", countries=["BE"], mode="cloud")
+    assert wire.text == "Badge [EMPLOYEE_ID] van Nick Bols"
+    assert result.redacted_text == "Badge [EMPLOYEE_ID] van [PERSON_NAME]"
+
+
+def test_a_span_across_a_placeholder_takes_the_whole_local_detection(wire):
+    """An address the model reports around a locally masked postal code."""
+    wire.found = {"Kerkstraat 12, [POSTAL_CODE] Gent": "ADDRESS"}
+    result = euredact.EuRedact().redact(
+        VISIT, countries=["BE"], mode="cloud", tokenize=True)
+    address = next(d for d in result.detections
+                   if d.entity_type == EntityType.ADDRESS)
+    assert address.text == "Kerkstraat 12, 9000 Gent"
+    assert VISIT[address.start:address.end] == address.text
+    assert "9000" not in result.redacted_text
+    assert "POSTAL_CODE" not in result.redacted_text, "the address covers it"
+    assert euredact.restore(result.redacted_text, result.tokens) == VISIT
+
+
+def test_a_span_that_ends_inside_a_placeholder_never_splits_the_value(wire):
+    """Offsets inside a label have no counterpart in the original, so they
+    snap outward: over-masking is the safe direction."""
+    wire.entities = [{"start": 13, "end": 31, "text": "Kerkstraat 12, [PO",
+                      "type": "ADDRESS", "source": "model"}]
+    result = euredact.EuRedact().redact(VISIT, countries=["BE"], mode="cloud")
+    assert wire.text == (
+        "Bezoekadres: Kerkstraat 12, [POSTAL_CODE] Gent. Contact: [EMAIL]")
+    assert result.redacted_text == "Bezoekadres: [ADDRESS] Gent. Contact: [EMAIL]"
+
+
+def test_a_span_naming_only_a_placeholder_adds_nothing(wire):
+    """The label is not part of the document; the local detection stands."""
+    wire.found = {"[BANK_ACCOUNT]": "BANK_ACCOUNT", "Nick Bols": "PERSON_NAME"}
+    result = euredact.EuRedact().redact(LEDGER, countries=["NL"], mode="cloud")
+    assert [d.entity_type for d in result.detections] == [
+        EntityType.BANK_ACCOUNT, EntityType.PERSON_NAME, EntityType.PHONE]
+    assert result.detections[0].source is DetectionSource.RULES
+
+
+def test_a_span_that_does_not_match_the_sent_text_raises(wire):
+    """Not only under tokenize: every span now has to be placed locally, and
+    one that cannot be would mask the wrong characters."""
+    wire.entities = [{"start": 0, "end": 9, "text": "Nick Bols",
+                      "type": "PERSON_NAME", "source": "model"}]
+    with pytest.raises(CloudError, match="span offsets"):
+        euredact.EuRedact().redact(LEDGER, countries=["NL"], mode="cloud")
+
+
+def test_a_span_past_the_end_of_the_sent_text_raises(wire):
+    wire.entities = [{"start": 50, "end": 500, "text": "x",
+                      "type": "PERSON_NAME", "source": "model"}]
+    with pytest.raises(CloudError, match="span offsets"):
+        euredact.EuRedact().redact(LEDGER, countries=["NL"], mode="cloud")
+
+
+def test_offsets_survive_normalisation_and_astral_characters(wire):
+    """NFD input changes length under NFC, and an emoji is two UTF-16 units:
+    both sit between the service's numbers and the caller's."""
+    import unicodedata
+
+    doc = unicodedata.normalize(
+        "NFD", "\U0001F600 Patiënt René Müller, IBAN NL91 ABNA 0417 1643 00, "
+               "arts Zoë Smit \U0001F600 en Anna Berger")
+    wire.found = {"Anna Berger": "PERSON_NAME"}
+    result = euredact.EuRedact().redact(doc, countries=["NL"], mode="cloud")
+    assert "NL91" not in wire.text and "[BANK_ACCOUNT]" in wire.text
+    name = next(d for d in result.detections
+                if d.entity_type == EntityType.PERSON_NAME)
+    assert doc[name.start:name.end] == "Anna Berger"
+    assert result.redacted_text == doc.replace(
+        "NL91 ABNA 0417 1643 00", "[BANK_ACCOUNT]").replace(
+        "Anna Berger", "[PERSON_NAME]")
+
+
+def test_the_local_evidence_is_reported_in_cloud_mode(wire):
+    result = euredact.EuRedact().redact(LEDGER, countries=["NL"], mode="cloud")
+    assert result.detection_mode == "declared"
+    assert dict(result.inferred_countries).get("NL")
+
+
+def test_a_cached_rules_result_is_not_mutated_by_cloud_mode(wire):
+    """The local pass shares the result cache with rules mode."""
+    sdk = euredact.EuRedact()
+    wire.found = {"Nick Bols": "PERSON_NAME"}
+    sdk.redact(LEDGER, countries=["NL"], mode="cloud")
+    rules = sdk.redact(LEDGER, countries=["NL"], detect_dates=True)
+    assert rules.source == "rules"
+    assert rules.redacted_text == "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]"
+    assert len(rules.detections) == 2
+
+
+def test_the_client_has_no_rules_only_switch():
+    """It never had a public surface in the SDK, and from a local-first
+    client it means nothing: the rules already ran."""
+    with _client(lambda r: _response(200, SUCCESS)) as client:
+        with pytest.raises(TypeError):
+            client.redact(DOC, country="BE", rules_only=True)

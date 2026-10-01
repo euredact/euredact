@@ -8,6 +8,7 @@ import re
 import secrets
 import unicodedata
 import warnings
+from bisect import bisect_left, bisect_right
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import Callable, Iterator, Mapping
@@ -72,6 +73,96 @@ def _apply_replacements(
         pos = end
     parts.append(text[pos:])
     return "".join(parts)
+
+
+#: One label in the text sent to the cloud tier: where it sits in the masked
+#: text, and the extent of the original it replaced.
+_WireLabel = tuple[int, int, int, int]
+
+
+def _mask_for_cloud(
+    text: str, detections: list[Detection]
+) -> tuple[str, list[_WireLabel]]:
+    """Bracket-mask *text* and record where each label landed.
+
+    Returns what is sent to the cloud tier, plus one ``(masked_start,
+    masked_end, start, end)`` per label. Everything between labels is copied
+    unchanged, so the labels are all it takes to carry an offset from the
+    masked text back to the original.
+
+    Always ``[TYPE]``, whatever label scheme the caller asked for. That is the
+    syntax the model was trained on, where a placeholder means "already
+    handled, do not list it". A token or a numbered label would be read as
+    ordinary text, so the format on the wire is a model contract and not an
+    output option.
+    """
+    parts: list[str] = []
+    labels: list[_WireLabel] = []
+    pos = out = 0
+    for det in detections:
+        start = max(det.start, pos)
+        if det.end <= start:
+            continue
+        label = f"[{_type_label(det.entity_type)}]"
+        out += start - pos
+        parts.append(text[pos:start])
+        parts.append(label)
+        labels.append((out, out + len(label), start, det.end))
+        out += len(label)
+        pos = det.end
+    parts.append(text[pos:])
+    return "".join(parts), labels
+
+
+def _onto_original(
+    spans: list[Detection], masked: str, text: str, labels: list[_WireLabel]
+) -> list[Detection]:
+    """Carry the service's spans from the masked text onto the original.
+
+    The service only ever saw *masked*, so its offsets index that. An offset
+    in copied text shifts by whatever the labels before it added or removed.
+    An offset inside a label has no counterpart in the original, so it snaps
+    outward to the edge of the value the label replaced: an address the model
+    reports around ``[POSTAL_CODE]`` covers the postal code, never half of it.
+    Over-masking is the safe direction.
+
+    A span lying wholly inside one label describes the label, not the
+    document. It is dropped; the local detection behind the label stands.
+
+    Raises :class:`CloudError` when a span does not match the text that was
+    sent. Such a span cannot be placed, and masking where it points would
+    cover the wrong characters and leave the right ones in the clear.
+    """
+    from euredact.cloud.client import CloudError
+
+    label_starts = [label[0] for label in labels]
+    placed: list[Detection] = []
+    for span in spans:
+        if (not 0 <= span.start <= span.end <= len(masked)
+                or masked[span.start : span.end] != span.text):
+            raise CloudError(
+                "span offsets do not match the text that was sent; cannot "
+                "place the service's detections in the document")
+        if span.start == span.end:
+            continue
+
+        start = span.start
+        at = bisect_right(label_starts, span.start) - 1
+        if at >= 0:
+            _, masked_end, orig_start, orig_end = labels[at]
+            if span.end <= masked_end:
+                continue
+            start = (orig_start if span.start < masked_end
+                     else orig_end + span.start - masked_end)
+
+        end = span.end
+        at = bisect_left(label_starts, span.end) - 1
+        if at >= 0:
+            _, masked_end, _, orig_end = labels[at]
+            end = orig_end + max(0, span.end - masked_end)
+
+        placed.append(replace(span, start=start, end=end, text=text[start:end]))
+    return placed
 
 
 class ReferentialMapper:
@@ -470,14 +561,11 @@ class EuRedact:
         domains = {**self._allowlist_domains, **_normalize_domains(allowlist_domains)}
 
         if mode == "cloud":
-            # Routed before any local work: the service runs its own rules
-            # engine, and running ours first would waste the pass and risk
-            # disagreeing with it on version.
             return self._redact_cloud(
                 text, countries=countries, country_hint=country_hint,
                 context=context, chunk_offset=chunk_offset,
                 referential_integrity=referential_integrity, tokenize=tokenize,
-                allowed=allowed, domains=domains, coref=coref,
+                allowed=allowed, domains=domains, coref=coref, cache=cache,
             )
         if mode != "rules":
             raise ValueError(
@@ -619,8 +707,18 @@ class EuRedact:
         allowed: dict[str, str],
         domains: dict[str, str],
         coref: bool,
+        cache: bool,
     ) -> RedactResult:
-        """Send the document to the cloud tier.
+        """Run the rules here, then send what they left to the cloud tier.
+
+        Local-first: the rules engine masks everything it can find on the
+        caller's machine, and only that masked text is sent. The service looks
+        for what has no shape to match on -- names, employers, diagnoses -- and
+        answers with spans relative to the text it received, which are mapped
+        back onto the original here.
+
+        This is minimisation, not an exemption: what the rules miss, and the
+        names and diagnoses the model is there to find, still travel.
 
         Options the service cannot honour raise rather than being ignored.
         Silently dropping one would mean returning a result that does not match
@@ -647,44 +745,39 @@ class EuRedact:
         if coref:
             raise ValueError("coref is not supported in cloud mode")
 
-        # detect_dates is deliberately NOT forwarded. The service always runs
-        # its rules engine with dates on, because that is what the model was
-        # trained against; the caller's value cannot change that. It is the one
-        # ignored option that is safe to ignore -- it can only cause MORE to be
-        # detected, never less, so it cannot produce under-redaction.
         with CloudClient() as client:
-            result = client.redact(text, country=countries[0].upper())
-        if tokenize or allowed or domains:
-            self._remask_cloud_result(
-                result, text, tokenize=tokenize, allowed=allowed, domains=domains)
-        return result
+            # Dates are always on, whatever detect_dates says: that is the
+            # rules output the model was trained against, and a date of birth
+            # the rules can place has no reason to travel. It is the one
+            # ignored option that is safe to ignore -- it can only cause MORE
+            # to be detected, never less.
+            #
+            # No allowlist and no tokens on this pass. An exemption says what
+            # the caller wants back, not what may leave; both are applied
+            # below, after the response, to the merged spans.
+            local = self._redact_rules(
+                text, countries=countries, country_hint=None, context=None,
+                chunk_offset=0, referential_integrity=False, tokenize=False,
+                allowed={}, domains={}, detect_dates=True, cache=cache,
+            )
+            masked, labels = _mask_for_cloud(text, local.detections)
+            remote = client.redact(masked, country=countries[0].upper())
 
-    def _remask_cloud_result(
-        self, result: RedactResult, text: str, *, tokenize: bool,
-        allowed: dict[str, str], domains: dict[str, str],
-    ) -> None:
-        """Rebuild the masked text from the service's spans, in place.
-
-        The service masks with bracketed labels only. Any other output
-        option is applied here, from its spans: the service builds its
-        ``redacted_text`` from exactly the spans it returns (entities it
-        reports but cannot place are listed separately and never applied),
-        so nothing it masked is lost by masking again from the same spans.
-        """
-        from euredact.cloud.client import CloudError
-
-        for det in result.detections:
-            if text[det.start : det.end] != det.text:
-                raise CloudError(
-                    "span offsets do not match the document; cannot apply "
-                    "tokenize/allowlist locally")
-        result.detections, result.exempted = _apply_allowlist(
-            text, result.detections, allowed, domains)
-        token_mapper = TokenMapper(text, result.detections) if tokenize else None
-        result.redacted_text = _apply_replacements(
-            text, result.detections, self._label_for(False, token_mapper)
+        # A new list throughout: `local` may be the cached rules result.
+        detections = local.detections + _onto_original(
+            remote.detections, masked, text, labels)
+        detections, exempted = _apply_allowlist(text, detections, allowed, domains)
+        detections.sort(key=lambda d: (d.start, -d.end))
+        token_mapper = TokenMapper(text, detections) if tokenize else None
+        return replace(
+            local,
+            redacted_text=_apply_replacements(
+                text, detections, self._label_for(False, token_mapper)),
+            detections=detections,
+            source="cloud",
+            tokens=token_mapper.tokens if token_mapper is not None else {},
+            exempted=exempted,
         )
-        result.tokens = token_mapper.tokens if token_mapper is not None else {}
 
     async def aredact(
         self,

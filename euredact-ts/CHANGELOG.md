@@ -31,6 +31,34 @@ narrative lives. Sections here use that vocabulary
   national passport patterns, and two more for the account-run guard.
   *(rules-engine#44)*
 
+### Changed
+
+- **Cloud mode is local-first: the rules run on the caller's machine and only
+  the masked text is sent.** *(Breaking for the cloud tier, which is in private
+  alpha.)* `redactAsync(text, { mode: "cloud" })` used to send the document as
+  passed in. It now runs the local pipeline first and sends
+  `... to Nick Bols on [BANK_ACCOUNT]`: one `text` field, with no types, offsets
+  or values beside it. The service answers with spans relative to that masked
+  text; `ontoOriginal` carries them back across the labels, after the client has
+  converted the service's code-point offsets to UTF-16 units of the text that
+  was sent. Same decisions as the Python SDK, by the same mechanisms: the wire
+  is always `[TYPE]` so `tokenize` does not change it; an allowlisted value is
+  masked in the request and restored in the result; dates are always on in the
+  local pass; a span touching a label snaps outward and one wholly inside a
+  label is dropped; a span that does not match the sent text rejects with
+  `CloudError` on every cloud call. Custom patterns now apply in cloud mode, and
+  a cloud result carries the local pass's country attribution,
+  `inferredCountries` and `evidence`. The "what leaves your machine" section
+  added earlier in this cycle is rewritten to match. Needs a service that
+  reports spans relative to the text it received (euredact-inference#14).
+  *(rules-engine#28)*
+
+### Removed
+
+- **`rulesOnly` on `CloudRedactOptions`**, and `rules_only` in the request body.
+  `redactAsync()` never exposed it, and from a local-first client it means
+  nothing: the rules have already run. *(rules-engine#28)*
+
 ### Fixed
 
 - **Postal codes were unmasked in five countries**, identically to the Python

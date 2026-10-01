@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { EuRedact } from "../sdk.js";
+import { EuRedact, restore } from "../sdk.js";
 import { redact, redactAsync } from "../index.js";
 import { CloudClient } from "../cloud/client.js";
 import { configure, reset } from "../cloud/config.js";
@@ -336,6 +336,246 @@ for (const [label, options, match] of unsupported) {
     );
   });
 }
+
+// ── Local-first: what is sent, and where the answer lands (rules-engine#28) ─
+
+interface Wire {
+  sent: Array<Record<string, unknown>>;
+  /** The one `text` that was sent. */
+  text(): string;
+}
+
+/**
+ * Run `fn` with `mode: "cloud"` going through the real client and a stand-in
+ * service that follows the local-first contract: it looks for `found` in the
+ * text it *received* and answers with code-point spans relative to that text.
+ * It never sees the caller's original, so a test that passes here cannot be
+ * relying on it.
+ */
+async function withWire(
+  script: { found?: Record<string, string>; entities?: unknown[] },
+  fn: (wire: Wire) => Promise<void>,
+): Promise<void> {
+  const realFetch = globalThis.fetch;
+  configure({ apiKey: "erk_test", baseUrl: "https://api.test" });
+  const sent: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    sent.push(body);
+    const text = body.text as string;
+    let entities = script.entities;
+    if (!entities) {
+      entities = [];
+      const codePoints = (units: number): number => [...text.slice(0, units)].length;
+      for (const [needle, type] of Object.entries(script.found ?? {})) {
+        for (let at = text.indexOf(needle); at !== -1; at = text.indexOf(needle, at + 1)) {
+          entities.push({
+            start: codePoints(at), end: codePoints(at + needle.length), text: needle,
+            type, source: "model", match: "exact_body",
+          });
+        }
+      }
+    }
+    return new Response(
+      JSON.stringify({ job_id: "job-1", status: "succeeded", redacted_text: text, entities, unlocated: [] }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+  try {
+    await fn({
+      sent,
+      text: () => {
+        assert.equal(sent.length, 1, "exactly one request per document");
+        return sent[0].text as string;
+      },
+    });
+  } finally {
+    globalThis.fetch = realFetch;
+    reset();
+  }
+}
+
+const PAYMENT = "Joren Janssens needs to pay 50EUR to Nick Bols on NL91 ABNA 0417 1643 00";
+const LEDGER = "IBAN NL91 ABNA 0417 1643 00 belongs to Nick Bols, tel +31 6 12345678";
+const VISIT = "Bezoekadres: Kerkstraat 12, 9000 Gent. Contact: jan@example.be";
+const cloudNL = { countries: ["NL"], mode: "cloud" };
+const cloudBE = { countries: ["BE"], mode: "cloud" };
+
+// The claim the documentation makes: identifiers the rules engine can find
+// are replaced on the caller's machine, before the request exists.
+testAsync("cloud mode sends only the locally masked text", () =>
+  withWire({}, async wire => {
+    await new EuRedact().redactAsync(PAYMENT, cloudNL);
+    assert.equal(wire.text(), "Joren Janssens needs to pay 50EUR to Nick Bols on [BANK_ACCOUNT]");
+    assert.ok(!JSON.stringify(wire.sent).includes("NL91"));
+  }));
+
+// One `text` field: no types list, no offsets, no values beside it.
+testAsync("nothing structured travels with the text", () =>
+  withWire({}, async wire => {
+    await new EuRedact().redactAsync(PAYMENT, cloudNL);
+    assert.deepEqual(wire.sent[0], {
+      text: "Joren Janssens needs to pay 50EUR to Nick Bols on [BANK_ACCOUNT]",
+      country: "NL", language: "", priority: "interactive",
+    });
+  }));
+
+// The service indexes the masked text; the caller gets the original's.
+testAsync("service spans are mapped back onto the original", () =>
+  withWire({ found: { "Nick Bols": "PERSON_NAME" } }, async wire => {
+    const r = await new EuRedact().redactAsync(LEDGER, cloudNL);
+    assert.equal(wire.text(), "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]");
+    assert.equal(r.source, "cloud");
+    assert.equal(r.redactedText, "IBAN [BANK_ACCOUNT] belongs to [PERSON_NAME], tel [PHONE]");
+    assert.deepEqual(r.detections.map(d => [d.entityType, d.text, d.source]), [
+      [EntityType.BANK_ACCOUNT, "NL91 ABNA 0417 1643 00", DetectionSource.RULES],
+      [EntityType.PERSON_NAME, "Nick Bols", DetectionSource.CLOUD],
+      [EntityType.PHONE, "+31 6 12345678", DetectionSource.RULES],
+    ]);
+    for (const d of r.detections) assert.equal(LEDGER.slice(d.start, d.end), d.text);
+  }));
+
+// The model was trained on `[TYPE]`; a token on the wire would be read as
+// ordinary text. Tokens are minted locally, after the response.
+testAsync("tokenize does not change what is sent", () =>
+  withWire({ found: { "Nick Bols": "PERSON_NAME" } }, async wire => {
+    const r = await new EuRedact().redactAsync(LEDGER, { ...cloudNL, tokenize: true });
+    assert.equal(wire.text(), "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]");
+    assert.equal(Object.keys(r.tokens).length, 3);
+    assert.ok(!r.redactedText.includes("["));
+    assert.equal(restore(r.redactedText, r.tokens), LEDGER);
+  }));
+
+// An exemption says what the caller wants back, not what may leave.
+testAsync("an allowlisted value is still masked on the wire", () =>
+  withWire({ found: { "Nick Bols": "PERSON_NAME" } }, async wire => {
+    const r = await new EuRedact({ allowlist: ["NL91ABNA0417164300"] }).redactAsync(LEDGER, cloudNL);
+    assert.equal(wire.text(), "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]");
+    assert.equal(r.redactedText, "IBAN NL91 ABNA 0417 1643 00 belongs to [PERSON_NAME], tel [PHONE]");
+    assert.deepEqual(r.exempted.map(e => e.text), ["NL91 ABNA 0417 1643 00"]);
+  }));
+
+testAsync("an allowlisted cloud type is exempted after the response", () =>
+  withWire({ found: { "Nick Bols": "PERSON_NAME" } }, async () => {
+    const r = await new EuRedact().redactAsync(LEDGER, { ...cloudNL, allowlist: ["Nick Bols"] });
+    assert.equal(r.redactedText, "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]");
+    assert.deepEqual(r.exempted.map(e => e.text), ["Nick Bols"]);
+  }));
+
+// The model is trained against rules output with dates on, and a date of
+// birth the rules can place has no reason to travel.
+testAsync("dates are masked before sending whatever detectDates says", () =>
+  withWire({}, async wire => {
+    const r = await new EuRedact().redactAsync("Mevrouw Peeters, geboren op 12/03/1985, woont in Gent.", cloudBE);
+    assert.equal(wire.text(), "Mevrouw Peeters, geboren op [DOB], woont in Gent.");
+    assert.deepEqual(r.detections.map(d => d.entityType), [EntityType.DOB]);
+  }));
+
+// The service has never heard of the caller's own patterns.
+testAsync("custom patterns are masked before sending", () =>
+  withWire({ found: { "Nick Bols": "PERSON_NAME" } }, async wire => {
+    const custom = new EuRedact();
+    custom.addCustomPattern("EMPLOYEE_ID", "EMP-\\d{6}");
+    const r = await custom.redactAsync("Badge EMP-004211 van Nick Bols", cloudBE);
+    assert.equal(wire.text(), "Badge [EMPLOYEE_ID] van Nick Bols");
+    assert.equal(r.redactedText, "Badge [EMPLOYEE_ID] van [PERSON_NAME]");
+  }));
+
+// An address the model reports around a locally masked postal code.
+testAsync("a span across a placeholder takes the whole local detection", () =>
+  withWire({ found: { "Kerkstraat 12, [POSTAL_CODE] Gent": "ADDRESS" } }, async () => {
+    const r = await new EuRedact().redactAsync(VISIT, { ...cloudBE, tokenize: true });
+    const address = r.detections.find(d => d.entityType === EntityType.ADDRESS)!;
+    assert.equal(address.text, "Kerkstraat 12, 9000 Gent");
+    assert.equal(VISIT.slice(address.start, address.end), address.text);
+    assert.ok(!r.redactedText.includes("9000"));
+    assert.ok(!r.redactedText.includes("POSTAL_CODE"), "the address covers it");
+    assert.equal(restore(r.redactedText, r.tokens), VISIT);
+  }));
+
+// Offsets inside a label have no counterpart in the original, so they snap
+// outward: over-masking is the safe direction.
+testAsync("a span that ends inside a placeholder never splits the value", () =>
+  withWire({ entities: [
+    { start: 13, end: 31, text: "Kerkstraat 12, [PO", type: "ADDRESS", source: "model" },
+  ] }, async wire => {
+    const r = await new EuRedact().redactAsync(VISIT, cloudBE);
+    assert.equal(wire.text(), "Bezoekadres: Kerkstraat 12, [POSTAL_CODE] Gent. Contact: [EMAIL]");
+    assert.equal(r.redactedText, "Bezoekadres: [ADDRESS] Gent. Contact: [EMAIL]");
+  }));
+
+// The label is not part of the document; the local detection stands.
+testAsync("a span naming only a placeholder adds nothing", () =>
+  withWire({ found: { "[BANK_ACCOUNT]": "BANK_ACCOUNT", "Nick Bols": "PERSON_NAME" } }, async () => {
+    const r = await new EuRedact().redactAsync(LEDGER, cloudNL);
+    assert.deepEqual(r.detections.map(d => d.entityType),
+      [EntityType.BANK_ACCOUNT, EntityType.PERSON_NAME, EntityType.PHONE]);
+    assert.equal(r.detections[0].source, DetectionSource.RULES);
+  }));
+
+// Not only under tokenize: every span now has to be placed locally, and one
+// that cannot be would mask the wrong characters.
+testAsync("a span that does not match the sent text throws", () =>
+  withWire({ entities: [
+    { start: 0, end: 9, text: "Nick Bols", type: "PERSON_NAME", source: "model" },
+  ] }, async () => {
+    await assert.rejects(
+      new EuRedact().redactAsync(LEDGER, cloudNL),
+      (e: unknown) => e instanceof CloudError && /span offsets/.test(e.message),
+    );
+  }));
+
+testAsync("a span past the end of the sent text throws", () =>
+  withWire({ entities: [
+    { start: 50, end: 500, text: "x", type: "PERSON_NAME", source: "model" },
+  ] }, async () => {
+    await assert.rejects(
+      new EuRedact().redactAsync(LEDGER, cloudNL),
+      (e: unknown) => e instanceof CloudError && /span offsets/.test(e.message),
+    );
+  }));
+
+// NFD input changes length under NFC, and an emoji is two UTF-16 units: both
+// sit between the service's numbers and the caller's.
+testAsync("offsets survive normalisation and astral characters", () =>
+  withWire({ found: { "Anna Berger": "PERSON_NAME" } }, async wire => {
+    const doc = ("\u{1F600} Patiënt René Müller, IBAN NL91 ABNA 0417 1643 00, " +
+                 "arts Zoë Smit \u{1F600} en Anna Berger").normalize("NFD");
+    const r = await new EuRedact().redactAsync(doc, cloudNL);
+    assert.ok(!wire.text().includes("NL91") && wire.text().includes("[BANK_ACCOUNT]"));
+    const name = r.detections.find(d => d.entityType === EntityType.PERSON_NAME)!;
+    assert.equal(doc.slice(name.start, name.end), "Anna Berger");
+    assert.equal(r.redactedText, doc
+      .replace("NL91 ABNA 0417 1643 00", "[BANK_ACCOUNT]")
+      .replace("Anna Berger", "[PERSON_NAME]"));
+  }));
+
+testAsync("the local evidence is reported in cloud mode", () =>
+  withWire({}, async () => {
+    const r = await new EuRedact().redactAsync(LEDGER, cloudNL);
+    assert.equal(r.detectionMode, "declared");
+    assert.ok(new Map(r.inferredCountries).get("NL"));
+  }));
+
+// The local pass shares the result cache with rules mode.
+testAsync("a cached rules result is not mutated by cloud mode", () =>
+  withWire({ found: { "Nick Bols": "PERSON_NAME" } }, async () => {
+    const shared = new EuRedact();
+    await shared.redactAsync(LEDGER, cloudNL);
+    const rules = shared.redact(LEDGER, { countries: ["NL"], detectDates: true });
+    assert.equal(rules.source, "rules");
+    assert.equal(rules.redactedText, "IBAN [BANK_ACCOUNT] belongs to Nick Bols, tel [PHONE]");
+    assert.equal(rules.detections.length, 2);
+  }));
+
+// It never had a public surface in the SDK, and from a local-first client it
+// means nothing: the rules already ran.
+testAsync("the client has no rulesOnly switch", async () => {
+  configure({ apiKey: "erk_test", baseUrl: "https://api.test" });
+  const { impl, calls } = scripted([{ status: 200, body: SUCCESS }]);
+  await new CloudClient().redact(DOC, { country: "BE", fetchImpl: impl, rulesOnly: true } as never);
+  assert.ok(!("rules_only" in JSON.parse(calls[0].body!)));
+});
 
 // ── Report ─────────────────────────────────────────────────────────────────
 

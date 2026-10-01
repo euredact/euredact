@@ -1,9 +1,13 @@
 """[CLOUD EXTENSION] The cloud client.
 
-Speaks to the euRedact inference service: a deterministic rules engine followed
-by a fine-tuned model asked only *what did the rules miss?* The service returns
-both the redacted document and located spans, so this module's job is transport
-and translation, not detection.
+Speaks to the euRedact inference service: a fine-tuned model asked only *what
+did the rules miss?* The service returns located spans, so this module's job is
+transport and translation, not detection.
+
+It sends the text it is given, as given. ``euredact.redact(mode="cloud")`` is
+what runs the rules engine first and hands this client only the masked text;
+call the client directly and whatever you pass is what leaves the machine. The
+spans that come back index the text that was sent.
 
 Three things it hides from the caller:
 
@@ -167,10 +171,9 @@ class _BaseClient:
             **self.config.headers,
         }
 
-    def _body(self, text: str, country: str, language: str, priority: str,
-              rules_only: bool) -> dict:
+    def _body(self, text: str, country: str, language: str, priority: str) -> dict:
         return {"text": text, "country": country, "language": language,
-                "priority": priority, "rules_only": rules_only}
+                "priority": priority}
 
     def _raise_for(self, status: int, payload: dict) -> None:
         error = payload.get("error", f"HTTP {status}")
@@ -210,18 +213,18 @@ class CloudClient(_BaseClient):
         self.close()
 
     def redact(self, text: str, *, country: str, language: str = "",
-               priority: str = "interactive", rules_only: bool = False,
+               priority: str = "interactive",
                idempotency_key: str | None = None) -> RedactResult:
         key = idempotency_key or str(uuid.uuid4())
-        payload = self._submit(text, country, language, priority, rules_only, key)
+        payload = self._submit(text, country, language, priority, key)
         if payload.get("_accepted"):
             payload = self._poll(payload["location"], key)
         return _to_result(payload, text=text)
 
-    def _submit(self, text, country, language, priority, rules_only, key) -> dict:
+    def _submit(self, text, country, language, priority, key) -> dict:
         attempt = _Attempt(self.config.max_retries)
         url = f"{self.config.base_url}/v1/redact"
-        body = self._body(text, country, language, priority, rules_only)
+        body = self._body(text, country, language, priority)
         while True:
             status, data, headers = None, {}, None
             try:
@@ -303,14 +306,14 @@ class AsyncCloudClient(_BaseClient):
         await self.aclose()
 
     async def redact(self, text: str, *, country: str, language: str = "",
-                     priority: str = "interactive", rules_only: bool = False,
+                     priority: str = "interactive",
                      idempotency_key: str | None = None) -> RedactResult:
         import asyncio
 
         key = idempotency_key or str(uuid.uuid4())
         attempt = _Attempt(self.config.max_retries)
         url = f"{self.config.base_url}/v1/redact"
-        body = self._body(text, country, language, priority, rules_only)
+        body = self._body(text, country, language, priority)
 
         payload: dict | None = None
         while payload is None:

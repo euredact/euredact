@@ -32,7 +32,7 @@ which both test suites run.
 - This file: a root changelog covering both SDKs, strictly categorised, with SDK-specific entries marked.
 - `What \`countries\` actually controls` in both package READMEs — the parameter scores and attributes, it does not decide what is found, shown with output from all four call shapes.
 - `Batch processing and concurrency` in both package READMEs, covering `redact_batch` / `aredact_batch` / `redact_iter` and why the TypeScript batch is synchronous.
-- `What leaves your machine` in both package READMEs: in `mode="cloud"` the whole document is sent, and the local engine does not run first.
+- `What leaves your machine` in both package READMEs: in `mode="cloud"` the rules engine runs locally first and only the masked text is sent; names, diagnoses and whatever the rules miss still travel. *(rules-engine#28)*
 - `Keeping identifiers local`: the `tokenize` → model → `restore` composition, including the part it cannot do.
 - `tests/test_changelog.py`, which holds this file to its declared vocabulary. *(Python only)*
 - Separator tolerance in 22 VAT patterns, so the spaced form printed on invoices is recognised.
@@ -41,6 +41,18 @@ which both test suites run.
 - `tests/test_dob_context.py`, which asserts the substring screen that keeps a short keyword from hiding inside an unrelated word. *(Python only)*
 - 45 conformance vectors closing gaps where a change was pinned in fewer countries than it touched: one per changed VAT pattern, one per country whose birth-date keyword had none, the Belgian and French national passport patterns, and the account-run guard. *(rules-engine#44)*
 - `TestNoDateBearingValidatorAcceptsAnImpossibleDate`, a property over the whole validator table; it found three more validators with the `#37` defect. *(Python only)* *(rules-engine#44)*
+
+### Changed
+
+- **Breaking, cloud tier (private alpha):** `mode="cloud"` is local-first. The SDK runs the rules engine on the caller's machine and sends only the `[TYPE]`-masked text; it used to send the whole document. Needs a service that answers with spans relative to the text it received (euredact-inference#14). *(rules-engine#28)*
+- Cloud results are assembled locally: the service's spans are mapped from the masked text back onto the original and merged with the local detections, so `detections` index the caller's document and carry the local pass's country attribution, `inferred_countries` and `evidence`. *(rules-engine#28)*
+- A service span that does not match the text that was sent raises `CloudError` on every cloud call, not only under `tokenize` or an allowlist. *(rules-engine#28)*
+- Custom patterns apply in cloud mode: they run in the local pass and are masked before the request. *(rules-engine#28)*
+- `tokenize` and the allowlists never change what is sent: the wire always carries `[TYPE]` placeholders, and an allowlisted value is masked in the request and restored in the result. *(rules-engine#28)*
+
+### Removed
+
+- `rules_only` / `rulesOnly` on `CloudClient.redact()` and in the request body. It had no surface on `redact()`, and from a local-first client the rules have already run. *(rules-engine#28)*
 
 ### Fixed
 
