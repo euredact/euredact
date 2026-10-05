@@ -22,8 +22,12 @@ narrative lives. Sections here use that vocabulary
   round it (`0170 / …`, `030 / 1234567`) matched nothing. The prefix may now be
   set off by ` / `, and up to three two-digit groups may follow the subscriber
   block. A pair followed by `.`, `,`, `/` or `:` and a digit is not taken, so the
-  day of a following date stays out of the span. Five conformance vectors.
-  *(rules-engine#51)*
+  day of a following date stays out of the span, and one followed by `-` and a
+  digit (an extension, `059133 60-3333`) is left to the shorter match. The
+  units guard now reads only the number's own line: with the longer span,
+  `+49 172 634 85 21` followed by an e-mail address starting `m.` on the next
+  line read as "21 m" and the whole number was dropped. Eight conformance
+  vectors. *(rules-engine#51)*
 
 ## 0.6.0 (2026-10-05)
 

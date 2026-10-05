@@ -4397,6 +4397,36 @@
         ]
       },
       "expectRedactedText": "Tel.: [PHONE]"
+    },
+    {
+      "id": "de-mobile-trailing-pairs-before-a-line-starting-m",
+      "text": "Mob: +49 172 634 85 21\nm.kowalski@vantage-consult.de",
+      "countries": null,
+      "mustDetect": {
+        "PHONE": [
+          "+49 172 634 85 21"
+        ]
+      }
+    },
+    {
+      "id": "de-phone-pair-before-a-hyphenated-extension",
+      "text": "Kontakt: Abt. Ermittlungen, Tel. 059133 60-3333",
+      "countries": null,
+      "mustDetect": {
+        "PHONE": [
+          "059133"
+        ]
+      }
+    },
+    {
+      "id": "units-still-on-the-same-line",
+      "text": "Gewicht: 1234567 kg",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "PHONE"
+      ]
     }
   ]
 }

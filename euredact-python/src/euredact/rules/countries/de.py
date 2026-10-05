@@ -67,11 +67,13 @@ class DEConfig(CountryConfig):
             # two-digit groups ("0170 / 123 45 85 21"); without them the span
             # stopped early and left the last digits readable (rules-engine#51).
             # A pair followed by ".", ",", "/" or ":" and a digit is the start of
-            # a date or time, not part of the number.
+            # a date or time, not part of the number; one followed by "-" and a
+            # digit continues it some other way ("059133 60-3333", an extension)
+            # and is left to the shorter match, which the maths guard spares.
             PatternDef(
                 entity_type=EntityType.PHONE,
                 pattern=(
-                    r"\b0[1-9]\d{1,4}(?:\s?[/\-]\s?|\s)?\d{3,8}\b(?:[ \-]\d{2}\b(?![.,/:]\d)){0,3}"
+                    r"\b0[1-9]\d{1,4}(?:\s?[/\-]\s?|\s)?\d{3,8}\b(?:[ \-]\d{2}\b(?![.,/:\-]\d)){0,3}"
                 ),
                 validator=None,
                 description="German national phone number",
@@ -79,7 +81,7 @@ class DEConfig(CountryConfig):
             # --- Phone (international) ---
             PatternDef(
                 entity_type=EntityType.PHONE,
-                pattern=r"\+49\s?\d{2,5}(?:\s?[/\-]\s?|\s)?\d{3,8}\b(?:[ \-]\d{2}\b(?![.,/:]\d)){0,3}",
+                pattern=r"\+49\s?\d{2,5}(?:\s?[/\-]\s?|\s)?\d{3,8}\b(?:[ \-]\d{2}\b(?![.,/:\-]\d)){0,3}",
                 validator=None,
                 description="German international phone — +49",
             ),
