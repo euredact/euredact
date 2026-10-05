@@ -1479,9 +1479,141 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
     if (match.pattern_def.entity_type in _DELIMITED_FIELD_TYPES
             and _fills_a_delimited_field(text, match.start, match.end)):
         return False
+    if match.pattern_def.entity_type in _DATE_LABEL_TYPES:
+        return not _labels_this_date(
+            text, match.start, match.end, match.pattern_def.context_keywords,
+            match.pattern_def.entity_type)
     before, after = _get_context(text, match.start, match.end)
     context = (before + " " + after).lower()
     return not any(kw.lower() in context for kw in match.pattern_def.context_keywords)
+
+
+#: Date types decided by a label. DOB and DATE_OF_DEATH share one date shape,
+#: so the label is the only thing that tells them apart -- and a date with
+#: neither label (an admission date, an invoice date) is neither.
+_DATE_LABEL_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
+
+#: Any common numeric date, to tell whether a label belongs to another date.
+_ANY_DATE = re.compile(r"\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}")
+
+
+def _labels_this_date(
+    text: str, start: int, end: int, keywords: list[str], entity_type: object = None,
+) -> bool:
+    """True when one of *keywords* is this date's own label.
+
+    Anywhere in the context window was the old test, and it typed every date in
+    a document from whichever date label the document carried: with "Date of
+    Death:" two lines down, "Date of Admission: 12/02/2024" became
+    DATE_OF_DEATH, and with a birth date present the death date became DOB
+    (rules-engine#52). A label belongs to the date it introduces, so it counts
+    before the date only when no other date sits between them, and after the
+    date only inside the date's own sentence ("03/05/1940 (date of birth)").
+
+    A label on an earlier line counts only when the date opens its own line
+    ("Date of birth:\n03/05/1940") or the label was asked as a question, which
+    is how a call transcript carries it ("AGENT: … date of birth?\n\nCALLER:
+    09/06/1987."); otherwise a table header two lines up would label every cell
+    under it. A table's column header is the fallback for a
+    date with no label of its own, and never overrules one: when it did,
+    ordinary comma-separated prose read as a table row and
+    "Geboortedatum en -plaats: 11/04/1989, Sint-Niklaas" lost its mask.
+    """
+    before, after = _get_context(text, start, end)
+    lower_before, lower_after = before.lower(), after.lower()
+    line_start = lower_before.rfind("\n") + 1
+    opens_line = not lower_before[line_start:].strip(" \t:|;*-•([")
+    # "°" is the birth sign in Belgian, Luxembourg and Dutch records:
+    # "Wasserbillig °09.07.1968". Not "n°", the number sign.
+    if entity_type == EntityType.DOB and _BIRTH_SIGN.search(lower_before):
+        return True
+    for keyword in keywords:
+        kw = keyword.lower()
+        i = lower_before.rfind(kw)
+        if (i >= 0 and _nothing_but_a_list_between(lower_before[i + len(kw):])
+                and (i >= line_start or opens_line
+                     or "?" in lower_before[i + len(kw):line_start])):
+            return True
+        j = lower_after.find(kw)
+        if j >= 0:
+            gap = lower_after[:j]
+            if (not _ANY_DATE.search(gap) and not _SENTENCE_BREAK.search(gap)
+                    and not _LEADS_TO_A_DATE.match(lower_after[j + len(kw):])):
+                return True
+    header = _column_header(text, start)
+    return header is not None and any(kw.lower() in header for kw in keywords)
+
+
+#: A label followed by a list of dates labels each of them: "DOBs e.g.
+#: 04/09/1978, 22/11/1985, 07/03/1990", "geboren op 14/05/1983 respectievelijk
+#: 02/11/1990". A date followed by a list separator is a list item.
+_LIST_ITEM = re.compile(
+    r"\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}\s*"
+    r"(?:,|;|–|&|\band\b|\ben\b|\bet\b|\bund\b|\bor\b|\bof\b|\bou\b|\boder\b"
+    r"|\brespectievelijk\b|\bbzw\.?)\s*")
+
+#: What may remain between a label and its date once list items are removed:
+#: punctuation and at most two short words ("e.g.", "bv.", "op", "le").
+_LABEL_TAIL = re.compile(
+    r"[\s:.,()\-]*(?:[^\W\d_]{1,4}(?:\.[^\W\d_]{1,2})*\.?(?:[\s:.,()\-]+|\Z)){0,2}")
+
+
+def _nothing_but_a_list_between(gap: str) -> bool:
+    """No other date between a label and the date, except items of its list."""
+    if not _ANY_DATE.search(gap):
+        return True
+    rest = _LIST_ITEM.sub(" ", gap)
+    return not _ANY_DATE.search(rest) and _LABEL_TAIL.fullmatch(rest) is not None
+
+
+#: The birth sign "°" directly before the date, but not the number sign "n°".
+_BIRTH_SIGN = re.compile(r"(?<![a-z])°\s?$")
+
+
+#: A label that runs straight into a date of its own -- punctuation, at most one
+#: short word ("am", "le", "on"), then the date -- introduces that date, not the
+#: one before it: in "Verstorben am 01.02.2020, geboren am 12.03.1940" the
+#: "geboren" is the second date's. A verb-final clause ("am 12.03.1940 geboren
+#: und ist am …") is not this shape and still labels the date before it.
+_LEADS_TO_A_DATE = re.compile(
+    r"[\s:.\-]*(?:[a-zà-ÿ]{1,3}[\s:.]+)?\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}")
+
+
+#: Field separators a table row may use.
+_COLUMN_SEPARATORS = ";|\t,"
+
+
+def _column_header(text: str, start: int) -> str | None:
+    """The lower-cased header cell above the value, if it sits in a table.
+
+    Consulted only for a date with no label of its own. In a table the column
+    supplies the label:
+    "Name | Aufnahme | Sterbedatum" over "Müller | 12.02.2024 | 15.02.2024" has
+    "Sterbedatum" before the admission date with no date between, and only the
+    column says it labels the other one. A header is one of the three lines
+    above, split by the row's separator into the same number of cells.
+    """
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", start)
+    line = text[line_start:line_end if line_end >= 0 else len(text)]
+    # The three lines above, found by rfind: splitting the whole prefix made
+    # this quadratic in the document, once per date candidate.
+    above_start = line_start - 1
+    for _ in range(3):
+        if above_start < 0:
+            break
+        above_start = text.rfind("\n", 0, above_start)
+    above = text[above_start + 1:max(0, line_start - 1)].split("\n") if line_start else []
+    for sep in _COLUMN_SEPARATORS:
+        if sep not in line:
+            continue
+        cells = line.split(sep)
+        column = text[line_start:start].count(sep)
+        for header in reversed(above):
+            heads = header.split(sep)
+            if len(heads) == len(cells) and not _ANY_DATE.search(header):
+                return heads[column].lower()
+    return None
 
 
 # ── Dispatch table: entity type → applicable suppressors ────────────────

@@ -167,6 +167,7 @@ const DATE_OF_DEATH_CONTEXT = [
   "overleden", "overlijdensdatum", "date de décès", "décédé le",
   "date of death", "Sterbedatum", "verstorben am", "gestorven",
   "death date", "died on", "mort le", "décès",
+  "datum van overlijden", "décédée le", "Sterbetag",
 ];
 
 // ---------------------------------------------------------------------------

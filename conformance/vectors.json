@@ -4888,6 +4888,317 @@
       "mustNotDetect": [
         "RESIDENCE_PERMIT"
       ]
+    },
+    {
+      "id": "date-type-admission-is-not-a-death-date",
+      "text": "Date of Admission: 12/02/2024\nWard: Ward 4C\nDate of Death: 15/02/2024",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "DATE_OF_DEATH": [
+          "15/02/2024"
+        ]
+      },
+      "mustNotDetect": [
+        "DOB"
+      ],
+      "expectRedactedText": "Date of Admission: 12/02/2024\nWard: Ward 4C\nDate of Death: [DATE_OF_DEATH]"
+    },
+    {
+      "id": "date-type-each-date-its-own-label",
+      "text": "Date of Admission: 14/02/2024\nDate of Death: 15/02/2024\nDate of Birth: 03/05/1940",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "DATE_OF_DEATH": [
+          "15/02/2024"
+        ],
+        "DOB": [
+          "03/05/1940"
+        ]
+      },
+      "expectRedactedText": "Date of Admission: 14/02/2024\nDate of Death: [DATE_OF_DEATH]\nDate of Birth: [DOB]"
+    },
+    {
+      "id": "date-type-invoice-date-before-a-birth-date-sentence",
+      "text": "Factuurdatum 12/03/1984. Geboortedatum: 12/03/1985.",
+      "countries": null,
+      "mustDetect": {
+        "DOB": [
+          "12/03/1985"
+        ]
+      },
+      "expectRedactedText": "Factuurdatum 12/03/1984. Geboortedatum: [DOB]."
+    },
+    {
+      "id": "date-type-invoice-date-before-a-birth-date-line",
+      "text": "Factuurdatum 12/03/1984\nGeboortedatum: 12/03/1985",
+      "countries": null,
+      "mustDetect": {
+        "DOB": [
+          "12/03/1985"
+        ]
+      },
+      "expectRedactedText": "Factuurdatum 12/03/1984\nGeboortedatum: [DOB]"
+    },
+    {
+      "id": "date-type-label-on-its-own-line",
+      "text": "Date of birth:\n03/05/1940",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "03/05/1940"
+        ]
+      }
+    },
+    {
+      "id": "date-type-label-after-in-the-same-sentence",
+      "text": "Patient seen on 03/05/1940 (date of birth) by the GP.",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "03/05/1940"
+        ]
+      }
+    },
+    {
+      "id": "date-type-table-column-decides",
+      "text": "Name | Aufnahme | Sterbedatum\nMüller | 12.02.2024 | 15.02.2024",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DATE_OF_DEATH": [
+          "15.02.2024"
+        ]
+      },
+      "mustNotDetect": [
+        "DOB"
+      ],
+      "expectRedactedText": "Name | Aufnahme | Sterbedatum\nMüller | 12.02.2024 | [DATE_OF_DEATH]"
+    },
+    {
+      "id": "date-type-table-header-behind-another-date",
+      "text": "Name;Geburtsdatum;Sterbedatum\nMüller;12.03.1940;01.02.2020",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.03.1940"
+        ],
+        "DATE_OF_DEATH": [
+          "01.02.2020"
+        ]
+      }
+    },
+    {
+      "id": "date-type-label-leading-into-the-next-date",
+      "text": "Verstorben am 01.02.2020, geboren am 12.03.1940, in Köln",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DATE_OF_DEATH": [
+          "01.02.2020"
+        ],
+        "DOB": [
+          "12.03.1940"
+        ]
+      }
+    },
+    {
+      "id": "date-type-verb-final-label-after-the-date",
+      "text": "Er wurde am 12.03.1940 geboren und ist nach Köln gezogen.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.03.1940"
+        ]
+      }
+    },
+    {
+      "id": "date-type-own-label-beats-a-comma-header",
+      "text": "Naam: DUBOIS, Youssef\nGeboortedatum en -plaats: 11/04/1989, Sint-Niklaas",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "11/04/1989"
+        ]
+      }
+    },
+    {
+      "id": "date-type-own-label-in-comma-prose",
+      "text": "The auditor, Charlotte Patel-Williams, born 14/05/1987, reviewed it.\nThe client, Anita Sharma, born 14/05/1984, signed it.",
+      "countries": [
+        "GB"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14/05/1987",
+          "14/05/1984"
+        ]
+      }
+    },
+    {
+      "id": "date-type-death-label-in-comma-prose",
+      "text": "Lieu : CHU, chambre 12\nDate et heure du décès : 09/02/2026 à 04 h 15, service de médecine",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "DATE_OF_DEATH": [
+          "09/02/2026"
+        ]
+      }
+    },
+    {
+      "id": "date-type-label-in-a-markdown-cell",
+      "text": "| Rol | Gegevens | Status |\n| Secundaire begunstigde | DOB: 14/03/1979 als verificatieveld | Actief |",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14/03/1979"
+        ]
+      }
+    },
+    {
+      "id": "date-type-comma-table-header",
+      "text": "Name, Geburtsdatum, Sterbedatum\nMüller, 12.03.1940, 01.02.2020",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.03.1940"
+        ],
+        "DATE_OF_DEATH": [
+          "01.02.2020"
+        ]
+      }
+    },
+    {
+      "id": "date-type-transcript-answer-to-a-question",
+      "text": "AGENT: Grand, and can you confirm your date of birth for me?\n\nCALLER: 09/06/1987.\n\nAGENT: Thank you.",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "09/06/1987"
+        ]
+      }
+    },
+    {
+      "id": "date-type-transcript-answer-with-timestamps",
+      "text": "[00:18] Mitarbeiterin: Können Sie mir bitte Ihr Geburtsdatum nennen?\n\n[00:20] Anrufer: Ja klar, das ist der 03.07.1958.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "03.07.1958"
+        ]
+      }
+    },
+    {
+      "id": "date-type-a-label-labels-its-list",
+      "text": "- DOBs e.g. 04/09/1978, 22/11/1985, 07/03/1990\n- Eircodes e.g. D04 X2Y1",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "04/09/1978",
+          "22/11/1985",
+          "07/03/1990"
+        ]
+      }
+    },
+    {
+      "id": "date-type-respectively",
+      "text": "De medeverzekerden zijn geboren op 14/05/1983 respectievelijk 02/11/1990.",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14/05/1983",
+          "02/11/1990"
+        ]
+      }
+    },
+    {
+      "id": "date-type-list-stops-at-another-label",
+      "text": "Geburtsdatum: 12.03.1940, Aufnahme: 14.02.2024",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.03.1940"
+        ]
+      },
+      "expectRedactedText": "Geburtsdatum: [DOB], Aufnahme: 14.02.2024"
+    },
+    {
+      "id": "date-type-spelled-out-then-bracketed",
+      "text": "Geboren am siebzehnten März neunzehnhundertneunzig\n    (17.03.1990)\nGeburtsort: Graz",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "17.03.1990"
+        ]
+      }
+    },
+    {
+      "id": "date-type-birth-sign",
+      "text": "El-Mansouri Rachid, 23 Rue de la Moselle, Wasserbillig °09.07.1968 (client)",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "09.07.1968"
+        ]
+      }
+    },
+    {
+      "id": "date-type-number-sign-is-not-a-birth-sign",
+      "text": "Facture n° 12/03/2024 réglée",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ]
+    },
+    {
+      "id": "date-type-death-keywords-the-window-hid",
+      "text": "Overlijdensattest (datum van overlijden: 14/01/2026, UZ Gent). Madame Benali est décédée le 08/11/2024 à 16h43.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "DATE_OF_DEATH": [
+          "14/01/2026",
+          "08/11/2024"
+        ]
+      }
     }
   ]
 }

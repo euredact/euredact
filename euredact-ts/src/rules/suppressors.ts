@@ -1045,9 +1045,107 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
   // column, not by a word, so that is context — but only for narrow shapes.
   if (DELIMITED_FIELD_TYPES.has(match.patternDef.entityType) &&
       fillsADelimitedField(text, match.start, match.end)) return false;
+  if (DATE_LABEL_TYPES.has(match.patternDef.entityType)) {
+    return !labelsThisDate(text, match.start, match.end, match.patternDef.contextKeywords,
+                           match.patternDef.entityType);
+  }
   const [before, after] = getContext(text, match.start, match.end);
   const context = (before + " " + after).toLowerCase();
   return !match.patternDef.contextKeywords.some(kw => context.includes(kw.toLowerCase()));
+}
+
+/** Date types decided by a label: DOB and DATE_OF_DEATH share one date shape. */
+const DATE_LABEL_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
+
+/** Any common numeric date, to tell whether a label belongs to another date. */
+const ANY_DATE = /\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}/;
+
+/**
+ * True when one of `keywords` is this date's own label: before the date with no
+ * other date between, or after it inside the date's own sentence. Anywhere in
+ * the window typed every date from whichever date label the document carried
+ * (rules-engine#52).
+ */
+/** A date followed by a list separator: an item of the list a label introduces. */
+const LIST_ITEM = /\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}\s*(?:,|;|–|&|\band\b|\ben\b|\bet\b|\bund\b|\bor\b|\bof\b|\bou\b|\boder\b|\brespectievelijk\b|\bbzw\.?)\s*/g;
+
+/** Punctuation and at most two short words ("e.g.", "bv.", "op") between label and date. */
+const LABEL_TAIL = /^[\s:.,()\-]*(?:\p{L}{1,4}(?:\.\p{L}{1,2})*\.?(?:[\s:.,()\-]+|$)){0,2}$/u;
+
+/** The birth sign "°" directly before the date, but not the number sign "n°". */
+const BIRTH_SIGN = /(?<![a-z])°\s?$/;
+
+/** No other date between a label and the date, except items of its list. */
+function nothingButAListBetween(gap: string): boolean {
+  if (!ANY_DATE.test(gap)) return true;
+  const rest = gap.replace(LIST_ITEM, " ");
+  return !ANY_DATE.test(rest) && LABEL_TAIL.test(rest);
+}
+
+function labelsThisDate(
+  text: string, start: number, end: number, keywords: string[], entityType?: EntityType | string,
+): boolean {
+  const [before, after] = getContext(text, start, end);
+  const lowerBefore = before.toLowerCase();
+  const lowerAfter = after.toLowerCase();
+  // A label on an earlier line counts only when the date opens its own line or
+  // the label was asked as a question (a call transcript's answer turn);
+  // a column header is a fallback and never overrules a label of the date's own.
+  const lineStart = lowerBefore.lastIndexOf("\n") + 1;
+  const opensLine = lowerBefore.slice(lineStart).replace(/[ \t:|;*\-•(\[]/g, "") === "";
+  if (entityType === EntityType.DOB && BIRTH_SIGN.test(lowerBefore)) return true;
+  for (const keyword of keywords) {
+    const kw = keyword.toLowerCase();
+    const i = lowerBefore.lastIndexOf(kw);
+    if (i >= 0 && nothingButAListBetween(lowerBefore.slice(i + kw.length))
+        && (i >= lineStart || opensLine
+            || lowerBefore.slice(i + kw.length, lineStart).includes("?"))) return true;
+    const j = lowerAfter.indexOf(kw);
+    if (j >= 0) {
+      const gap = lowerAfter.slice(0, j);
+      if (!ANY_DATE.test(gap) && !SENTENCE_BREAK.test(gap)
+          && !LEADS_TO_A_DATE.test(lowerAfter.slice(j + kw.length))) return true;
+    }
+  }
+  const header = columnHeader(text, start);
+  return header !== null && keywords.some(kw => header.includes(kw.toLowerCase()));
+}
+
+/**
+ * A label running straight into a date of its own introduces that date, not the
+ * one before it ("Verstorben am 01.02.2020, geboren am 12.03.1940").
+ */
+const LEADS_TO_A_DATE = /^[\s:.\-]*(?:[a-zà-ÿ]{1,3}[\s:.]+)?\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}/;
+
+/** Field separators a table row may use. */
+const COLUMN_SEPARATORS = [";", "|", "\t", ","];
+
+/**
+ * The lower-cased header cell above the value, if it sits in a table: in a table
+ * the column decides the label, not proximity. A header is one of the three
+ * lines above, split by the row's separator into the same number of cells.
+ */
+function columnHeader(text: string, start: number): string | null {
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+  const lineEndAt = text.indexOf("\n", start);
+  const line = text.slice(lineStart, lineEndAt >= 0 ? lineEndAt : text.length);
+  // The three lines above, by lastIndexOf: splitting the whole prefix was
+  // quadratic in the document, once per date candidate.
+  let aboveStart = lineStart - 1;
+  for (let k = 0; k < 3 && aboveStart >= 0; k++) {
+    aboveStart = aboveStart === 0 ? -1 : text.lastIndexOf("\n", aboveStart - 1);
+  }
+  const above = lineStart ? text.slice(aboveStart + 1, Math.max(0, lineStart - 1)).split("\n") : [];
+  for (const sep of COLUMN_SEPARATORS) {
+    if (!line.includes(sep)) continue;
+    const cells = line.split(sep);
+    const column = text.slice(lineStart, start).split(sep).length - 1;
+    for (const header of [...above].reverse()) {
+      const heads = header.split(sep);
+      if (heads.length === cells.length && !ANY_DATE.test(header)) return heads[column].toLowerCase();
+    }
+  }
+  return null;
 }
 
 // Suppressors that need whole-document facts take the optional scratch; the

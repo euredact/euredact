@@ -651,6 +651,9 @@ class SharedConfig(CountryConfig):
                     "overleden", "overlijdensdatum", "date de décès", "décédé le",
                     "date of death", "Sterbedatum", "verstorben am", "gestorven",
                     "death date", "died on", "mort le", "décès",
+                    # The window used to find these through some other word
+                    # nearby; a label now has to be the date's own (#52).
+                    "datum van overlijden", "décédée le", "Sterbetag",
                 ],
                 requires_context=True,
             ),
