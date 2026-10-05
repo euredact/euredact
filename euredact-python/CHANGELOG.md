@@ -11,6 +11,25 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **Every date in a document took its type from one date label.** With
+  `detect_dates=True`, `DOB` and `DATE_OF_DEATH` are one date shape gated by
+  their keywords, and the gate passed when a keyword appeared anywhere in the
+  150-character window. So `Date of Admission: 12/02/2024` became
+  `DATE_OF_DEATH` because `Date of Death:` sat two lines down; with a birth date
+  present, the death date became `DOB`; and `Factuurdatum 12/03/1984.
+  Geboortedatum: …` masked the invoice date as `DOB`. A keyword now licenses a
+  date only when it is that date's own label: before it with no other date in
+  between, or after it in the same sentence without running straight into a
+  date of its own (`Verstorben am 01.02.2020, geboren am 12.03.1940`). In a
+  table the column header decides, so `Name | Aufnahme | Sterbedatum` leaves the
+  admission column alone and `Name;Geburtsdatum;Sterbedatum` types both columns.
+  A date with neither label is no longer masked as either. Ten conformance
+  vectors. *(rules-engine#52)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added

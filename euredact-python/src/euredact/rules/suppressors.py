@@ -1428,9 +1428,89 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
     if (match.pattern_def.entity_type in _DELIMITED_FIELD_TYPES
             and _fills_a_delimited_field(text, match.start, match.end)):
         return False
+    if match.pattern_def.entity_type in _DATE_LABEL_TYPES:
+        return not _labels_this_date(
+            text, match.start, match.end, match.pattern_def.context_keywords)
     before, after = _get_context(text, match.start, match.end)
     context = (before + " " + after).lower()
     return not any(kw.lower() in context for kw in match.pattern_def.context_keywords)
+
+
+#: Date types decided by a label. DOB and DATE_OF_DEATH share one date shape,
+#: so the label is the only thing that tells them apart -- and a date with
+#: neither label (an admission date, an invoice date) is neither.
+_DATE_LABEL_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
+
+#: Any common numeric date, to tell whether a label belongs to another date.
+_ANY_DATE = re.compile(r"\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}")
+
+
+def _labels_this_date(text: str, start: int, end: int, keywords: list[str]) -> bool:
+    """True when one of *keywords* is this date's own label.
+
+    Anywhere in the context window was the old test, and it typed every date in
+    a document from whichever date label the document carried: with "Date of
+    Death:" two lines down, "Date of Admission: 12/02/2024" became
+    DATE_OF_DEATH, and with a birth date present the death date became DOB
+    (rules-engine#52). A label belongs to the date it introduces, so it counts
+    before the date only when no other date sits between them, and after the
+    date only inside the date's own sentence ("03/05/1940 (date of birth)").
+    """
+    header = _column_header(text, start)
+    if header is not None:
+        return any(kw.lower() in header for kw in keywords)
+    before, after = _get_context(text, start, end)
+    lower_before, lower_after = before.lower(), after.lower()
+    for keyword in keywords:
+        kw = keyword.lower()
+        i = lower_before.rfind(kw)
+        if i >= 0 and not _ANY_DATE.search(lower_before[i + len(kw):]):
+            return True
+        j = lower_after.find(kw)
+        if j >= 0:
+            gap = lower_after[:j]
+            if (not _ANY_DATE.search(gap) and not _SENTENCE_BREAK.search(gap)
+                    and not _LEADS_TO_A_DATE.match(lower_after[j + len(kw):])):
+                return True
+    return False
+
+
+#: A label that runs straight into a date of its own -- punctuation, at most one
+#: short word ("am", "le", "on"), then the date -- introduces that date, not the
+#: one before it: in "Verstorben am 01.02.2020, geboren am 12.03.1940" the
+#: "geboren" is the second date's. A verb-final clause ("am 12.03.1940 geboren
+#: und ist am …") is not this shape and still labels the date before it.
+_LEADS_TO_A_DATE = re.compile(
+    r"[\s:.\-]*(?:[a-zà-ÿ]{1,3}[\s:.]+)?\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}")
+
+
+#: Field separators a table row may use.
+_COLUMN_SEPARATORS = ";|\t,"
+
+
+def _column_header(text: str, start: int) -> str | None:
+    """The lower-cased header cell above the value, if it sits in a table.
+
+    In a table the column decides the label, not proximity:
+    "Name | Aufnahme | Sterbedatum" over "Müller | 12.02.2024 | 15.02.2024" has
+    "Sterbedatum" before the admission date with no date between, and only the
+    column says it labels the other one. A header is one of the three lines
+    above, split by the row's separator into the same number of cells.
+    """
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", start)
+    line = text[line_start:line_end if line_end >= 0 else len(text)]
+    above = text[:max(0, line_start - 1)].split("\n")[-3:] if line_start else []
+    for sep in _COLUMN_SEPARATORS:
+        if sep not in line:
+            continue
+        cells = line.split(sep)
+        column = text[line_start:start].count(sep)
+        for header in reversed(above):
+            heads = header.split(sep)
+            if len(heads) == len(cells) and not _ANY_DATE.search(header):
+                return heads[column].lower()
+    return None
 
 
 # ── Dispatch table: entity type → applicable suppressors ────────────────

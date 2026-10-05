@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- Every date in a document took its type from whichever date label the document carried (an admission date as `DATE_OF_DEATH`, a death date as `DOB`, an invoice date as `DOB`); a `DOB` or `DATE_OF_DEATH` keyword now counts only as the date's own label, or as its column header in a table. *(rules-engine#52)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added
