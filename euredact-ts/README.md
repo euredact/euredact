@@ -1189,6 +1189,21 @@ the measured ones.
 const { redact } = require("euredact");
 ```
 
+## Browsers
+
+The package bundles for a page as published. Its only platform dependency is a
+SHA-256 digest (the result-cache key) and a random index (token suffixes); on
+Node both come from `node:crypto`, and a bundler targeting the browser (esbuild,
+webpack, Rollup, Vite) follows the `browser` field in `package.json` to a build
+that uses `crypto.getRandomValues` and a synchronous SHA-256 of its own, checked
+against `node:crypto` byte for byte. `redact` runs entirely in the page, and so
+does the local half of `redactAsync({ mode: "cloud" })`: only the masked text
+leaves it.
+
+```js
+import { redact } from "euredact";   // esbuild --platform=browser, webpack, Vite
+```
+
 ## License
 
 Apache-2.0

@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- The package can be bundled for a browser: `node:crypto` is no longer imported outside a platform module, and the `browser` field selects a Web-Crypto build. *(TypeScript only)* *(rules-engine#56)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

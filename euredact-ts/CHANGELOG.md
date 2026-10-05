@@ -11,6 +11,23 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **The package could not be bundled for a browser.** `cache.ts` imported
+  `createHash` and `sdk.ts` imported `randomInt` from `node:crypto`, so a
+  bundler targeting a page failed on both, although nothing else in the SDK
+  needs Node. Both now come from `platform.ts`, and the `browser` field in
+  `package.json` swaps in `platform.browser.ts`: `crypto.getRandomValues` with
+  rejection sampling, and a synchronous SHA-256 — the cache key is computed
+  synchronously and must stay collision-resistant, and Web Crypto's digest is
+  asynchronous. Node keeps `node:crypto` and Node 16 support. A test checks the
+  two digests agree on 210 inputs (astral characters and lone surrogates
+  included) and that no other module imports from `node:`. Verified by bundling
+  the packed tarball with esbuild for the browser and running it with no Node
+  globals. *(rules-engine#56)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added
