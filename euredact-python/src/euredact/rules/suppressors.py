@@ -1455,16 +1455,23 @@ def _labels_this_date(text: str, start: int, end: int, keywords: list[str]) -> b
     (rules-engine#52). A label belongs to the date it introduces, so it counts
     before the date only when no other date sits between them, and after the
     date only inside the date's own sentence ("03/05/1940 (date of birth)").
+
+    A label on an earlier line counts only when the date opens its own line
+    ("Date of birth:\n03/05/1940"); otherwise a table header two lines up would
+    label every cell under it. A table's column header is the fallback for a
+    date with no label of its own, and never overrules one: when it did,
+    ordinary comma-separated prose read as a table row and
+    "Geboortedatum en -plaats: 11/04/1989, Sint-Niklaas" lost its mask.
     """
-    header = _column_header(text, start)
-    if header is not None:
-        return any(kw.lower() in header for kw in keywords)
     before, after = _get_context(text, start, end)
     lower_before, lower_after = before.lower(), after.lower()
+    line_start = lower_before.rfind("\n") + 1
+    opens_line = not lower_before[line_start:].strip(" \t:|;*-•")
     for keyword in keywords:
         kw = keyword.lower()
         i = lower_before.rfind(kw)
-        if i >= 0 and not _ANY_DATE.search(lower_before[i + len(kw):]):
+        if (i >= 0 and not _ANY_DATE.search(lower_before[i + len(kw):])
+                and (i >= line_start or opens_line)):
             return True
         j = lower_after.find(kw)
         if j >= 0:
@@ -1472,7 +1479,8 @@ def _labels_this_date(text: str, start: int, end: int, keywords: list[str]) -> b
             if (not _ANY_DATE.search(gap) and not _SENTENCE_BREAK.search(gap)
                     and not _LEADS_TO_A_DATE.match(lower_after[j + len(kw):])):
                 return True
-    return False
+    header = _column_header(text, start)
+    return header is not None and any(kw.lower() in header for kw in keywords)
 
 
 #: A label that runs straight into a date of its own -- punctuation, at most one
@@ -1491,7 +1499,8 @@ _COLUMN_SEPARATORS = ";|\t,"
 def _column_header(text: str, start: int) -> str | None:
     """The lower-cased header cell above the value, if it sits in a table.
 
-    In a table the column decides the label, not proximity:
+    Consulted only for a date with no label of its own. In a table the column
+    supplies the label:
     "Name | Aufnahme | Sterbedatum" over "Müller | 12.02.2024 | 15.02.2024" has
     "Sterbedatum" before the admission date with no date between, and only the
     column says it labels the other one. A header is one of the three lines

@@ -4468,6 +4468,70 @@
           "12.03.1940"
         ]
       }
+    },
+    {
+      "id": "date-type-own-label-beats-a-comma-header",
+      "text": "Naam: DUBOIS, Youssef\nGeboortedatum en -plaats: 11/04/1989, Sint-Niklaas",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "11/04/1989"
+        ]
+      }
+    },
+    {
+      "id": "date-type-own-label-in-comma-prose",
+      "text": "The auditor, Charlotte Patel-Williams, born 14/05/1987, reviewed it.\nThe client, Anita Sharma, born 14/05/1984, signed it.",
+      "countries": [
+        "GB"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14/05/1987",
+          "14/05/1984"
+        ]
+      }
+    },
+    {
+      "id": "date-type-death-label-in-comma-prose",
+      "text": "Lieu : CHU, chambre 12\nDate et heure du décès : 09/02/2026 à 04 h 15, service de médecine",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "DATE_OF_DEATH": [
+          "09/02/2026"
+        ]
+      }
+    },
+    {
+      "id": "date-type-label-in-a-markdown-cell",
+      "text": "| Rol | Gegevens | Status |\n| Secundaire begunstigde | DOB: 14/03/1979 als verificatieveld | Actief |",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "14/03/1979"
+        ]
+      }
+    },
+    {
+      "id": "date-type-comma-table-header",
+      "text": "Name, Geburtsdatum, Sterbedatum\nMüller, 12.03.1940, 01.02.2020",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.03.1940"
+        ],
+        "DATE_OF_DEATH": [
+          "01.02.2020"
+        ]
+      }
     }
   ]
 }

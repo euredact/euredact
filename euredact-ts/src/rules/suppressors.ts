@@ -1025,15 +1025,18 @@ const ANY_DATE = /\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}/;
  * (rules-engine#52).
  */
 function labelsThisDate(text: string, start: number, end: number, keywords: string[]): boolean {
-  const header = columnHeader(text, start);
-  if (header !== null) return keywords.some(kw => header.includes(kw.toLowerCase()));
   const [before, after] = getContext(text, start, end);
   const lowerBefore = before.toLowerCase();
   const lowerAfter = after.toLowerCase();
+  // A label on an earlier line counts only when the date opens its own line;
+  // a column header is a fallback and never overrules a label of the date's own.
+  const lineStart = lowerBefore.lastIndexOf("\n") + 1;
+  const opensLine = lowerBefore.slice(lineStart).replace(/[ \t:|;*\-•]/g, "") === "";
   for (const keyword of keywords) {
     const kw = keyword.toLowerCase();
     const i = lowerBefore.lastIndexOf(kw);
-    if (i >= 0 && !ANY_DATE.test(lowerBefore.slice(i + kw.length))) return true;
+    if (i >= 0 && !ANY_DATE.test(lowerBefore.slice(i + kw.length))
+        && (i >= lineStart || opensLine)) return true;
     const j = lowerAfter.indexOf(kw);
     if (j >= 0) {
       const gap = lowerAfter.slice(0, j);
@@ -1041,7 +1044,8 @@ function labelsThisDate(text: string, start: number, end: number, keywords: stri
           && !LEADS_TO_A_DATE.test(lowerAfter.slice(j + kw.length))) return true;
     }
   }
-  return false;
+  const header = columnHeader(text, start);
+  return header !== null && keywords.some(kw => header.includes(kw.toLowerCase()));
 }
 
 /**
