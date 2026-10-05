@@ -4332,6 +4332,106 @@
         "POSTAL_CODE"
       ],
       "notes": "Ditto for a policy number."
+    },
+    {
+      "id": "claim-ref-schadeclaim-blind",
+      "text": "Schadeclaim 2026-0412",
+      "countries": null,
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "2026-0412"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "claim-ref-schadeclaim-nl",
+      "text": "Schadeclaim 2026-0412",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "2026-0412"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "claim-ref-schadenummer-nl",
+      "text": "Schadenummer: 2026-0412",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "2026-0412"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "claim-ref-schadensnummer-de",
+      "text": "Schadensnummer 2026-0412",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "2026-0412"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "claim-ref-sinistre-fr",
+      "text": "Numéro de sinistre : 2026-0412",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "2026-0412"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "claim-ref-claim-number-ie",
+      "text": "Claim number: 2026-0412",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "2026-0412"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "claim-ref-cyprus-phone-still-a-phone",
+      "text": "Tel: 2212 3456",
+      "countries": [
+        "CY"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "2212 3456"
+        ]
+      }
     }
   ]
 }

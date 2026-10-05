@@ -11,6 +11,19 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **An insurance claim number was masked as a Cypriot phone number.**
+  `Schadeclaim 2026-0412` became `[PHONE]` (country CY), even under
+  `countries=["NL"]`: eight digits starting with 2 is a Cypriot landline, and no
+  label claimed the value. Claim-number labels (`Schadeclaim`, `Schadenummer`,
+  `Schadensnummer`, `numéro de sinistre`, `numero di sinistro`, `número de
+  siniestro`, `skadenummer`, `claim number`, …) now join the `INTERNAL_ID` cue,
+  so the reference is typed `INTERNAL_ID`, as `Dossiernummer` already was. Seven
+  conformance vectors. *(rules-engine#54)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added

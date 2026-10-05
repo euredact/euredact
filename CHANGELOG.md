@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- An insurance claim number behind its label (`Schadeclaim 2026-0412`, `numéro de sinistre`, `claim number`) was masked as a Cypriot `PHONE`; it is now `INTERNAL_ID`, like `Dossiernummer`. *(rules-engine#54)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added
