@@ -1545,7 +1545,14 @@ def _column_header(text: str, start: int) -> str | None:
     line_start = text.rfind("\n", 0, start) + 1
     line_end = text.find("\n", start)
     line = text[line_start:line_end if line_end >= 0 else len(text)]
-    above = text[:max(0, line_start - 1)].split("\n")[-3:] if line_start else []
+    # The three lines above, found by rfind: splitting the whole prefix made
+    # this quadratic in the document, once per date candidate.
+    above_start = line_start - 1
+    for _ in range(3):
+        if above_start < 0:
+            break
+        above_start = text.rfind("\n", 0, above_start)
+    above = text[above_start + 1:max(0, line_start - 1)].split("\n") if line_start else []
     for sep in _COLUMN_SEPARATORS:
         if sep not in line:
             continue

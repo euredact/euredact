@@ -1088,7 +1088,13 @@ function columnHeader(text: string, start: number): string | null {
   const lineStart = text.lastIndexOf("\n", start - 1) + 1;
   const lineEndAt = text.indexOf("\n", start);
   const line = text.slice(lineStart, lineEndAt >= 0 ? lineEndAt : text.length);
-  const above = lineStart ? text.slice(0, Math.max(0, lineStart - 1)).split("\n").slice(-3) : [];
+  // The three lines above, by lastIndexOf: splitting the whole prefix was
+  // quadratic in the document, once per date candidate.
+  let aboveStart = lineStart - 1;
+  for (let k = 0; k < 3 && aboveStart >= 0; k++) {
+    aboveStart = aboveStart === 0 ? -1 : text.lastIndexOf("\n", aboveStart - 1);
+  }
+  const above = lineStart ? text.slice(aboveStart + 1, Math.max(0, lineStart - 1)).split("\n") : [];
   for (const sep of COLUMN_SEPARATORS) {
     if (!line.includes(sep)) continue;
     const cells = line.split(sep);
