@@ -294,6 +294,13 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         # INTERNAL_ID they exist only behind their label.
         r"|betriebsstätten(?:nr|nummer)|grundstücks(?:nr|nummer)"
         r"|dossier-?(?:nr|nummer)|aktenzeichen"
+        # Insurance claim numbers. "2026-0412" is the shape of a Cypriot
+        # landline, so behind "Schadeclaim" it was masked as PHONE/CY even
+        # under countries=["NL"] (rules-engine#54).
+        r"|schade(?:claim|nummer|dossier)|schadens?-?(?:nummer|nr)"
+        r"|num[ée]ro\s*de\s*sinistre|numero\s*(?:di\s*)?sinistro"
+        r"|n[úu]mero\s*de\s*siniestro|skade(?:nummer|sag)"
+        r"|claim\s*(?:no|number|id)"
         r"|osobní\s*(?:číslo\s*)?zaměstnance)" + _SEP, re.IGNORECASE)),
 
     # ── Credential ─────────────────────────────────────────────────────

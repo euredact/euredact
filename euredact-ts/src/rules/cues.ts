@@ -167,7 +167,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
   // only thing that identifies one, which is why the engine emits this type
   // from here and nowhere else.
   [EntityType.INTERNAL_ID,
-   /(?<![A-Za-z0-9_])(?:medarbejdernummer|ansattnummer|anställningsnummer|personalnummer|personeelsnummer|matricule\s*salarié|employee\s*(?:no|number|id)|badge(?:\s*(?:no|number))?|betriebsstätten(?:nr|nummer)|grundstücks(?:nr|nummer)|dossier-?(?:nr|nummer)|aktenzeichen|osobní\s*(?:číslo\s*)?zaměstnance)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:medarbejdernummer|ansattnummer|anställningsnummer|personalnummer|personeelsnummer|matricule\s*salarié|employee\s*(?:no|number|id)|badge(?:\s*(?:no|number))?|betriebsstätten(?:nr|nummer)|grundstücks(?:nr|nummer)|dossier-?(?:nr|nummer)|aktenzeichen|schade(?:claim|nummer|dossier)|schadens?-?(?:nummer|nr)|num[ée]ro\s*de\s*sinistre|numero\s*(?:di\s*)?sinistro|n[úu]mero\s*de\s*siniestro|skade(?:nummer|sag)|claim\s*(?:no|number|id)|osobní\s*(?:číslo\s*)?zaměstnance)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Credential. Typed SECRET because that is the type this SDK has; the
   // training pipeline's report asks for CREDENTIAL, which does not exist here.
