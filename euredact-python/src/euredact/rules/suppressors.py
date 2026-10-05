@@ -1457,8 +1457,10 @@ def _labels_this_date(text: str, start: int, end: int, keywords: list[str]) -> b
     date only inside the date's own sentence ("03/05/1940 (date of birth)").
 
     A label on an earlier line counts only when the date opens its own line
-    ("Date of birth:\n03/05/1940"); otherwise a table header two lines up would
-    label every cell under it. A table's column header is the fallback for a
+    ("Date of birth:\n03/05/1940") or the label was asked as a question, which
+    is how a call transcript carries it ("AGENT: … date of birth?\n\nCALLER:
+    09/06/1987."); otherwise a table header two lines up would label every cell
+    under it. A table's column header is the fallback for a
     date with no label of its own, and never overrules one: when it did,
     ordinary comma-separated prose read as a table row and
     "Geboortedatum en -plaats: 11/04/1989, Sint-Niklaas" lost its mask.
@@ -1471,7 +1473,8 @@ def _labels_this_date(text: str, start: int, end: int, keywords: list[str]) -> b
         kw = keyword.lower()
         i = lower_before.rfind(kw)
         if (i >= 0 and not _ANY_DATE.search(lower_before[i + len(kw):])
-                and (i >= line_start or opens_line)):
+                and (i >= line_start or opens_line
+                     or "?" in lower_before[i + len(kw):line_start])):
             return True
         j = lower_after.find(kw)
         if j >= 0:

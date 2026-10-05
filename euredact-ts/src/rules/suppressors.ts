@@ -1028,7 +1028,8 @@ function labelsThisDate(text: string, start: number, end: number, keywords: stri
   const [before, after] = getContext(text, start, end);
   const lowerBefore = before.toLowerCase();
   const lowerAfter = after.toLowerCase();
-  // A label on an earlier line counts only when the date opens its own line;
+  // A label on an earlier line counts only when the date opens its own line or
+  // the label was asked as a question (a call transcript's answer turn);
   // a column header is a fallback and never overrules a label of the date's own.
   const lineStart = lowerBefore.lastIndexOf("\n") + 1;
   const opensLine = lowerBefore.slice(lineStart).replace(/[ \t:|;*\-•]/g, "") === "";
@@ -1036,7 +1037,8 @@ function labelsThisDate(text: string, start: number, end: number, keywords: stri
     const kw = keyword.toLowerCase();
     const i = lowerBefore.lastIndexOf(kw);
     if (i >= 0 && !ANY_DATE.test(lowerBefore.slice(i + kw.length))
-        && (i >= lineStart || opensLine)) return true;
+        && (i >= lineStart || opensLine
+            || lowerBefore.slice(i + kw.length, lineStart).includes("?"))) return true;
     const j = lowerAfter.indexOf(kw);
     if (j >= 0) {
       const gap = lowerAfter.slice(0, j);

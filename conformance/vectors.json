@@ -4532,6 +4532,30 @@
           "01.02.2020"
         ]
       }
+    },
+    {
+      "id": "date-type-transcript-answer-to-a-question",
+      "text": "AGENT: Grand, and can you confirm your date of birth for me?\n\nCALLER: 09/06/1987.\n\nAGENT: Thank you.",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "09/06/1987"
+        ]
+      }
+    },
+    {
+      "id": "date-type-transcript-answer-with-timestamps",
+      "text": "[00:18] Mitarbeiterin: Können Sie mir bitte Ihr Geburtsdatum nennen?\n\n[00:20] Anrufer: Ja klar, das ist der 03.07.1958.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "03.07.1958"
+        ]
+      }
     }
   ]
 }
