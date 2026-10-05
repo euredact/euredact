@@ -45,9 +45,12 @@ class ATConfig(CountryConfig):
             # "01 53460 2215". The pattern above requires 3-4 digits after the
             # trunk 0, so it never matched these. Both separators are
             # mandatory here, which keeps "01 2025" (a date fragment) out.
+            # The last group may not be the start of a date or time:
+            # "0170 1234567 12.03.2024" took "12" and left ".03.2024"
+            # (rules-engine#60).
             PatternDef(
                 entity_type=EntityType.PHONE,
-                pattern=r"\b0\d{1,4}[\s\-/]\d{3,7}[\s\-/]\d{2,6}\b",
+                pattern=r"\b0\d{1,4}[\s\-/]\d{3,7}[\s\-/]\d{2,6}\b(?![.,/:]\d)",
                 validator=None,
                 description="Austrian national phone — short area code, grouped",
             ),

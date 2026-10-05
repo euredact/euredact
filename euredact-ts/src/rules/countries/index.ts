@@ -380,7 +380,7 @@ const AT: CountryConfig = {
     // "01 53460 2215". The pattern above requires 3-4 digits after the trunk
     // 0, so it never matched these. Both separators are mandatory here, which
     // keeps "01 2025" (a date fragment) out.
-    p(EntityType.PHONE, String.raw`\b0\d{1,4}[\s\-/]\d{3,7}[\s\-/]\d{2,6}\b`, null, "Austrian national phone — short area code, grouped"),
+    p(EntityType.PHONE, String.raw`\b0\d{1,4}[\s\-/]\d{3,7}[\s\-/]\d{2,6}\b(?![.,/:]\d)`, null, "Austrian national phone — short area code, grouped"),
     p(EntityType.PHONE, String.raw`\+43\s?\d{3,4}[\s\-]?\d{5,8}`),
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-ZÄÖÜ]{1,2}\s?\d{1,5}\s?[A-Z]{1,2}\b`, null, "", ["Kennzeichen", "Nummernschild", "Kfz-Kennzeichen"], true),
     p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{3}\b`, null, "", ["PLZ", "Postleitzahl", "Adresse", "Anschrift", "Straße", "Str.", "Gasse", "Weg", "Platz", "Postal:", "Wohnort"], true),
