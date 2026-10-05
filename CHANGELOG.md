@@ -27,6 +27,8 @@ which both test suites run.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-05
+
 ### Added
 
 - This file: a root changelog covering both SDKs, strictly categorised, with SDK-specific entries marked.
@@ -345,7 +347,8 @@ which both test suites run.
 
 - First release. *(Python only)* 31 countries, 20+ PII entity types, checksum validation, two-pass detection, context-aware detection, batch processing, true async, referential integrity, Aho-Corasick acceleration, and zero required dependencies.
 
-[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v0.5.1...main
+[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v0.6.0...main
+[0.6.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.5.1...v0.6.0
 [0.5.1]: https://git.euredact.dev/euredact/rules-engine/compare/v0.5.0...v0.5.1
 [0.5.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.4.0...v0.5.0
 [0.4.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.3.9...v0.4.0

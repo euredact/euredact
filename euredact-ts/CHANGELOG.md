@@ -9,9 +9,9 @@ the [root CHANGELOG.md](../CHANGELOG.md). It follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this file is where the
 narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
-0.5.2 onward; earlier releases keep the headings they were written with.
+0.6.0 onward; earlier releases keep the headings they were written with.
 
-## Unreleased
+## 0.6.0 (2026-10-05)
 
 ### Added
 
