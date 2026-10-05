@@ -5299,6 +5299,96 @@
           "2212 3456"
         ]
       }
+    },
+    {
+      "id": "bic-surname-under-an-iban",
+      "text": "IBAN pour remboursement éventuel : LU47 0019 2000 7341 8200\nMédecin signataire du résumé : Dr. Joëlle NGUYEN-HOFFMANN",
+      "countries": [
+        "LU"
+      ],
+      "mustNotDetect": [
+        "BIC"
+      ]
+    },
+    {
+      "id": "bic-surname-after-a-real-bic",
+      "text": "BIC: BCEELULL, Dr. HOFFMANN",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "BIC": [
+          "BCEELULL"
+        ]
+      }
+    },
+    {
+      "id": "bic-eleven-letter-word-beside-an-iban",
+      "text": "IBAN NL91 ABNA 0417 1643 00, MAANDELIJKS betalen",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "BIC"
+      ]
+    },
+    {
+      "id": "bic-unlisted-behind-its-label",
+      "text": "IBAN: DE89 3704 0044 0532 0130 00\nBIC: MUSTDEMM",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "BIC": [
+          "MUSTDEMM"
+        ]
+      }
+    },
+    {
+      "id": "bic-unlisted-primary-office-form",
+      "text": "Bankverbindung: IBAN DE89 3704 0044 0532 0130 00, MUSTDEMMXXX",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "BIC": [
+          "MUSTDEMMXXX"
+        ]
+      }
+    },
+    {
+      "id": "bic-unlisted-with-a-digit",
+      "text": "IBAN: DE89 3704 0044 0532 0130 00 / ZZZZDEF1XXX",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "BIC": [
+          "ZZZZDEF1XXX"
+        ]
+      }
+    },
+    {
+      "id": "bic-hyphenated-name-beside-an-iban",
+      "text": "IBAN: NL91 ABNA 0417 1643 00 — Dhr. Jan JANSSENS-HOFBAUER",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "BIC"
+      ]
+    },
+    {
+      "id": "bic-unlisted-eleven-letters-behind-its-label",
+      "text": "IBAN: DE89 3704 0044 0532 0130 00, SWIFT: MUSTDEMMABC",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "BIC": [
+          "MUSTDEMMABC"
+        ]
+      }
     }
   ]
 }

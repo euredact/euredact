@@ -11,6 +11,7 @@ import re
 from typing import Callable
 
 from euredact.rules.bic_registry import is_registered_bic
+from euredact.rules.cues import cued_type
 from euredact.rules.de_districts import DE_DISTRICT_CODES
 from euredact.rules.matchers import RawMatch
 from euredact.types import EntityType
@@ -1310,6 +1311,38 @@ def _is_heading_shape(text: str, start: int, end: int, token: str) -> bool:
     return False
 
 
+#: A personal title right before the token: "Dr. HOFFMANN", "Mme JANSSENS".
+_TITLE_BEFORE = re.compile(
+    r"(?<![A-Za-z])(?:dr|prof|mr|mrs|ms|mme|mlle|m|herr|frau|dhr|mevr|sig|sra?)"
+    r"\.?\s+$", re.IGNORECASE)
+
+
+def _bic_shaped_word(text: str, start: int, end: int, token: str) -> bool:
+    """A registry miss sitting where only a word or a name can.
+
+    Banking context alone admitted any word whose letters 5-6 are a country
+    code -- about 100 per 968 banking documents (rules-engine#57). Most cannot
+    be told from an unlisted bank code by shape, and the context gate exists for
+    those codes, but three positions are never a bank code's:
+
+    * joined to a word by a hyphen: "Dr. Joëlle NGUYEN-HOFFMANN" two lines under
+      an IBAN, where masking HOFFMANN also broke the model's span for the name;
+    * right after a personal title: "BIC: BCEELULL, Dr. HOFFMANN";
+    * eleven letters with no digit and no `XXX` branch, which is the shape of
+      `MAANDELIJKS`, `UNIVERSELLE` and `OBLIGATOIRE` -- an unlisted code of that
+      length needs a BIC/SWIFT label touching it.
+    """
+    before = text[max(0, start - 2):start]
+    after = text[end:end + 2]
+    if (len(before) == 2 and before[1] == "-" and before[0].isalpha()) or (
+            len(after) == 2 and after[0] == "-" and after[1].isalpha()):
+        return True
+    if _TITLE_BEFORE.search(text[max(0, start - 8):start]):
+        return True
+    return (len(token) == 11 and token.isalpha() and not token.endswith("XXX")
+            and cued_type(text, start) != EntityType.BIC)
+
+
 def suppress_bic_without_evidence(text: str, match: RawMatch) -> bool:
     """Emit a BIC only on registry membership or banking context.
 
@@ -1321,7 +1354,9 @@ def suppress_bic_without_evidence(text: str, match: RawMatch) -> bool:
     0. the token also occurs as an ordinary lowercase word here -> reject;
     1. registry hit (deployment-supplied, then bundled seed prefixes) -> emit;
     2. heading / shouted-word shape -> reject;
-    3. BIC-SWIFT keyword, IBAN or bank block in the structural unit -> emit;
+    3. BIC-SWIFT keyword, IBAN or bank block in the structural unit -> emit,
+       unless the token sits where only a word or a name can (see
+       `_bic_shaped_word`);
 
     and a bare shape match reaching the end with none of the above is never
     emitted. Gate 0 outranks every tier below it — no genuine BIC is also an
@@ -1349,6 +1384,8 @@ def suppress_bic_without_evidence(text: str, match: RawMatch) -> bool:
     unit = _structural_unit(text, match.start, match.end)
     unit = unit.replace(token, " " * len(token))
     if _BIC_KEYWORD.search(unit) or _IBAN_SHAPE.search(unit) or _BANK_BLOCK.search(unit):
+        if _bic_shaped_word(text, match.start, match.end, token):
+            return True
         return _occurs_as_lowercase_word(text, token)
 
     # No tier satisfied.

@@ -1,5 +1,6 @@
 import { EntityType, type PatternDef } from "../types.js";
 import { isRegisteredBic } from "./bicRegistry.js";
+import { cuedType } from "./cues.js";
 import { DE_DISTRICT_CODES } from "./deDistricts.js";
 
 const CONTEXT_CHARS = 150;
@@ -919,9 +920,28 @@ function suppressBicWithoutEvidence(text: string, match: RawMatch, scratch?: Sup
   // The token itself is blanked out so it cannot vouch for itself.
   const unit = structuralUnit(text, match.start, match.end).split(token).join(" ".repeat(token.length));
   if (BIC_KEYWORD.test(unit) || IBAN_SHAPE.test(unit) || BANK_BLOCK.test(unit)) {
+    if (bicShapedWord(text, match.start, match.end, token)) return true;
     return occursAsLowercaseWord(text, token, scratch);
   }
   return true;
+}
+
+/** A personal title right before the token: "Dr. HOFFMANN", "Mme JANSSENS". */
+const TITLE_BEFORE = /(?<![A-Za-z])(?:dr|prof|mr|mrs|ms|mme|mlle|m|herr|frau|dhr|mevr|sig|sra?)\.?\s+$/i;
+const LETTER = /\p{L}/u;
+
+/**
+ * A registry miss sitting where only a word or a name can (rules-engine#57):
+ * joined to a word by a hyphen ("NGUYEN-HOFFMANN"), right after a personal
+ * title ("Dr. HOFFMANN"), or eleven letters with no `XXX` branch and no
+ * BIC/SWIFT label touching it ("MAANDELIJKS").
+ */
+function bicShapedWord(text: string, start: number, end: number, token: string): boolean {
+  if ((start >= 2 && text[start - 1] === "-" && LETTER.test(text[start - 2])) ||
+      (text[end] === "-" && end + 1 < text.length && LETTER.test(text[end + 1]))) return true;
+  if (TITLE_BEFORE.test(text.slice(Math.max(0, start - 8), start))) return true;
+  return token.length === 11 && /^[A-Za-z]+$/.test(token) && !token.endsWith("XXX")
+    && cuedType(text, start) !== EntityType.BIC;
 }
 
 // ── Postal code: digits belonging to a longer identifier ────────────────
