@@ -56,8 +56,11 @@ _AMOUNT_LABEL_BEFORE = re.compile(
 
 # ── Units ───────────────────────────────────────────────────────────────
 
+# Horizontal space only: a unit is on the number's own line. Read across the
+# break, "Mob: +49 172 634 85 21" followed by "m.k@example.de" on the next line
+# was "21 m" and the whole phone number was dropped (rules-engine#51).
 _UNIT_AFTER = re.compile(
-    r"^\s*(?:kg|km|cm|mm|m[²³]?|m\b|g\b|l\b|ml|mg|GB|MB|KB|TB|%|"
+    r"^[ \t]*(?:kg|km|cm|mm|m[²³]?|m\b|g\b|l\b|ml|mg|GB|MB|KB|TB|%|"
     r"jaar|maanden|weken|dagen|uur|minuten|seconden|"
     # "st" (stuks/pieces) must not swallow the "St." of a place name —
     # "Postal: 9600 St. Paul's Bay", "Adresse: 8386 St. Gallen".
