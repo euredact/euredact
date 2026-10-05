@@ -10,8 +10,7 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-from euredact.rules.bic_registry import is_registered_bic
-from euredact.rules.cues import cued_type
+from euredact.rules.bic_registry import is_known_institution, is_registered_bic
 from euredact.rules.de_districts import DE_DISTRICT_CODES
 from euredact.rules.matchers import RawMatch
 from euredact.types import EntityType
@@ -1317,6 +1316,13 @@ _TITLE_BEFORE = re.compile(
     r"\.?\s+$", re.IGNORECASE)
 
 
+#: A BIC/SWIFT label touching the token: "BIC: ", "SWIFT-Code:\n", "Code SWIFT : ",
+#: "BIC/SWIFT: ", "BIC Bank A: ", "(BIC ".
+_BIC_LABEL_BEFORE = re.compile(
+    r"(?<![A-Za-z])(?:bic|swift)(?:[\s/\-]*(?:code|swift|bic))?(?:\s+bank\s+\w{1,3})?"
+    r"[\s:.\-()]*$", re.IGNORECASE)
+
+
 def _bic_shaped_word(text: str, start: int, end: int, token: str) -> bool:
     """A registry miss sitting where only a word or a name can.
 
@@ -1328,9 +1334,11 @@ def _bic_shaped_word(text: str, start: int, end: int, token: str) -> bool:
     * joined to a word by a hyphen: "Dr. Joëlle NGUYEN-HOFFMANN" two lines under
       an IBAN, where masking HOFFMANN also broke the model's span for the name;
     * right after a personal title: "BIC: BCEELULL, Dr. HOFFMANN";
-    * eleven letters with no digit and no `XXX` branch, which is the shape of
-      `MAANDELIJKS`, `UNIVERSELLE` and `OBLIGATOIRE` -- an unlisted code of that
-      length needs a BIC/SWIFT label touching it.
+    * letters only -- eight, or eleven without the `XXX` branch -- which is the
+      only shape a word can have: `BETALING`, `MAANDELIJKS`, `JANSSENS`. Unless
+      the GLEIF mapping knows the institution (about 10,400 prefixes), such a
+      code needs a BIC/SWIFT label touching it. A code with a digit, or with an `XXX` branch, is no word and keeps the
+      context gate.
     """
     before = text[max(0, start - 2):start]
     after = text[end:end + 2]
@@ -1339,8 +1347,9 @@ def _bic_shaped_word(text: str, start: int, end: int, token: str) -> bool:
         return True
     if _TITLE_BEFORE.search(text[max(0, start - 8):start]):
         return True
-    return (len(token) == 11 and token.isalpha() and not token.endswith("XXX")
-            and cued_type(text, start) != EntityType.BIC)
+    return (token.isalpha() and not (len(token) == 11 and token.endswith("XXX"))
+            and not is_known_institution(token)
+            and not _BIC_LABEL_BEFORE.search(text[max(0, start - 30):start]))
 
 
 def suppress_bic_without_evidence(text: str, match: RawMatch) -> bool:

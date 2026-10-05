@@ -881,9 +881,9 @@ frequently valid ISO 3166 country codes (`DRINGEND` → `GE`, `HOSPITAL` →
 | Stage | Condition | Result |
 |---|---|---|
 | Gate 0 | the token also occurs as an ordinary lowercase word in the same document | never emitted |
-| Tier 1 | registry hit on the BIC6 institution+country prefix | emitted |
+| Tier 1 | registry hit on the BIC6 institution+country prefix (your registry, or the bundled seed of major banks) | emitted |
 | Gate 2 | heading / shouted-word shape | never emitted |
-| Tier 2 | `BIC`/`SWIFT` keyword, an IBAN, or a bank block in the enclosing line, record or paragraph | emitted |
+| Tier 2 | `BIC`/`SWIFT` keyword, an IBAN, or a bank block in the enclosing line, record or paragraph | emitted — but a **letters-only** code (`BETALING`, `HOFFMANN`), unless the bundled GLEIF mapping knows the institution, also needs a `BIC`/`SWIFT` label touching it |
 | — | none of the above | never emitted |
 
 The context window is the enclosing **line, record or paragraph**, not a
@@ -892,13 +892,18 @@ CSV row.
 
 ### Supplying your own BIC registry
 
-The package bundles **no licensed BIC data**. The authoritative SWIFTRef BIC
-Directory is a commercial product, and redistributing it inside a package
-requires a specific redistribution licence. What ships is a small seed list of
-BIC6 prefixes for major European banks, compiled from publicly published bank
-data.
+The package bundles about **10,400 BIC6 prefixes** for the 31 supported countries,
+derived from the [GLEIF BIC-to-LEI mapping](https://www.gleif.org/en/lei-data/lei-mapping/download-bic-to-lei-relationship-files),
+which SWIFT develops and licenses for redistribution under the BIC/LEI Mapping
+Table License Agreement; its required notice is in `NOTICE`. They tell a real
+bank from an ordinary word next to an IBAN, but do not by themselves license a
+code in bare prose: with that many real prefixes, some words begin with one
+(`DERNIERS` → `DERN`+`IE`, an Irish institution). `scripts/refresh_bic_registry.py`
+regenerates the list; GLEIF publishes the mapping monthly.
 
-Deployments holding a licensed directory install it at startup:
+The complete SWIFTRef BIC Directory is a commercial product and is not
+bundled. Deployments holding it install it at startup, where it works like the
+seed — a hit is emitted without context:
 
 ```python
 import euredact
@@ -919,10 +924,12 @@ euredact.set_bic_registry(None)
 Entries may be full BIC8/BIC11 codes or bare BIC6 prefixes; both are matched,
 case-insensitively and ignoring spaces.
 
-The registry is an **accept** signal, never a filter. A code missing from it
-falls through to the context gate and is still detected when banking context
-is present, so a stale list costs a little recall on bare, contextless BICs —
-it never causes a leak. Annual review is sufficient.
+The registry is mostly an **accept** signal. A code missing from it falls
+through to the context gate and is still detected when banking context is
+present — except a letters-only code, the only shape an ordinary word can take,
+which then also needs a `BIC`/`SWIFT` label touching it. Context alone used to
+admit those, and surnames and words beside an IBAN were masked as `[BIC]`
+(rules-engine#57).
 
 ## Custom Patterns
 

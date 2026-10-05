@@ -1,6 +1,5 @@
 import { EntityType, type PatternDef } from "../types.js";
-import { isRegisteredBic } from "./bicRegistry.js";
-import { cuedType } from "./cues.js";
+import { isKnownInstitution, isRegisteredBic } from "./bicRegistry.js";
 import { DE_DISTRICT_CODES } from "./deDistricts.js";
 
 const CONTEXT_CHARS = 150;
@@ -930,18 +929,23 @@ function suppressBicWithoutEvidence(text: string, match: RawMatch, scratch?: Sup
 const TITLE_BEFORE = /(?<![A-Za-z])(?:dr|prof|mr|mrs|ms|mme|mlle|m|herr|frau|dhr|mevr|sig|sra?)\.?\s+$/i;
 const LETTER = /\p{L}/u;
 
+/** A BIC/SWIFT label touching the token: "BIC: ", "SWIFT-Code:\n", "Code SWIFT : ", "BIC Bank A: ". */
+const BIC_LABEL_BEFORE = /(?<![A-Za-z])(?:bic|swift)(?:[\s/\-]*(?:code|swift|bic))?(?:\s+bank\s+\w{1,3})?[\s:.\-()]*$/i;
+
 /**
  * A registry miss sitting where only a word or a name can (rules-engine#57):
  * joined to a word by a hyphen ("NGUYEN-HOFFMANN"), right after a personal
- * title ("Dr. HOFFMANN"), or eleven letters with no `XXX` branch and no
- * BIC/SWIFT label touching it ("MAANDELIJKS").
+ * title ("Dr. HOFFMANN"), or letters only (eight, or eleven without an `XXX`
+ * branch: "BETALING", "MAANDELIJKS") that the GLEIF mapping does not know and
+ * no BIC/SWIFT label touches.
  */
 function bicShapedWord(text: string, start: number, end: number, token: string): boolean {
   if ((start >= 2 && text[start - 1] === "-" && LETTER.test(text[start - 2])) ||
       (text[end] === "-" && end + 1 < text.length && LETTER.test(text[end + 1]))) return true;
   if (TITLE_BEFORE.test(text.slice(Math.max(0, start - 8), start))) return true;
-  return token.length === 11 && /^[A-Za-z]+$/.test(token) && !token.endsWith("XXX")
-    && cuedType(text, start) !== EntityType.BIC;
+  return /^[A-Za-z]+$/.test(token) && !(token.length === 11 && token.endsWith("XXX"))
+    && !isKnownInstitution(token)
+    && !BIC_LABEL_BEFORE.test(text.slice(Math.max(0, start - 30), start));
 }
 
 // ── Postal code: digits belonging to a longer identifier ────────────────

@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Added
+
+- About 10,400 BIC6 prefixes for the 31 supported countries from the GLEIF BIC-to-LEI mapping (developed by SWIFT, redistributable under the BIC/LEI Mapping Table License Agreement; notice in `NOTICE`), with `scripts/refresh_bic_registry.py` to regenerate them. *(rules-engine#57)*
+
 ### Fixed
 
 - A Luxembourg matricule grouped other than compact or fully spaced was half-masked, or not at all, leaving the birth date readable: `19710314 12345` and `1971 0314 123 45` are now one `NATIONAL_ID`. *(rules-engine#49)*
@@ -38,7 +42,7 @@ which both test suites run.
 - A residence-permit number behind a permit label (`Aufenthaltstitel Nr.:`, `Verblijfsvergunning`, `Titre de séjour`, …) is typed `RESIDENCE_PERMIT` instead of the `NATIONAL_ID`, `PASSPORT` or `PHONE` pattern that happened to fit it; a Spanish NIE stays `NATIONAL_ID`. *(rules-engine#53)*
 - Every date in a document took its type from whichever date label the document carried (an admission date as `DATE_OF_DEATH`, a death date as `DOB`, an invoice date as `DOB`); a `DOB` or `DATE_OF_DEATH` keyword now counts only as the date's own label, or as its column header in a table. *(rules-engine#52)*
 - An insurance claim number behind its label (`Schadeclaim 2026-0412`, `numéro de sinistre`, `claim number`) was masked as a Cypriot `PHONE`; it is now `INTERNAL_ID`, like `Dossiernummer`. *(rules-engine#54)*
-- A surname or ALL-CAPS word near an IBAN was masked as `[BIC]` (`Dr. Joëlle NGUYEN-[BIC]`); a registry miss joined to a word by a hyphen, after a personal title, or eleven letters long without `XXX` or a BIC label is no longer a BIC. *(rules-engine#57)*
+- Surnames and ALL-CAPS words near an IBAN were masked as `[BIC]` (`Dr. Joëlle NGUYEN-[BIC]`, `BETALING`); a letters-only code that misses the registry now needs a `BIC`/`SWIFT` label, unless the bundled GLEIF mapping knows the institution, and a hyphen-joined token or one after a personal title is never a BIC. *(rules-engine#57)*
 - A phone number followed by a date took the date's day (`[PHONE].03.2024`); the Austrian grouped phone pattern no longer ends on the start of a date or time. *(rules-engine#60)*
 - Token suffixes could contain `A`, `E`, `U` and `Y`, against the documented "no vowels" (`POSTAL_CODE_KENE`); the alphabet is now `BCDFGHJKLMNPQRSTVWXZ23456789`. *(rules-engine#55)*
 - The package can be bundled for a browser: `node:crypto` is no longer imported outside a platform module, and the `browser` field selects a Web-Crypto build. *(TypeScript only)* *(rules-engine#56)*

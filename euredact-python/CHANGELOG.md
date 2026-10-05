@@ -13,6 +13,18 @@ narrative lives. Sections here use that vocabulary
 
 ## Unreleased
 
+### Added
+
+- **About 10,400 BIC6 prefixes for the 31 supported countries**, from the GLEIF
+  BIC-to-LEI mapping (September 2026), which SWIFT develops and licenses for
+  redistribution; its required notice ships in `NOTICE` and in the generated
+  module. `scripts/refresh_bic_registry.py` regenerates the list from the
+  monthly file. The mapping decides whether a letters-only code beside an IBAN
+  is a bank or a word; it does not license a code in bare prose, because some
+  ordinary words begin with a real prefix (`DERNIERS` → `DERN`+`IE`). That stays
+  the hand-kept seed's job. Adds about 54 kB to each package's source.
+  *(rules-engine#57)*
+
 ### Fixed
 
 - **A Luxembourg matricule in any grouping but two was half-masked, and its
@@ -127,17 +139,19 @@ narrative lives. Sections here use that vocabulary
   conformance vectors. *(rules-engine#54)*
 
 - **Surnames and ALL-CAPS words near an IBAN were masked as `[BIC]`.** A BIC
-  missing from the registry is still emitted on banking context, which is what
-  catches unlisted bank codes, and that admitted any word whose letters 5-6 are
-  a country code: `Dr. Joëlle NGUYEN-[BIC]` two lines under an IBAN, which also
-  breaks the name apart for the model. Three positions no bank code takes are
-  now refused even with banking context: joined to a word by a hyphen, right
-  after a personal title (`Dr.`, `Mme`, `Herr`, …), and an eleven-letter token
-  without the `XXX` branch code and without a BIC/SWIFT label touching it
-  (`MAANDELIJKS`, `UNIVERSELLE`, `OBLIGATOIRE`). Eight-letter words in prose
-  beside an IBAN (`BETALING`) are not covered: they have the same shape and
-  position as the unlisted codes the context gate exists for. Eight conformance
-  vectors. *(rules-engine#57)*
+  missing from the registry was emitted on banking context alone, and that
+  admitted any word whose letters 5-6 are a country code: `Dr. Joëlle
+  NGUYEN-[BIC]` two lines under an IBAN (which also breaks the name apart for
+  the model), `BETALING`, `VIREMENT`, `DOCUMENT`, `JANSSENS`. Hyphen-joined
+  tokens and tokens right after a personal title are refused outright; any other
+  **letters-only** code (eight letters, or eleven without the `XXX` branch) that
+  misses the registry now needs a `BIC`/`SWIFT` label touching it, unless the
+  bundled GLEIF mapping knows the institution. Measured on 7,571 pipeline
+  documents: 38 false `[BIC]` removed, every real bank code kept, nothing else
+  changed. A code with a digit or an `XXX` branch is no word and keeps the
+  context gate. Five pinned tier-2 inputs were letters-only invented codes; they
+  now pin the label requirement, and the context gate keeps its coverage with
+  digit-bearing codes. *(rules-engine#57)*
 
 - **A phone number followed by a date took the date's day.** `Mob: 0170
   1234567 12.03.2024` became `[PHONE].03.2024`: the Austrian grouped phone
