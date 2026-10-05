@@ -10,8 +10,11 @@ class UKConfig(CountryConfig):
         self.code = "UK"
         self.name = "United Kingdom"
         self.patterns = [
-            # National Insurance Number: LL NN NN NN L
-            PatternDef(entity_type=EntityType.NATIONAL_ID,
+            # National Insurance Number: LL NN NN NN L. A social-security
+            # number, so SSN: the canon defaults NINO to SSN and keeps TAX_ID
+            # for a purely fiscal form, which no pattern can see
+            # (rules-engine#47).
+            PatternDef(entity_type=EntityType.SSN,
                        pattern=r"\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?\d{2}\s?\d{2}\s?\d{2}\s?[ABCD]\b",
                        validator=None,
                        description="UK National Insurance Number — NINO"),

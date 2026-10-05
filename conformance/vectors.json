@@ -4332,6 +4332,49 @@
         "POSTAL_CODE"
       ],
       "notes": "Ditto for a policy number."
+    },
+    {
+      "id": "uk-nino-is-ssn",
+      "text": "National Insurance number: AB 12 34 56 C",
+      "countries": [
+        "GB"
+      ],
+      "mustDetect": {
+        "SSN": [
+          "AB 12 34 56 C"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ]
+    },
+    {
+      "id": "uk-nino-is-ssn-compact",
+      "text": "NI number: AB123456C",
+      "countries": [
+        "GB"
+      ],
+      "mustDetect": {
+        "SSN": [
+          "AB123456C"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ]
+    },
+    {
+      "id": "uk-nino-is-ssn-blind",
+      "text": "NINO AB 12 34 56 C",
+      "countries": null,
+      "mustDetect": {
+        "SSN": [
+          "AB 12 34 56 C"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ]
     }
   ]
 }

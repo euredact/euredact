@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- A UK National Insurance number (NINO) is typed `SSN`, as the canon defaults it, instead of `NATIONAL_ID`; the placeholder changes, the masked characters do not. *(rules-engine#47)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

@@ -613,7 +613,8 @@ const UK: CountryConfig = {
   code: "UK",
   name: "United Kingdom",
   patterns: [
-    p(EntityType.NATIONAL_ID, String.raw`\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?\d{2}\s?\d{2}\s?\d{2}\s?[ABCD]\b`),
+    // UK NINO: a social-security number, so SSN, as the canon defaults it (rules-engine#47).
+    p(EntityType.SSN, String.raw`\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?\d{2}\s?\d{2}\s?\d{2}\s?[ABCD]\b`),
     p(EntityType.HEALTH_INSURANCE, String.raw`\b\d{3}\s?\d{3}\s?\d{4}\b`, "uk_nhs", "", ["NHS", "NHS number", "health number", "NHS no"], true),
     p(EntityType.IBAN, String.raw`\bGB\d{2}\s?[A-Z]{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b`, "iban"),
     p(EntityType.IBAN, String.raw`\bGB\d{2}[A-Z]{4}\d{14}\b`, "iban"),

@@ -11,6 +11,17 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **A UK National Insurance number is `SSN`, not `NATIONAL_ID`.** The NINO
+  pattern returned `NATIONAL_ID`; the project canon types a NINO as a
+  social-security number by default, and as `TAX_ID` only on a purely fiscal
+  form, which a pattern cannot see. Callers see `[SSN]` where they saw
+  `[NATIONAL_ID]`; what is masked does not change. Three conformance vectors.
+  *(rules-engine#47)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added
