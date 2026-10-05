@@ -575,6 +575,16 @@ const NOT_CITY_CODES = new Set([
 
 const CURRENCY_PLATE = /^(?:EUR|USD|GBP|CHF|SEK|NOK|DKK|ISK|CZK|PLN|HUF|RON|BGN|HRK)\s/i;
 
+const ALNUM = /[\p{L}\p{N}]/u;
+
+/** A hyphen glues [start, end) to a letter or digit outside it. */
+function joinedByHyphen(text: string, start: number, end: number): boolean {
+  return (
+    (text[end] === "-" && end + 1 < text.length && ALNUM.test(text[end + 1])) ||
+    (start >= 2 && text[start - 1] === "-" && ALNUM.test(text[start - 2]))
+  );
+}
+
 function suppressPlateInCompound(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.LICENSE_PLATE) return false;
   // Suppress currency + number misread as plate (e.g. "EUR 2")
@@ -583,6 +593,9 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
     const before = text.slice(Math.max(0, match.start - 10), match.start);
     if (/[A-Za-zÄÖÜäöüß]{2,}-$/.test(before)) return true;
   }
+  // Inside a longer hyphen-joined token ("TF-284-KL-00874"): a segment of a
+  // reference, not a plate (rules-engine#50). A spaced dash does not join.
+  if (joinedByHyphen(text, match.start, match.end)) return true;
   const matched = match.text.trim();
   const parts = matched.split(/[\s\-]+/);
 

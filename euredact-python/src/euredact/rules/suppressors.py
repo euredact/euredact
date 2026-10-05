@@ -980,6 +980,16 @@ def suppress_phone_date_overlap(text: str, match: RawMatch) -> bool:
     return bool(_DATE_PATTERN_FULL.match(match.text.strip()))
 
 
+def _joined_by_hyphen(text: str, start: int, end: int) -> bool:
+    """A hyphen glues [start, end) to a letter or digit outside it."""
+    after = text[end:end + 2]
+    before = text[max(0, start - 2):start]
+    return (
+        (len(after) == 2 and after[0] == "-" and after[1].isalnum())
+        or (len(before) == 2 and before[1] == "-" and before[0].isalnum())
+    )
+
+
 def suppress_plate_in_compound(text: str, match: RawMatch) -> bool:
     """Suppress license plates that are part of a hyphenated compound word,
     use a non-city code, or appear in semester/IP context."""
@@ -996,6 +1006,14 @@ def suppress_plate_in_compound(text: str, match: RawMatch) -> bool:
         three_before = text[max(0, match.start - 10):match.start]
         if re.search(r"[A-Za-zÄÖÜäöüß]{2,}-$", three_before):
             return True
+
+    # Inside a longer hyphen-joined token: "TF-284-KL-00874",
+    # "LU-TS-2023-004512". A plate-shaped run with a hyphen glued to another
+    # letter or digit on either side is a segment of a reference, and taking it
+    # left the rest of the reference readable (rules-engine#50). A spaced dash
+    # ("AB-123-CD - stationné") does not join.
+    if _joined_by_hyphen(text, match.start, match.end):
+        return True
 
     matched = match.text.strip()
     parts = re.split(r"[\s\-]+", matched)
