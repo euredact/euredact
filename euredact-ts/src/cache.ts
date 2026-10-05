@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256Hex } from "./platform.js";
 import type { RedactResult } from "./types.js";
 
 // Default ceiling on retained characters, not entries. A count-only cap of
@@ -36,13 +36,7 @@ export class ResultCache {
     // deployment an attacker who can guess a victim's document could submit a
     // same-length colliding one and be served the victim's cached result,
     // detections and raw matched PII included.
-    return createHash("sha256")
-      .update(text)
-      .update("|")
-      .update(sorted.join("|"))
-      .update("|")
-      .update(mode)
-      .digest("hex");
+    return sha256Hex([text, "|", sorted.join("|"), "|", mode]);
   }
 
   get(key: string): RedactResult | null {

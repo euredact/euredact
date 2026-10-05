@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { randomIndex } from "./platform.js";
 
 import { ResultCache } from "./cache.js";
 import { normalize, mapOffsetToOriginal } from "./normalizer.js";
@@ -226,7 +226,7 @@ export class TokenMapper {
         }
         let suffix = "";
         for (let i = 0; i < TOKEN_SUFFIX_LENGTH; i++) {
-          suffix += TOKEN_ALPHABET[randomInt(TOKEN_ALPHABET.length)];
+          suffix += TOKEN_ALPHABET[randomIndex(TOKEN_ALPHABET.length)];
         }
         token = prefix + suffix;
       } while (this.taken.has(token));

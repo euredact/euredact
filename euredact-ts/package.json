@@ -20,6 +20,10 @@
       }
     }
   },
+  "browser": {
+    "./dist/esm/platform.js": "./dist/esm/platform.browser.js",
+    "./dist/cjs/platform.js": "./dist/cjs/platform.browser.js"
+  },
   "files": [
     "dist",
     "README.md",
@@ -54,7 +58,7 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "postbuild:cjs": "echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
-    "test": "npm run test:spec && npm run test:inference && npm run test:cloud && npm run test:tokenize && npm run test:allowlist && npm run test:eval-scoring && npm run test:conformance",
+    "test": "npm run test:spec && npm run test:inference && npm run test:cloud && npm run test:tokenize && npm run test:allowlist && npm run test:eval-scoring && npm run test:platform && npm run test:conformance",
     "benchmark": "node --import tsx src/__tests__/benchmark.ts",
     "prepublishOnly": "npm run build",
     "test:spec": "node --import tsx src/__tests__/spec.ts",
@@ -66,7 +70,8 @@
     "test:cloud": "node --import tsx src/__tests__/cloud.ts",
     "test:tokenize": "node --import tsx src/__tests__/tokenize.ts",
     "test:allowlist": "node --import tsx src/__tests__/allowlist.ts",
-    "test:eval-scoring": "node --import tsx src/__tests__/evalScoring.ts"
+    "test:eval-scoring": "node --import tsx src/__tests__/evalScoring.ts",
+    "test:platform": "node --import tsx src/__tests__/platform.ts"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
