@@ -563,7 +563,8 @@ const LU: CountryConfig = {
   code: "LU",
   name: "Luxembourg",
   patterns: [
-    p(EntityType.NATIONAL_ID, String.raw`\b(?:19|20)\d{2}\s(?:0[1-9]|1[0-2])\s(?:0[1-9]|[12]\d|3[01])\s\d{3}\s\d{2}\b`),
+    // Grouped: one horizontal space is optional at each boundary of YYYY MM DD XXX XX (rules-engine#49).
+    p(EntityType.NATIONAL_ID, String.raw`\b(?:19|20)\d{2}[^\S\r\n]?(?:0[1-9]|1[0-2])[^\S\r\n]?(?:0[1-9]|[12]\d|3[01])[^\S\r\n]?\d{3}[^\S\r\n]?\d{2}\b`),
     p(EntityType.NATIONAL_ID, String.raw`\b(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{5}\b`),
     p(EntityType.IBAN, String.raw`\bLU\d{2}\s?[A-Z0-9]{4}\s?[A-Z0-9]{4}\s?[A-Z0-9]{4}\s?[A-Z0-9]{4}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bLU\s?\d{8}\b`, "vat_lu"),

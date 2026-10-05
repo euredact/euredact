@@ -11,6 +11,25 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **A Luxembourg matricule in any grouping but two was half-masked, and its
+  birth date stayed readable.** The pattern accepted the number compact
+  (`1971031412345`) or fully spaced (`1971 03 14 123 45`) and nothing between,
+  so `19710314 12345` was left entirely in the clear on 0.6.0 (0.5.1 masked the
+  tail as `POSTAL_CODE`) and `1971 0314 123 45` lost only `0314 123 45`, as
+  `PHONE`. The first eight digits are the date of birth. One space is now
+  optional at each boundary of `YYYY MM DD XXX XX`; a line break never joins
+  groups.
+
+  The cost: a 13-digit run whose first eight digits are a valid date, spaced
+  `8 + 5`, now reads as a matricule — `Bestellung 20231105 99812` is
+  `[NATIONAL_ID]` where it was `[PHONE] 99812`. It was over-masked before as
+  well; it is now masked whole under a different type. Seven shared conformance
+  vectors, all groupings plus the line-break case, run in both SDKs. *(rules-engine#49)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added

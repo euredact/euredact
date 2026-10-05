@@ -15,12 +15,16 @@ class LUConfig(CountryConfig):
         self.patterns = [
             # --- Matricule (National ID) ---
             # Format: YYYYMMDDXXXXX (13 digits: birth date + sequence + check)
-            # Spaced: 1985 09 08 149 50 — date prefix makes this distinctive
+            # Grouped: one space (never a line break) is optional at each boundary
+            # of YYYY MM DD XXX XX, so 1985 09 08 149 50, 19850908 14950 and
+            # 1985 0908 149 50 are one span. Requiring every space (or none) left the other groupings to
+            # PHONE and POSTAL_CODE, which took the tail and left the birth date
+            # readable (rules-engine#49).
             PatternDef(
                 entity_type=EntityType.NATIONAL_ID,
-                pattern=r"\b(?:19|20)\d{2}\s(?:0[1-9]|1[0-2])\s(?:0[1-9]|[12]\d|3[01])\s\d{3}\s\d{2}\b",
+                pattern=r"\b(?:19|20)\d{2}[^\S\r\n]?(?:0[1-9]|1[0-2])[^\S\r\n]?(?:0[1-9]|[12]\d|3[01])[^\S\r\n]?\d{3}[^\S\r\n]?\d{2}\b",
                 validator=None,
-                description="Luxembourg Matricule — spaced (YYYY MM DD XXX XX)",
+                description="Luxembourg Matricule — grouped (YYYY MM DD XXX XX, any spaces)",
             ),
             # Matricule compact (no spaces)
             PatternDef(
