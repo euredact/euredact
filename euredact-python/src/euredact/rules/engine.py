@@ -220,6 +220,18 @@ _RETYPABLE_UNCORROBORATED: frozenset[EntityType] = frozenset({
     EntityType.NATIONAL_ID,
 })
 
+# Retypable to RESIDENCE_PERMIT by a permit label touching the span, whatever
+# the country support. A German eAT number has the identity card's alphabet and
+# length, and a Dutch permit number fits the passport pattern, so in a German or
+# Dutch document the pattern is corroborated and the label is still right: the
+# document says what the card is (rules-engine#53). The label must touch the
+# value, so this cannot reach an identifier the permit is merely near.
+#
+# Not a Spanish NIE: the canon keeps it NATIONAL_ID even on a residence card.
+_RETYPABLE_BY_PERMIT_LABEL: frozenset[EntityType] = frozenset({
+    EntityType.NATIONAL_ID, EntityType.PASSPORT,
+})
+
 # Right of the arrow: types a label can assert on its own.
 #
 # PHONE is absent on purpose: "Tel:" in front of something no phone pattern
@@ -231,7 +243,7 @@ _CUE_TARGETS: frozenset[EntityType] = frozenset({
     EntityType.HEALTH_INSURANCE, EntityType.HEALTHCARE_PROVIDER,
     EntityType.CHAMBER_OF_COMMERCE, EntityType.VAT, EntityType.POSTAL_CODE,
     EntityType.PASSPORT, EntityType.INTERNAL_ID, EntityType.BANK_ACCOUNT,
-    EntityType.SECRET,
+    EntityType.SECRET, EntityType.RESIDENCE_PERMIT,
 })
 
 # Which of those a label may also *rescue* — re-admit after its checksum
@@ -259,7 +271,8 @@ _RESCUE_TARGETS: frozenset[EntityType] = frozenset({
 
 
 def _retyped(
-    text: str, start: int, entity_type: object, country_score: float
+    text: str, start: int, entity_type: object, country_score: float,
+    country: str | None = None,
 ) -> EntityType | None:
     """The type a cue overrules *entity_type* with, or None to leave it alone.
 
@@ -267,13 +280,18 @@ def _retyped(
     candidate of the cued type claimed that span — one would have won on the
     cue bonus above. *country_score* is the document's support for the country
     the winning pattern came from; see :data:`_RETYPABLE_UNCORROBORATED`.
+    *country* is that pattern's country; see :data:`_RETYPABLE_BY_PERMIT_LABEL`.
     """
-    if entity_type not in _RETYPABLE and not (
+    general = entity_type in _RETYPABLE or (
         entity_type in _RETYPABLE_UNCORROBORATED and country_score == 0.0
-    ):
+    )
+    by_permit = entity_type in _RETYPABLE_BY_PERMIT_LABEL and country != "ES"
+    if not (general or by_permit):
         return None
     cued = cues.cued_type(text, start)
     if cued is None or cued == entity_type or cued not in _CUE_TARGETS:
+        return None
+    if not general and cued != EntityType.RESIDENCE_PERMIT:
         return None
     return cued
 
@@ -917,7 +935,7 @@ class RuleEngine:
                 )
                 out_of_scope = not in_scope
 
-                retyped = _retyped(text, start, entity_type, score)
+                retyped = _retyped(text, start, entity_type, score, match.country_code)
                 if retyped is not None:
                     # The country came from the pattern that matched, and that
                     # pattern was just overruled: a Finnish phone rule saying

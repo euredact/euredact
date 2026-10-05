@@ -478,7 +478,7 @@ export class RuleEngine {
       // outOfScope, which would otherwise claim the detection belongs to a
       // country the caller did not declare while naming no country at all.
       const retyped = retypedBy(text, match.start, entityType,
-                                countryScores.get(match.countryCode) ?? 0);
+                                countryScores.get(match.countryCode) ?? 0, match.countryCode);
       if (retyped !== null) {
         entityType = retyped;
         country = null;

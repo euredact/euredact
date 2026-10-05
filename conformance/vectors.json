@@ -4756,6 +4756,138 @@
           "AB-123-CD"
         ]
       }
+    },
+    {
+      "id": "residence-permit-be-card-letter",
+      "text": "Verblijfskaart nr. B 565992336 — A-kaart",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "RESIDENCE_PERMIT": [
+          "565992336"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "PASSPORT",
+        "PHONE"
+      ]
+    },
+    {
+      "id": "residence-permit-lu-grouped",
+      "text": "Titre de séjour n° 843-294-189 — carte bleue européenne",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "RESIDENCE_PERMIT": [
+          "843-294-189"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "PASSPORT",
+        "PHONE"
+      ]
+    },
+    {
+      "id": "residence-permit-de-eat-over-id-card",
+      "text": "Identitätsprüfung (KYC): Personalausweis geprüft.\nAufenthaltstitel Nr.: GW2LR308X — Blaue Karte EU",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "RESIDENCE_PERMIT": [
+          "GW2LR308X"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "PASSPORT",
+        "PHONE"
+      ]
+    },
+    {
+      "id": "residence-permit-at-label-run-on",
+      "text": "Nr. des Aufenthaltstitels: 021 333 464 — Rot-Weiß-Rot-Karte",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "RESIDENCE_PERMIT": [
+          "021 333 464"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "PASSPORT",
+        "PHONE"
+      ]
+    },
+    {
+      "id": "residence-permit-at-leading-zeros",
+      "text": "Aufenthaltstitel Nr. 0012345678, „Rot-Weiß-Rot – Karte plus“",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "RESIDENCE_PERMIT": [
+          "0012345678"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "PASSPORT",
+        "PHONE"
+      ]
+    },
+    {
+      "id": "residence-permit-nl-over-passport",
+      "text": "Identiteitscontrole: paspoort gezien.\nVerblijfsvergunning nr.: W07342056 — verblijf bij partner",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "RESIDENCE_PERMIT": [
+          "W07342056"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "PASSPORT",
+        "PHONE"
+      ]
+    },
+    {
+      "id": "residence-permit-label-leaves-a-spanish-nie",
+      "text": "Residence permit: X1234567L",
+      "countries": [
+        "ES"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "X1234567L"
+        ]
+      },
+      "mustNotDetect": [
+        "RESIDENCE_PERMIT"
+      ]
+    },
+    {
+      "id": "residence-permit-label-not-a-passport-label",
+      "text": "Paspoort nr.: W07342056",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "W07342056"
+        ]
+      },
+      "mustNotDetect": [
+        "RESIDENCE_PERMIT"
+      ]
     }
   ]
 }

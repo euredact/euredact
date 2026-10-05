@@ -237,6 +237,28 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         r"|kontonummer|numéro\s*de\s*compte|sort-?code)" + _SEP,
         re.IGNORECASE)),
 
+    # ── Residence permit ───────────────────────────────────────────────
+    # The engine has no permit patterns -- the numbers have no shape of their
+    # own -- so a permit number was masked by whichever ID, passport or phone
+    # pattern fitted it and filed under that type: 129 of 344 planted permit
+    # numbers across BE, LU, DE, AT and NL (rules-engine#53). This label makes
+    # the span RESIDENCE_PERMIT. The tail also admits one capital before the
+    # value, the Belgian card category ("Verblijfskaart nr. B 565992336"); the
+    # letter is a status, not part of the number, and is not masked.
+    #
+    # No Spanish label: the canon keeps the NIE a NATIONAL_ID even on a
+    # residence card, and `_retyped` refuses to move it.
+    (EntityType.RESIDENCE_PERMIT, re.compile(
+        _B + r"(?:aufenthalts(?:titel|erlaubnis|karte|gestattung)"
+        r"|niederlassungs(?:erlaubnis|bewilligung)"
+        r"|verblijfs(?:vergunning|kaart|document|titel)"
+        r"|titre\s*de\s*s[ée]jour|carte\s*de\s*s[ée]jour|permis\s*de\s*s[ée]jour"
+        r"|carte\s*de\s*r[ée]sident"
+        r"|residence\s*(?:permit|card|document)|biometric\s*residence\s*permit"
+        r"|permesso\s*di\s*soggiorno|carta\s*di\s*soggiorno|karta\s*pobytu"
+        r"|uppehållstillstånd|opholdstilladelse|oppholdstillatelse|oleskelulupa)"
+        + _SEP[:-1] + r"(?:[A-Z]\s+)?$", re.IGNORECASE)),
+
     # ── Passport ───────────────────────────────────────────────────────
     (EntityType.PASSPORT, re.compile(
         _B + r"(?:passport(?:\s*(?:no|number))?|paspoort(?:nummer)?"
