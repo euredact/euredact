@@ -4332,6 +4332,52 @@
         "POSTAL_CODE"
       ],
       "notes": "Ditto for a policy number."
+    },
+    {
+      "id": "phone-does-not-take-a-following-dates-day-de",
+      "text": "Mob: 0170 1234567 12.03.2024",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "0170 1234567"
+        ]
+      }
+    },
+    {
+      "id": "phone-does-not-take-a-following-dates-day-at",
+      "text": "Tel. 01 5123456 12.03.2024",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "01 5123456"
+        ]
+      }
+    },
+    {
+      "id": "phone-does-not-take-a-following-dates-day-blind",
+      "text": "Tel. 0664 1234567 12.03.2024",
+      "countries": null,
+      "mustDetect": {
+        "PHONE": [
+          "0664 1234567"
+        ]
+      }
+    },
+    {
+      "id": "phone-at-grouped-still-whole",
+      "text": "Tel. 01 512 3456",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "01 512 3456"
+        ]
+      }
     }
   ]
 }

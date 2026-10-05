@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- A phone number followed by a date took the date's day (`[PHONE].03.2024`); the Austrian grouped phone pattern no longer ends on the start of a date or time. *(rules-engine#60)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

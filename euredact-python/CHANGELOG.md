@@ -11,6 +11,16 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **A phone number followed by a date took the date's day.** `Mob: 0170
+  1234567 12.03.2024` became `[PHONE].03.2024`: the Austrian grouped phone
+  pattern accepted `12` as its last group because `\b` sits between `12` and
+  `.`. The last group may no longer be followed by `.`, `,`, `/` or `:` and a
+  digit. Four conformance vectors. *(rules-engine#60)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added
