@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- A residence-permit number behind a permit label (`Aufenthaltstitel Nr.:`, `Verblijfsvergunning`, `Titre de séjour`, …) is typed `RESIDENCE_PERMIT` instead of the `NATIONAL_ID`, `PASSPORT` or `PHONE` pattern that happened to fit it; a Spanish NIE stays `NATIONAL_ID`. *(rules-engine#53)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

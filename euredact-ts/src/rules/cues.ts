@@ -143,6 +143,11 @@ export const CUES: Array<[EntityType, RegExp]> = [
    /(?<![A-Za-z0-9_])(?:sort\s*code|account\s*(?:no|number)|rekeningnummer|kontonummer|numéro\s*de\s*compte|sort-?code)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Passport.
+  // Residence permit. No permit patterns exist, so a permit number was filed
+  // under whichever ID, passport or phone pattern fitted it (rules-engine#53).
+  // The tail admits the Belgian card category ("nr. B 565992336"), unmasked.
+  [EntityType.RESIDENCE_PERMIT,
+   /(?<![A-Za-z0-9_])(?:aufenthalts(?:titel|erlaubnis|karte|gestattung)|niederlassungs(?:erlaubnis|bewilligung)|verblijfs(?:vergunning|kaart|document|titel)|titre\s*de\s*s[ée]jour|carte\s*de\s*s[ée]jour|permis\s*de\s*s[ée]jour|carte\s*de\s*r[ée]sident|residence\s*(?:permit|card|document)|biometric\s*residence\s*permit|permesso\s*di\s*soggiorno|carta\s*di\s*soggiorno|karta\s*pobytu|uppehållstillstånd|opholdstilladelse|oppholdstillatelse|oleskelulupa)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*(?:[A-Z]\s+)?$/i],
   [EntityType.PASSPORT,
    /(?<![A-Za-z0-9_])(?:passport(?:\s*(?:no|number))?|paspoort(?:nummer)?|reisepass(?:nummer)?|passeport|passnummer)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
@@ -213,6 +218,14 @@ const RETYPABLE = new Set<string>([
 const RETYPABLE_UNCORROBORATED = new Set<string>([EntityType.NATIONAL_ID]);
 
 /**
+ * Retypable to RESIDENCE_PERMIT by a permit label touching the span, whatever
+ * the country support: a German eAT number fits the identity-card pattern and a
+ * Dutch permit number the passport pattern (rules-engine#53). Not a Spanish
+ * NIE, which the canon keeps NATIONAL_ID.
+ */
+const RETYPABLE_BY_PERMIT_LABEL = new Set<string>([EntityType.NATIONAL_ID, EntityType.PASSPORT]);
+
+/**
  * Types a label can assert on its own.
  *
  * PHONE is absent on purpose: "Tel:" in front of something no phone pattern
@@ -225,7 +238,7 @@ export const CUE_TARGETS = new Set<string>([
   EntityType.HEALTH_INSURANCE, EntityType.HEALTHCARE_PROVIDER,
   EntityType.CHAMBER_OF_COMMERCE, EntityType.VAT, EntityType.POSTAL_CODE,
   EntityType.PASSPORT, EntityType.INTERNAL_ID, EntityType.BANK_ACCOUNT,
-  EntityType.SECRET,
+  EntityType.SECRET, EntityType.RESIDENCE_PERMIT,
 ]);
 
 /**
@@ -266,12 +279,15 @@ export const RESCUE_TARGETS = new Set<string>([
  */
 export function retypedBy(
   text: string, start: number, entityType: EntityType | string,
-  countryScore: number,
+  countryScore: number, country: string | null = null,
 ): EntityType | null {
   const type = String(entityType);
-  if (!RETYPABLE.has(type)
-      && !(RETYPABLE_UNCORROBORATED.has(type) && countryScore === 0)) return null;
+  const general = RETYPABLE.has(type)
+      || (RETYPABLE_UNCORROBORATED.has(type) && countryScore === 0);
+  const byPermit = RETYPABLE_BY_PERMIT_LABEL.has(type) && country !== "ES";
+  if (!general && !byPermit) return null;
   const cued = cuedType(text, start);
   if (cued === null || cued === entityType || !CUE_TARGETS.has(String(cued))) return null;
+  if (!general && cued !== EntityType.RESIDENCE_PERMIT) return null;
   return cued;
 }

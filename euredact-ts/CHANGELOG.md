@@ -11,6 +11,26 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **A residence-permit number was masked as a national ID, a passport or a
+  phone number, never as `RESIDENCE_PERMIT`.** The engine has no permit
+  patterns, since permit numbers have no shape of their own, so whichever
+  pattern fitted the value named it: 129 of 344 planted permit numbers across
+  BE, LU, DE, AT and NL came back under a wrong type. A permit label touching
+  the value (`Aufenthaltstitel Nr.:`, `Verblijfsvergunning nr.:`, `Titre de
+  séjour n°`, `residence permit`, `karta pobytu`, …) now types it
+  `RESIDENCE_PERMIT`. It overrules a `PHONE` as any label does, and also a
+  `NATIONAL_ID` or `PASSPORT` the country supports, because a German eAT number
+  fits the identity-card pattern and a Dutch permit the passport one, and the
+  label is the better evidence. A Spanish NIE stays `NATIONAL_ID`, as the canon
+  requires. The Belgian card category before the number (`B 565992336`) is
+  allowed between label and value and is not masked: it is a status, not part
+  of the number. A permit number nothing detects is still not detected; that
+  is the LLM tier's. Eight conformance vectors. *(rules-engine#53)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added
