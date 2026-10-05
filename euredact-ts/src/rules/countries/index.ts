@@ -347,8 +347,9 @@ const DE: CountryConfig = {
     p(EntityType.NATIONAL_ID, String.raw`\b[CFGHJKLMNPRTVWXYZ][0-9CFGHJKLMNPRTVWXYZ]{8}\d?\b`, null, "", ["Personalausweis", "Personalausweisnummer", "Ausweis", "Ausweisnummer", "Ausweis-Nr", "identity card", "Identitätskarte", "Perso", "PA-Nummer"], true),
     p(EntityType.IBAN, String.raw`\bDE\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bDE\s?\d{9}\b`, "vat_de"),
-    p(EntityType.PHONE, String.raw`\b0[1-9]\d{1,4}[\s/\-]?\d{3,8}\b`),
-    p(EntityType.PHONE, String.raw`\+49\s?\d{2,5}[\s/\-]?\d{3,8}\b`),
+    // Prefix may be set off by " / "; up to three trailing two-digit groups (rules-engine#51).
+    p(EntityType.PHONE, String.raw`\b0[1-9]\d{1,4}(?:\s?[/\-]\s?|\s)?\d{3,8}\b(?:[ \-]\d{2}\b(?![.,/:]\d)){0,3}`),
+    p(EntityType.PHONE, String.raw`\+49\s?\d{2,5}(?:\s?[/\-]\s?|\s)?\d{3,8}\b(?:[ \-]\d{2}\b(?![.,/:]\d)){0,3}`),
     p(EntityType.PASSPORT, String.raw`\b[CFGHJK][0-9CFGHJKLMNPRTVWXYZ]{8}\d?\b`, null, "", PASSPORT_CONTEXT, true),
     // The separator after the city code is mandatory. When it was optional, a
     // contiguous letter run split across both groups and the hyphen was

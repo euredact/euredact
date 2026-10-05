@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- German phone numbers with trailing two-digit groups were cut short (`+49 170 1234567 85 21` left `85 21` readable), and a prefix set off by ` / ` was not detected at all. *(rules-engine#51)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

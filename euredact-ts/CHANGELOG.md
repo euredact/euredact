@@ -11,6 +11,20 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **German phone numbers with trailing two-digit groups were cut short, and
+  `0170 / 123 45 85 21` was not detected at all.** Both German phone patterns
+  allowed one separator and one subscriber block, so `+49 170 1234567 85 21`
+  left `85 21` readable and `0151-2345 85 21` left `21`; a slash with spaces
+  round it (`0170 / …`, `030 / 1234567`) matched nothing. The prefix may now be
+  set off by ` / `, and up to three two-digit groups may follow the subscriber
+  block. A pair followed by `.`, `,`, `/` or `:` and a digit is not taken, so the
+  day of a following date stays out of the span. Five conformance vectors.
+  *(rules-engine#51)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added

@@ -4332,6 +4332,71 @@
         "POSTAL_CODE"
       ],
       "notes": "Ditto for a policy number."
+    },
+    {
+      "id": "de-mobile-intl-trailing-pairs",
+      "text": "Mob: +49 170 1234567 85 21",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "+49 170 1234567 85 21"
+        ]
+      },
+      "expectRedactedText": "Mob: [PHONE]"
+    },
+    {
+      "id": "de-mobile-hyphen-trailing-pairs",
+      "text": "Mob: 0151-2345 85 21",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "0151-2345 85 21"
+        ]
+      },
+      "expectRedactedText": "Mob: [PHONE]"
+    },
+    {
+      "id": "de-mobile-spaced-slash-grouped",
+      "text": "Mob: 0170 / 123 45 85 21",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "0170 / 123 45 85 21"
+        ]
+      },
+      "expectRedactedText": "Mob: [PHONE]"
+    },
+    {
+      "id": "de-mobile-intl-all-pairs",
+      "text": "Mob: +49 172 45 67 85 21",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "+49 172 45 67 85 21"
+        ]
+      },
+      "expectRedactedText": "Mob: [PHONE]"
+    },
+    {
+      "id": "de-landline-spaced-slash",
+      "text": "Tel.: 030 / 1234567",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "030 / 1234567"
+        ]
+      },
+      "expectRedactedText": "Tel.: [PHONE]"
     }
   ]
 }
