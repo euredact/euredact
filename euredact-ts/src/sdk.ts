@@ -166,11 +166,12 @@ function ontoOriginal(
 }
 
 /**
- * Characters a token suffix is drawn from. No vowels, so a suffix never spells
- * a word; no 0/1/I/O, so it survives being read back by a person; no
- * underscore, so the type prefix stays unambiguous.
+ * Characters a token suffix is drawn from. No vowels (and no Y), so a suffix
+ * never spells a word; no 0/1/I/O, so it survives being read back by a person;
+ * no underscore, so the type prefix stays unambiguous. A, E, U and Y were in it
+ * until rules-engine#55, against this comment.
  */
-export const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const TOKEN_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ23456789";
 export const TOKEN_SUFFIX_LENGTH = 4;
 const TOKEN_MAX_DRAWS = 100;
 

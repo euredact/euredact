@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- Token suffixes could contain `A`, `E`, `U` and `Y`, against the documented "no vowels" (`POSTAL_CODE_KENE`); the alphabet is now `BCDFGHJKLMNPQRSTVWXZ23456789`. *(rules-engine#55)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

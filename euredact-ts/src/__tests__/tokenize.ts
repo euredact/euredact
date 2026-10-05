@@ -43,6 +43,12 @@ function det(start: number, end: number, text: string, entityType: EntityType | 
 
 // ── Tokens ─────────────────────────────────────────────────────────────────
 
+test("the alphabet keeps its documented contract", () => {
+  // rules-engine#55: documented as vowel-free while A, E, U and Y were in it.
+  for (const ch of "AEIOUY01") assert.ok(!TOKEN_ALPHABET.includes(ch), `alphabet contains ${ch}`);
+  assert.equal(new Set(TOKEN_ALPHABET).size, TOKEN_ALPHABET.length);
+});
+
 test("the prompt use case round-trips", () => {
   const r = new EuRedact().redact(PROMPT, { countries: ["BE"], tokenize: true });
   assert.ok(!r.redactedText.includes("joren.janssens@euredact.be"));
@@ -108,11 +114,11 @@ testAsync("the exclusivity guard runs before the cloud dispatch", async () => {
 });
 
 test("a document that already holds tokens is not collided with", () => {
-  const text = "Reply to EMAIL_ABCD and jan@example.com";
+  const text = "Reply to EMAIL_BCDF and jan@example.com";
   const mapper = new TokenMapper(text, [det(24, 39, "jan@example.com", EntityType.EMAIL)]);
   const seen = new Set<string>();
   for (let i = 0; i < 50; i++) seen.add(mapper.getToken(det(0, 1, "", EntityType.EMAIL), `v${i}`));
-  assert.ok(!seen.has("EMAIL_ABCD"));
+  assert.ok(!seen.has("EMAIL_BCDF"));
   assert.equal(seen.size, 50);
 });
 

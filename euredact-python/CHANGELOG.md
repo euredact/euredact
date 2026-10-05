@@ -11,6 +11,19 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **Token suffixes contained vowels despite the documented "no vowels".**
+  `TOKEN_ALPHABET` held `A`, `E`, `U` and `Y`, so a suffix could spell a word —
+  a real call produced `POSTAL_CODE_KENE`. The alphabet is now
+  `BCDFGHJKLMNPQRSTVWXZ23456789`: 28 characters, about 615,000 four-character
+  suffixes. Tokens minted by earlier versions are still recognised as the
+  engine's own markers on a second pass, and `restore()` reads the mapping,
+  not the alphabet, so existing mappings keep working. A test holds the
+  alphabet to its contract. *(rules-engine#55)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added
