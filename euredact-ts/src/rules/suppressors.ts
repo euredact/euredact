@@ -1005,7 +1005,8 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
   if (DELIMITED_FIELD_TYPES.has(match.patternDef.entityType) &&
       fillsADelimitedField(text, match.start, match.end)) return false;
   if (DATE_LABEL_TYPES.has(match.patternDef.entityType)) {
-    return !labelsThisDate(text, match.start, match.end, match.patternDef.contextKeywords);
+    return !labelsThisDate(text, match.start, match.end, match.patternDef.contextKeywords,
+                           match.patternDef.entityType);
   }
   const [before, after] = getContext(text, match.start, match.end);
   const context = (before + " " + after).toLowerCase();
@@ -1024,7 +1025,25 @@ const ANY_DATE = /\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}/;
  * the window typed every date from whichever date label the document carried
  * (rules-engine#52).
  */
-function labelsThisDate(text: string, start: number, end: number, keywords: string[]): boolean {
+/** A date followed by a list separator: an item of the list a label introduces. */
+const LIST_ITEM = /\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}\s*(?:,|;|–|&|\band\b|\ben\b|\bet\b|\bund\b|\bor\b|\bof\b|\bou\b|\boder\b|\brespectievelijk\b|\bbzw\.?)\s*/g;
+
+/** Punctuation and at most two short words ("e.g.", "bv.", "op") between label and date. */
+const LABEL_TAIL = /^[\s:.,()\-]*(?:\p{L}{1,4}(?:\.\p{L}{1,2})*\.?(?:[\s:.,()\-]+|$)){0,2}$/u;
+
+/** The birth sign "°" directly before the date, but not the number sign "n°". */
+const BIRTH_SIGN = /(?<![a-z])°\s?$/;
+
+/** No other date between a label and the date, except items of its list. */
+function nothingButAListBetween(gap: string): boolean {
+  if (!ANY_DATE.test(gap)) return true;
+  const rest = gap.replace(LIST_ITEM, " ");
+  return !ANY_DATE.test(rest) && LABEL_TAIL.test(rest);
+}
+
+function labelsThisDate(
+  text: string, start: number, end: number, keywords: string[], entityType?: EntityType | string,
+): boolean {
   const [before, after] = getContext(text, start, end);
   const lowerBefore = before.toLowerCase();
   const lowerAfter = after.toLowerCase();
@@ -1032,11 +1051,12 @@ function labelsThisDate(text: string, start: number, end: number, keywords: stri
   // the label was asked as a question (a call transcript's answer turn);
   // a column header is a fallback and never overrules a label of the date's own.
   const lineStart = lowerBefore.lastIndexOf("\n") + 1;
-  const opensLine = lowerBefore.slice(lineStart).replace(/[ \t:|;*\-•]/g, "") === "";
+  const opensLine = lowerBefore.slice(lineStart).replace(/[ \t:|;*\-•(\[]/g, "") === "";
+  if (entityType === EntityType.DOB && BIRTH_SIGN.test(lowerBefore)) return true;
   for (const keyword of keywords) {
     const kw = keyword.toLowerCase();
     const i = lowerBefore.lastIndexOf(kw);
-    if (i >= 0 && !ANY_DATE.test(lowerBefore.slice(i + kw.length))
+    if (i >= 0 && nothingButAListBetween(lowerBefore.slice(i + kw.length))
         && (i >= lineStart || opensLine
             || lowerBefore.slice(i + kw.length, lineStart).includes("?"))) return true;
     const j = lowerAfter.indexOf(kw);
