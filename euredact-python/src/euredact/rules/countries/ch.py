@@ -90,7 +90,9 @@ class CHConfig(CountryConfig):
             ),
             PatternDef(
                 entity_type=EntityType.POSTAL_CODE,
-                pattern=r"(?<=, )[1-9]\d{3}(?= [A-Z])",
+                # "…, 8004 Zürich", and the cross-border form "…, CH-8004 Zürich"
+                # or a letterhead line "CH-8004 Zürich" (rules-engine#58).
+                pattern=r"(?:(?<=, )|(?<=, CH-)|(?<=^CH-)|(?<=\nCH-))[1-9]\d{3}(?= [A-Z])",
                 validator=None,
                 description="Swiss postal code — in address structure",
             ),

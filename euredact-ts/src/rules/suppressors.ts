@@ -51,6 +51,16 @@ const HASH_BEFORE = /#\s*$/;
 // A short uppercase tag hyphenated to the number: "IR-43433", "INC-2024".
 const REF_PREFIX_BEFORE = /(?:^|[\s([])[A-Z]{2,5}-$/;
 
+// The cross-border address form, "CH-8004 Zürich": a country code hyphenated to
+// a postal code, told apart from a reference tag by position -- it opens an
+// address line and a place name follows (rules-engine#58).
+const COUNTRY_PREFIX_OPENS_LINE = /(?:^|\n|,)[ \t]*([A-Z]{2})-$/;
+const POSTAL_PREFIX_COUNTRIES = new Set([
+  "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI",
+  "FR", "GB", "GR", "HR", "HU", "IE", "IS", "IT", "LI", "LT", "LU", "LV",
+  "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK", "UK",
+]);
+
 const LEGAL_BEFORE = /(?:Art(?:ikel|icle|\.)|§|Artikel|Section|Sectie|Afdeling|paragraaf|Absatz|alinéa|punt|point|Punkt|lid)\s*$/i;
 
 const MATH_BEFORE = /[=+\-×÷*/]\s*$/;
@@ -332,7 +342,22 @@ function suppressReference(text: string, match: RawMatch): boolean {
   const [before] = getContext(text, match.start, match.end);
   if (REFERENCE_BEFORE.test(before)) return true;
   const adjacent = text.slice(Math.max(0, match.start - 8), match.start);
-  return HASH_BEFORE.test(adjacent) || REF_PREFIX_BEFORE.test(adjacent);
+  if (HASH_BEFORE.test(adjacent)) return true;
+  if (!REF_PREFIX_BEFORE.test(adjacent)) return false;
+  return !(
+    match.patternDef.entityType === EntityType.POSTAL_CODE &&
+    isCountryPrefixedAddress(text, match.start, match.end)
+  );
+}
+
+/** "CH-8004 Zürich" on an address line, not the reference "IT-20431". */
+function isCountryPrefixedAddress(text: string, start: number, end: number): boolean {
+  const found = COUNTRY_PREFIX_OPENS_LINE.exec(text.slice(Math.max(0, start - 12), start));
+  return (
+    found !== null &&
+    POSTAL_PREFIX_COUNTRIES.has(found[1]) &&
+    CITY_AFTER.test(text.slice(end, end + 24))
+  );
 }
 
 function suppressLegal(text: string, match: RawMatch): boolean {
@@ -421,7 +446,9 @@ const POSTAL_LABEL_TOUCHING = new RegExp(
 
 // A capitalised place name after the code: "2000 Antwerpen". A following label
 // ("1970 Fødselsnummer:") is excluded by the colon.
-const CITY_AFTER = /^[ \t](?!\w+\s*:)[A-ZÀ-ÞŁŠŽ][\w\-']{2,}/u;
+// `\p{L}\p{N}_` rather than `\w`: JS `\w` is ASCII-only, so "8004 Zürich" failed
+// at the ü here while Python's Unicode `\w` accepted it (rules-engine#58).
+const CITY_AFTER = /^[ \t](?![\p{L}\p{N}_]+\s*:)[A-ZÀ-ÞŁŠŽ][\p{L}\p{N}_\-']{2,}/u;
 
 // Every position is local to the value or inside its own sentence. Proximity to
 // an address *word* anywhere in a 300-character window is what the old rescue

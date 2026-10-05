@@ -400,7 +400,7 @@ const CH: CountryConfig = {
     p(EntityType.PHONE, String.raw`\+41\s?\d{2}\s?\d{3}\s?\d{2}\s?\d{2}`),
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z]{2}\s?\d{1,6}\b`, null, "", ["Kontrollschild", "Nummernschild", "plaque", "immatriculation", "Kennzeichen"], true),
     p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{3}\b`, null, "", ["PLZ", "Postleitzahl", "code postal", "NPA", "Adresse", "Anschrift", "adresse", "rue", "Straße", "Str.", "Gasse", "chemin", "Postal:", "Wohnort"], true),
-    p(EntityType.POSTAL_CODE, String.raw`(?<=, )[1-9]\d{3}(?= [A-Z])`),
+    p(EntityType.POSTAL_CODE, String.raw`(?:(?<=, )|(?<=, CH-)|(?<=^CH-)|(?<=\nCH-))[1-9]\d{3}(?= [A-Z])`), // also "…, CH-8004 Zürich" and a "CH-8004 Zürich" line (rules-engine#58)
   ],
 };
 
