@@ -27,6 +27,11 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- A postal code with a two-letter country prefix (`CH-8004 Zürich`, `DE-10115 Berlin`, `NL-1012 LG Amsterdam`) was not masked: the prefix was read as a reference tag. References such as `IR-43433` and `PV-2026-LU-09143` stay unmasked. *(rules-engine#58)*
+- A place name with a non-ASCII letter (`Zürich`) did not count as one in the address-structure check. *(TypeScript only)* *(rules-engine#58)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

@@ -100,6 +100,19 @@ _HASH_BEFORE = re.compile(r"#\s*$")
 #: postal code is never introduced this way.
 _REF_PREFIX_BEFORE = re.compile(r"(?:^|[\s(\[])[A-Z]{2,5}-$")
 
+#: The cross-border address form, "CH-8004 Zürich", "NL-1012 LG Amsterdam":
+#: an ISO country code hyphenated to a postal code. `_REF_PREFIX_BEFORE` reads
+#: those two letters as a reference tag, which is what it is for "IR-43433",
+#: so the address form is told apart by position rather than by shape -- the
+#: prefix opens an address line (after a comma or at a line start) and a place
+#: name follows the code (rules-engine#58).
+_COUNTRY_PREFIX_OPENS_LINE = re.compile(r"(?:^|\n|,)[ \t]*([A-Z]{2})-$")
+_POSTAL_PREFIX_COUNTRIES = frozenset({
+    "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI",
+    "FR", "GB", "GR", "HR", "HU", "IE", "IS", "IT", "LI", "LT", "LU", "LV",
+    "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK", "UK",
+})
+
 # ── Legal / structural reference ────────────────────────────────────────
 
 _LEGAL_BEFORE = re.compile(
@@ -674,7 +687,24 @@ def suppress_reference(text: str, match: RawMatch) -> bool:
     if _REFERENCE_BEFORE.search(before):
         return True
     adjacent = text[max(0, match.start - 8):match.start]
-    return bool(_HASH_BEFORE.search(adjacent) or _REF_PREFIX_BEFORE.search(adjacent))
+    if _HASH_BEFORE.search(adjacent):
+        return True
+    if not _REF_PREFIX_BEFORE.search(adjacent):
+        return False
+    return not (
+        match.pattern_def.entity_type == EntityType.POSTAL_CODE
+        and _is_country_prefixed_address(text, match.start, match.end)
+    )
+
+
+def _is_country_prefixed_address(text: str, start: int, end: int) -> bool:
+    """"CH-8004 Zürich" on an address line, not the reference "IT-20431"."""
+    found = _COUNTRY_PREFIX_OPENS_LINE.search(text[max(0, start - 12):start])
+    return (
+        found is not None
+        and found.group(1) in _POSTAL_PREFIX_COUNTRIES
+        and bool(_CITY_AFTER.match(text[end:end + 24]))
+    )
 
 
 def suppress_legal(text: str, match: RawMatch) -> bool:

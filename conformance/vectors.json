@@ -4332,6 +4332,126 @@
         "POSTAL_CODE"
       ],
       "notes": "Ditto for a policy number."
+    },
+    {
+      "id": "postal-two-letter-prefix-ch",
+      "text": "Hauptstrasse 5, CH-8004 Zürich",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "8004"
+        ]
+      }
+    },
+    {
+      "id": "postal-two-letter-prefix-ch-blind",
+      "text": "Hauptstrasse 5, CH-8004 Zürich",
+      "countries": null,
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "8004"
+        ]
+      }
+    },
+    {
+      "id": "postal-two-letter-prefix-de",
+      "text": "Hauptstraße 5, DE-10115 Berlin",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "10115"
+        ]
+      }
+    },
+    {
+      "id": "postal-two-letter-prefix-at",
+      "text": "Hauptstraße 5, AT-1010 Wien",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1010"
+        ]
+      }
+    },
+    {
+      "id": "postal-two-letter-prefix-be",
+      "text": "Rue Royale 5, BE-1000 Bruxelles",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1000"
+        ]
+      }
+    },
+    {
+      "id": "postal-two-letter-prefix-nl",
+      "text": "Damrak 5, NL-1012 LG Amsterdam",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1012 LG"
+        ]
+      }
+    },
+    {
+      "id": "postal-two-letter-prefix-lu",
+      "text": "Rue de la Gare 3, LU-1611 Luxembourg",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1611"
+        ]
+      }
+    },
+    {
+      "id": "postal-two-letter-prefix-own-line",
+      "text": "Muster AG\nHauptstrasse 5\nCH-8004 Zürich",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "8004"
+        ]
+      }
+    },
+    {
+      "id": "postal-ref-tag-not-a-country",
+      "text": "Incident report IR-43433 Netzwerk",
+      "countries": null,
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-ref-tag-country-after-label",
+      "text": "Ticket: IT-20431 Drucker defekt",
+      "countries": null,
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-ref-tag-country-no-place",
+      "text": "Hauptstrasse 5, CH-8004 wurde geschlossen",
+      "countries": [
+        "CH"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
     }
   ]
 }

@@ -11,6 +11,29 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **A postal code with a two-letter country prefix was not masked.**
+  `Hauptstrasse 5, CH-8004 Zürich`, `DE-10115 Berlin`, `NL-1012 LG Amsterdam`
+  and the AT, BE and LU forms came out unchanged, with or without `countries`;
+  `D-10115` and `L-1611` were masked only because the prefix had one letter.
+  `suppress_reference` reads 2-5 capitals and a hyphen before a number as a
+  document tag (`IR-43433`, `INC-2024`), and `CH-` has that shape. A two-letter
+  tag is now an address when it is a supported country code, it opens an
+  address line (after a comma or at a line start) and a capitalised place name
+  follows the code. `IR-43433`, `Ticket: IT-20431 Drucker` and the #31
+  references (`PV-2026-LU-09143`) stay unmasked.
+
+  Switzerland needed one more step: its postal pattern is context-gated and
+  its address-structure fallback required the code straight after the comma.
+  The fallback now also accepts `, CH-` and a `CH-` line start. Adding the Swiss
+  spelling `Strasse` to the context keywords was tried and rejected: it masked
+  `Zimmer 2041`, `4500 Franken` and a year in the same sentence as a street.
+  Eleven conformance vectors, three of them references that must stay
+  unmasked. *(rules-engine#58)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added
