@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- A surname or ALL-CAPS word near an IBAN was masked as `[BIC]` (`Dr. Joëlle NGUYEN-[BIC]`); a registry miss joined to a word by a hyphen, after a personal title, or eleven letters long without `XXX` or a BIC label is no longer a BIC. *(rules-engine#57)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

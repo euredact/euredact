@@ -11,6 +11,23 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **Surnames and ALL-CAPS words near an IBAN were masked as `[BIC]`.** A BIC
+  missing from the registry is still emitted on banking context, which is what
+  catches unlisted bank codes, and that admitted any word whose letters 5-6 are
+  a country code: `Dr. Joëlle NGUYEN-[BIC]` two lines under an IBAN, which also
+  breaks the name apart for the model. Three positions no bank code takes are
+  now refused even with banking context: joined to a word by a hyphen, right
+  after a personal title (`Dr.`, `Mme`, `Herr`, …), and an eleven-letter token
+  without the `XXX` branch code and without a BIC/SWIFT label touching it
+  (`MAANDELIJKS`, `UNIVERSELLE`, `OBLIGATOIRE`). Eight-letter words in prose
+  beside an IBAN (`BETALING`) are not covered: they have the same shape and
+  position as the unlisted codes the context gate exists for. Eight conformance
+  vectors. *(rules-engine#57)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added
