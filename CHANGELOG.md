@@ -30,6 +30,18 @@ which both test suites run.
 ### Fixed
 
 - A Luxembourg matricule grouped other than compact or fully spaced was half-masked, or not at all, leaving the birth date readable: `19710314 12345` and `1971 0314 123 45` are now one `NATIONAL_ID`. *(rules-engine#49)*
+- German phone numbers with trailing two-digit groups were cut short (`+49 170 1234567 85 21` left `85 21` readable), and a prefix set off by ` / ` was not detected at all. *(rules-engine#51)*
+- A postal code with a two-letter country prefix (`CH-8004 Zürich`, `DE-10115 Berlin`, `NL-1012 LG Amsterdam`) was not masked: the prefix was read as a reference tag. References such as `IR-43433` and `PV-2026-LU-09143` stay unmasked. *(rules-engine#58)*
+- A place name with a non-ASCII letter (`Zürich`) did not count as one in the address-structure check. *(TypeScript only)* *(rules-engine#58)*
+- A UK National Insurance number (NINO) is typed `SSN`, as the canon defaults it, instead of `NATIONAL_ID`; the placeholder changes, the masked characters do not. *(rules-engine#47)*
+- A licence plate was cut out of a longer hyphen-joined reference (`TF-284-KL-00874` → `[LICENSE_PLATE]-00874`); a plate candidate glued to more of the token by a hyphen is no longer a plate. *(rules-engine#50)*
+- A residence-permit number behind a permit label (`Aufenthaltstitel Nr.:`, `Verblijfsvergunning`, `Titre de séjour`, …) is typed `RESIDENCE_PERMIT` instead of the `NATIONAL_ID`, `PASSPORT` or `PHONE` pattern that happened to fit it; a Spanish NIE stays `NATIONAL_ID`. *(rules-engine#53)*
+- Every date in a document took its type from whichever date label the document carried (an admission date as `DATE_OF_DEATH`, a death date as `DOB`, an invoice date as `DOB`); a `DOB` or `DATE_OF_DEATH` keyword now counts only as the date's own label, or as its column header in a table. *(rules-engine#52)*
+- An insurance claim number behind its label (`Schadeclaim 2026-0412`, `numéro de sinistre`, `claim number`) was masked as a Cypriot `PHONE`; it is now `INTERNAL_ID`, like `Dossiernummer`. *(rules-engine#54)*
+- A surname or ALL-CAPS word near an IBAN was masked as `[BIC]` (`Dr. Joëlle NGUYEN-[BIC]`); a registry miss joined to a word by a hyphen, after a personal title, or eleven letters long without `XXX` or a BIC label is no longer a BIC. *(rules-engine#57)*
+- A phone number followed by a date took the date's day (`[PHONE].03.2024`); the Austrian grouped phone pattern no longer ends on the start of a date or time. *(rules-engine#60)*
+- Token suffixes could contain `A`, `E`, `U` and `Y`, against the documented "no vowels" (`POSTAL_CODE_KENE`); the alphabet is now `BCDFGHJKLMNPQRSTVWXZ23456789`. *(rules-engine#55)*
+- The package can be bundled for a browser: `node:crypto` is no longer imported outside a platform module, and the `browser` field selects a Web-Crypto build. *(TypeScript only)* *(rules-engine#56)*
 
 ## [0.6.0] - 2026-10-05
 

@@ -30,6 +30,130 @@ narrative lives. Sections here use that vocabulary
   well; it is now masked whole under a different type. Seven conformance
   vectors, all groupings plus the line-break case. *(rules-engine#49)*
 
+- **German phone numbers with trailing two-digit groups were cut short, and
+  `0170 / 123 45 85 21` was not detected at all.** Both German phone patterns
+  allowed one separator and one subscriber block, so `+49 170 1234567 85 21`
+  left `85 21` readable and `0151-2345 85 21` left `21`; a slash with spaces
+  round it (`0170 / …`, `030 / 1234567`) matched nothing. The prefix may now be
+  set off by ` / `, and up to three two-digit groups may follow the subscriber
+  block. A pair followed by `.`, `,`, `/` or `:` and a digit is not taken, so the
+  day of a following date stays out of the span, and one followed by `-` and a
+  digit (an extension, `059133 60-3333`) is left to the shorter match. The
+  units guard now reads only the number's own line: with the longer span,
+  `+49 172 634 85 21` followed by an e-mail address starting `m.` on the next
+  line read as "21 m" and the whole number was dropped. Eight conformance
+  vectors. *(rules-engine#51)*
+
+- **A postal code with a two-letter country prefix was not masked.**
+  `Hauptstrasse 5, CH-8004 Zürich`, `DE-10115 Berlin`, `NL-1012 LG Amsterdam`
+  and the AT, BE and LU forms came out unchanged, with or without `countries`;
+  `D-10115` and `L-1611` were masked only because the prefix had one letter.
+  `suppress_reference` reads 2-5 capitals and a hyphen before a number as a
+  document tag (`IR-43433`, `INC-2024`), and `CH-` has that shape. A two-letter
+  tag is now an address when it is a supported country code, it opens an
+  address line (after a comma or at a line start) and a capitalised place name
+  follows the code. `IR-43433`, `Ticket: IT-20431 Drucker` and the #31
+  references (`PV-2026-LU-09143`) stay unmasked.
+
+  Switzerland needed one more step: its postal pattern is context-gated and
+  its address-structure fallback required the code straight after the comma.
+  The fallback now also accepts `, CH-` and a `CH-` line start. Adding the Swiss
+  spelling `Strasse` to the context keywords was tried and rejected: it masked
+  `Zimmer 2041`, `4500 Franken` and a year in the same sentence as a street.
+  Eleven conformance vectors, three of them references that must stay
+  unmasked. *(rules-engine#58)*
+
+- **A UK National Insurance number is `SSN`, not `NATIONAL_ID`.** The NINO
+  pattern returned `NATIONAL_ID`; the project canon types a NINO as a
+  social-security number by default, and as `TAX_ID` only on a purely fiscal
+  form, which a pattern cannot see. Callers see `[SSN]` where they saw
+  `[NATIONAL_ID]`; what is masked does not change. Three conformance vectors.
+  *(rules-engine#47)*
+
+- **A licence plate was cut out of a longer reference.** `Référence dossier :
+  TF-284-KL-00874` became `[LICENSE_PLATE]-00874`, and `LU-TS-2023-004512`
+  became `[LICENSE_PLATE]-004512`: the plate patterns matched a plate-shaped run
+  that a hyphen joined to more letters or digits, so the reference was masked
+  under the wrong type and its tail stayed readable. A plate candidate glued by
+  a hyphen to a letter or digit on either side is now part of a longer token
+  and is not a plate; a spaced dash (`AB-123-CD - stationné`) does not join.
+  Plates in NL, BE, DE, FR and IT forms are unaffected. Five conformance
+  vectors. *(rules-engine#50)*
+
+- **A residence-permit number was masked as a national ID, a passport or a
+  phone number, never as `RESIDENCE_PERMIT`.** The engine has no permit
+  patterns, since permit numbers have no shape of their own, so whichever
+  pattern fitted the value named it: 129 of 344 planted permit numbers across
+  BE, LU, DE, AT and NL came back under a wrong type. A permit label touching
+  the value (`Aufenthaltstitel Nr.:`, `Verblijfsvergunning nr.:`, `Titre de
+  séjour n°`, `residence permit`, `karta pobytu`, …) now types it
+  `RESIDENCE_PERMIT`. It overrules a `PHONE` as any label does, and also a
+  `NATIONAL_ID` or `PASSPORT` the country supports, because a German eAT number
+  fits the identity-card pattern and a Dutch permit the passport one, and the
+  label is the better evidence. A Spanish NIE stays `NATIONAL_ID`, as the canon
+  requires. The Belgian card category before the number (`B 565992336`) is
+  allowed between label and value and is not masked: it is a status, not part
+  of the number. A permit number nothing detects is still not detected; that
+  is the LLM tier's. Eight conformance vectors. *(rules-engine#53)*
+
+- **Every date in a document took its type from one date label.** With
+  `detect_dates=True`, `DOB` and `DATE_OF_DEATH` are one date shape gated by
+  their keywords, and the gate passed when a keyword appeared anywhere in the
+  150-character window. So `Date of Admission: 12/02/2024` became
+  `DATE_OF_DEATH` because `Date of Death:` sat two lines down; with a birth date
+  present, the death date became `DOB`; and `Factuurdatum 12/03/1984.
+  Geboortedatum: …` masked the invoice date as `DOB`. A keyword now licenses a
+  date only when it is that date's own label: before it with no other date in
+  between, or after it in the same sentence without running straight into a
+  date of its own (`Verstorben am 01.02.2020, geboren am 12.03.1940`). In a
+  table the column header decides, so `Name | Aufnahme | Sterbedatum` leaves the
+  admission column alone and `Name;Geburtsdatum;Sterbedatum` types both columns.
+  A date with neither label is no longer masked as either. Measured over the
+  152,300-record corpus, DOB recall stays at 100% and DOB false positives fall
+  from 267 to 5. A run over 7,571 longer pipeline documents shaped the rest:
+  a label asked as a question labels the answer below it (call transcripts),
+  a label labels each date of a list after it, `°` directly before a date is
+  the birth sign (not `n°`), and `datum van overlijden`, `décédée le` and
+  `Sterbetag` join the death labels. Twenty-four conformance vectors.
+  *(rules-engine#52)*
+
+- **An insurance claim number was masked as a Cypriot phone number.**
+  `Schadeclaim 2026-0412` became `[PHONE]` (country CY), even under
+  `countries=["NL"]`: eight digits starting with 2 is a Cypriot landline, and no
+  label claimed the value. Claim-number labels (`Schadeclaim`, `Schadenummer`,
+  `Schadensnummer`, `numéro de sinistre`, `numero di sinistro`, `número de
+  siniestro`, `skadenummer`, `claim number`, …) now join the `INTERNAL_ID` cue,
+  so the reference is typed `INTERNAL_ID`, as `Dossiernummer` already was. Seven
+  conformance vectors. *(rules-engine#54)*
+
+- **Surnames and ALL-CAPS words near an IBAN were masked as `[BIC]`.** A BIC
+  missing from the registry is still emitted on banking context, which is what
+  catches unlisted bank codes, and that admitted any word whose letters 5-6 are
+  a country code: `Dr. Joëlle NGUYEN-[BIC]` two lines under an IBAN, which also
+  breaks the name apart for the model. Three positions no bank code takes are
+  now refused even with banking context: joined to a word by a hyphen, right
+  after a personal title (`Dr.`, `Mme`, `Herr`, …), and an eleven-letter token
+  without the `XXX` branch code and without a BIC/SWIFT label touching it
+  (`MAANDELIJKS`, `UNIVERSELLE`, `OBLIGATOIRE`). Eight-letter words in prose
+  beside an IBAN (`BETALING`) are not covered: they have the same shape and
+  position as the unlisted codes the context gate exists for. Eight conformance
+  vectors. *(rules-engine#57)*
+
+- **A phone number followed by a date took the date's day.** `Mob: 0170
+  1234567 12.03.2024` became `[PHONE].03.2024`: the Austrian grouped phone
+  pattern accepted `12` as its last group because `\b` sits between `12` and
+  `.`. The last group may no longer be followed by `.`, `,`, `/` or `:` and a
+  digit. Four conformance vectors. *(rules-engine#60)*
+
+- **Token suffixes contained vowels despite the documented "no vowels".**
+  `TOKEN_ALPHABET` held `A`, `E`, `U` and `Y`, so a suffix could spell a word —
+  a real call produced `POSTAL_CODE_KENE`. The alphabet is now
+  `BCDFGHJKLMNPQRSTVWXZ23456789`: 28 characters, about 615,000 four-character
+  suffixes. Tokens minted by earlier versions are still recognised as the
+  engine's own markers on a second pass, and `restore()` reads the mapping,
+  not the alphabet, so existing mappings keep working. A test holds the
+  alphabet to its contract. *(rules-engine#55)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added
