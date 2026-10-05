@@ -156,7 +156,9 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         r"|numéro\s*national|national\s*(?:id|number)|identiteitsnummer"
         r"|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dni"
         r"|rr|nn|nir|insz|niss|nis|matricule"
-        r"|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN)"
+        r"|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN"
+        # Polish identity card, in the cases a document uses (rules-engine#75).
+        r"|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu)"
         + _SEP, re.IGNORECASE)),
     # Cyprus: "ID number" in both official languages, plus the Greek
     # abbreviation ΑΔΤ (Αστυνομική Ταυτότητα). Neither has a phone reading.
@@ -220,7 +222,7 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         r"|company\s*registration(?:\s*(?:number|no))?"
         r"|company\s*(?:no|number|reg)|organisationsnummer|orgnr"
         r"|i[čc]o|identifikační\s*číslo|ЕИК|eik|bulstat|cvr(?:-?nummer)?"
-        r"|virksomhedsnummer)" + _SEP, re.IGNORECASE)),
+        r"|virksomhedsnummer|regon)" + _SEP, re.IGNORECASE)),
 
     # ── VAT ────────────────────────────────────────────────────────────
     (EntityType.VAT, re.compile(
@@ -258,6 +260,14 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         r"|permesso\s*di\s*soggiorno|carta\s*di\s*soggiorno|karta\s*pobytu"
         r"|uppehållstillstånd|opholdstilladelse|oppholdstillatelse|oleskelulupa)"
         + _SEP[:-1] + r"(?:[A-Z]\s+)?$", re.IGNORECASE)),
+
+    # ── Driving licence ────────────────────────────────────────────────
+    # Polish: a licence's document number has the passport shape (two letters
+    # and digits), so without its own cue "prawa jazdy: AB1234567" lost the
+    # span to the passport rule beside a passport label (rules-engine#77).
+    (EntityType.DRIVERS_LICENSE, re.compile(
+        _B + r"(?:(?:nr\s*dokumentu\s*)?(?:prawo|prawa|prawem)\s*jazdy"
+        r"|numer\s*blankietu\s*prawa\s*jazdy)" + _SEP, re.IGNORECASE)),
 
     # ── Passport ───────────────────────────────────────────────────────
     (EntityType.PASSPORT, re.compile(

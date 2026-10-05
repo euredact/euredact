@@ -527,12 +527,23 @@ class RuleEngine:
             is_valid = self._matcher.validate(m)
             if is_valid:
                 validated.append((m, m.pattern_def.validator is not None))
-            elif m.pattern_def.validator is not None and not m.pattern_def.requires_context:
-                failed_spans.append(
-                    (m.start, m.end, m.country_code, m.pattern_def.entity_type)
-                )
-                if (m.pattern_def.entity_type in _RESCUE_TARGETS
-                        and cues.cued_type(text, m.start) == m.pattern_def.entity_type):
+            elif m.pattern_def.validator is not None:
+                cued = (m.pattern_def.entity_type in _RESCUE_TARGETS
+                        and cues.cued_type(text, m.start) == m.pattern_def.entity_type)
+                if not m.pattern_def.requires_context:
+                    failed_spans.append(
+                        (m.start, m.end, m.country_code, m.pattern_def.entity_type)
+                    )
+                    if cued:
+                        rescued.append(m)
+                elif cued:
+                    # A label-gated pattern is rescued too, but only by a cue
+                    # touching the value -- stronger than the keyword anywhere
+                    # in the window that gates it. "Numer dowodu osobistego
+                    # ABA912345" is a Polish identity card with a bad check
+                    # digit, and it is still one (rules-engine#75). It is not
+                    # recorded as a failed span: without its label it was never
+                    # a candidate, so it has no demotion zone to cast.
                     rescued.append(m)
 
         # Evidence pass: work out which countries this document belongs to,

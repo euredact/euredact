@@ -270,7 +270,7 @@ class TestNoDateBearingValidatorAcceptsAnImpossibleDate:
         "belgian_vat", "bic", "bsn", "croatian_oib", "danish_vat", "e164",
         "finnish_business_id", "german_tax_id", "greek_afm", "high_entropy",
         "hungarian_taj", "iban", "imei", "irish_pps", "kvk", "luhn",
-        "norwegian_org", "polish_nip", "portuguese_nif", "spanish_dni",
+        "norwegian_org", "polish_id_card", "polish_nip", "polish_regon", "portuguese_nif", "spanish_dni",
         "spanish_nie", "swiss_ahv", "uk_nhs", "vat_de", "vat_fr", "vat_lu",
         "vat_nl", "vin",
     ]
@@ -374,3 +374,28 @@ class TestTheDateChecksAddedInIssue43:
         # EMŠO opens with the *day*, unlike the Czech, Polish and Romanian
         # forms, which open with the year or a century digit.
         assert validate_slovenian_emso("0101006500006") is True
+
+
+class TestPolishIdCardAndRegon:
+    """rules-engine#75 and #76: the two Polish check-digit schemes."""
+
+    @pytest.mark.parametrize("value", ["ABA300000", "ABA212345", "aba300000", "ABA 300000"])
+    def test_valid_id_card(self, value: str) -> None:
+        assert VALIDATORS["polish_id_card"](value)
+
+    @pytest.mark.parametrize("value", ["ABA912345", "ABA300001", "AB1300000", "ABA30000"])
+    def test_invalid_id_card(self, value: str) -> None:
+        assert not VALIDATORS["polish_id_card"](value)
+
+    @pytest.mark.parametrize("value", ["123456785", "12345678512347"])
+    def test_valid_regon(self, value: str) -> None:
+        assert VALIDATORS["polish_regon"](value)
+
+    @pytest.mark.parametrize("value", [
+        "123456789",       # wrong check digit
+        "12345678512348",  # wrong local-unit check digit
+        "12345678912347",  # parent REGON invalid
+        "1234567851234",   # 13 digits
+    ])
+    def test_invalid_regon(self, value: str) -> None:
+        assert not VALIDATORS["polish_regon"](value)

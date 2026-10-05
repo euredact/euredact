@@ -13,6 +13,36 @@ narrative lives. Sections here use that vocabulary
 
 ## Unreleased
 
+### Added
+
+- **Polish identity card, REGON and driving-licence numbers.** None had a
+  pattern, so behind their own labels they were left in the clear, and beside a
+  passport mention the passport rule took them: `dowód osobisty ABA212345` and
+  `REGON: 123456785` came out as `[PASSPORT]`.
+  - Identity card (dowód osobisty): 3 letters + 6 digits with its check digit
+    (weights 7,3,1,9,7,3,1,7,3; letters A=10…Z=35) → `NATIONAL_ID`.
+    *(rules-engine#75)*
+  - REGON: 9 digits, or 14 for a local unit, each with its mod-11 check digit
+    → `CHAMBER_OF_COMMERCE`. *(rules-engine#76)*
+  - Driving licence: the field-5 number (`01234/12/1234`, slash-separated digit
+    groups whose widths vary with the year of issue) and the document number
+    (two letters and six or seven digits) → `DRIVERS_LICENSE`. No check digit
+    exists, so both are label-only. *(rules-engine#77)*
+
+  All three need their label nearby (`dowód osobisty`, `dowodu osobistego`,
+  `REGON`, `prawo jazdy`, `prawa jazdy`, …), and the labels join the cue table,
+  so each wins its span over the passport rule. Thirteen conformance vectors.
+
+### Changed
+
+- **A label touching a value now rescues a failed checksum on a label-gated
+  pattern too**, as it already did on the others. `Numer dowodu osobistego
+  ABA912345` has a bad check digit and is still an identity card; before, a
+  pattern that needs its label in the window was dropped on any checksum
+  failure, however close the label sat. The rescue needs the cue to touch the
+  value, which is stronger evidence than the keyword anywhere in the window
+  that gates the pattern. *(rules-engine#75)*
+
 ### Fixed
 
 - **A Luxembourg matricule in any grouping but two was half-masked, and its

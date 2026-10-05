@@ -5435,6 +5435,172 @@
           "01 512 3456"
         ]
       }
+    },
+    {
+      "id": "pl-id-card-labelled",
+      "text": "Dowód osobisty: ABA300000",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "ABA300000"
+        ]
+      }
+    },
+    {
+      "id": "pl-id-card-genitive-label",
+      "text": "Numer dowodu osobistego ABA212345",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "ABA212345"
+        ]
+      }
+    },
+    {
+      "id": "pl-id-card-failed-checksum-behind-its-label",
+      "text": "Numer dowodu osobistego ABA912345",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "ABA912345"
+        ]
+      },
+      "mustNotDetect": [
+        "PASSPORT"
+      ]
+    },
+    {
+      "id": "pl-id-card-not-a-passport-beside-one",
+      "text": "Pan Jan Kowalski, PESEL 85041212344, dowód osobisty ABA212345, paszport EA1234567.",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "85041212344",
+          "ABA212345"
+        ],
+        "PASSPORT": [
+          "EA1234567"
+        ]
+      }
+    },
+    {
+      "id": "pl-id-card-shape-without-label",
+      "text": "Kod produktu ABC123458 jest w magazynie.",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "PASSPORT"
+      ]
+    },
+    {
+      "id": "pl-regon-9",
+      "text": "REGON: 123456785",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "123456785"
+        ]
+      }
+    },
+    {
+      "id": "pl-regon-14",
+      "text": "REGON 12345678512347",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "12345678512347"
+        ]
+      }
+    },
+    {
+      "id": "pl-regon-not-a-passport",
+      "text": "Pan Jan Kowalski, PESEL 85041212344, dowód osobisty ABA212345, paszport EA1234567. REGON: 123456785.",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "123456785"
+        ],
+        "PASSPORT": [
+          "EA1234567"
+        ]
+      }
+    },
+    {
+      "id": "pl-driving-licence-number",
+      "text": "Prawo jazdy nr 01234/12/1234",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "DRIVERS_LICENSE": [
+          "01234/12/1234"
+        ]
+      }
+    },
+    {
+      "id": "pl-driving-licence-number-genitive",
+      "text": "Numer prawa jazdy: 01234/12/1234",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "DRIVERS_LICENSE": [
+          "01234/12/1234"
+        ]
+      }
+    },
+    {
+      "id": "pl-driving-licence-document-number",
+      "text": "nr dokumentu prawa jazdy: AB1234567",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "DRIVERS_LICENSE": [
+          "AB1234567"
+        ]
+      },
+      "mustNotDetect": [
+        "PASSPORT"
+      ]
+    },
+    {
+      "id": "pl-driving-licence-blank-number",
+      "text": "Numer blankietu prawa jazdy: AB 123456",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "DRIVERS_LICENSE": [
+          "AB 123456"
+        ]
+      }
+    },
+    {
+      "id": "pl-slash-number-without-label",
+      "text": "Sygnatura akt 01234/12/1234 z dnia 3 marca.",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "DRIVERS_LICENSE"
+      ]
     }
   ]
 }

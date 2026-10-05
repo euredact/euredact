@@ -259,11 +259,18 @@ export class RuleEngine {
     for (const m of rawMatches) {
       if (this.matcher.validate(m)) {
         validated.push({ match: m, hasValidValidator: m.patternDef.validator !== null });
-      } else if (m.patternDef.validator !== null && !m.patternDef.requiresContext) {
-        failedSpans.push({ start: m.start, end: m.end, code: m.countryCode,
-                           etype: String(m.patternDef.entityType) });
-        if (RESCUE_TARGETS.has(String(m.patternDef.entityType))
-            && cuedType(text, m.start) === m.patternDef.entityType) rescued.push(m);
+      } else if (m.patternDef.validator !== null) {
+        const cued = RESCUE_TARGETS.has(String(m.patternDef.entityType))
+          && cuedType(text, m.start) === m.patternDef.entityType;
+        if (!m.patternDef.requiresContext) {
+          failedSpans.push({ start: m.start, end: m.end, code: m.countryCode,
+                             etype: String(m.patternDef.entityType) });
+          if (cued) rescued.push(m);
+        } else if (cued) {
+          // A label-gated pattern is rescued too, but only by a cue touching the
+          // value; it casts no demotion zone (rules-engine#75).
+          rescued.push(m);
+        }
       }
     }
 

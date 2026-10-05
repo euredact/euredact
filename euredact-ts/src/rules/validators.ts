@@ -432,6 +432,41 @@ export function validatePolishNip(candidate: string): boolean {
   return total % 11 === d[9];
 }
 
+/**
+ * Polish identity card (dowód osobisty): 3 letters + 6 digits, the first digit
+ * a check digit. Letters A=10 … Z=35, weights 7,3,1,9,7,3,1,7,3: the weighted
+ * sum of all nine is 0 mod 10 exactly when the check digit is right (rules-engine#75).
+ */
+export function validatePolishIdCard(candidate: string): boolean {
+  const c = candidate.replace(/\s/g, "").toUpperCase();
+  if (!/^[A-Z]{3}\d{6}$/.test(c)) return false;
+  const weights = [7, 3, 1, 9, 7, 3, 1, 7, 3];
+  let total = 0;
+  for (let i = 0; i < 9; i++) {
+    const ch = c[i];
+    total += (/[A-Z]/.test(ch) ? ch.charCodeAt(0) - 55 : Number(ch)) * weights[i];
+  }
+  return total % 10 === 0;
+}
+
+/**
+ * Polish REGON: 9 digits, or 14 for a local unit, each with a mod-11 check (a
+ * remainder of 10 counts as 0). A 14-digit REGON begins with its parent's valid
+ * 9-digit REGON (rules-engine#76).
+ */
+export function validatePolishRegon(candidate: string): boolean {
+  const c = candidate.replace(/[\s\-]/g, "");
+  if (!/^\d+$/.test(c) || (c.length !== 9 && c.length !== 14)) return false;
+  const check = (digits: string, weights: number[]): boolean => {
+    let total = 0;
+    for (let i = 0; i < weights.length; i++) total += Number(digits[i]) * weights[i];
+    const rest = total % 11;
+    return (rest === 10 ? 0 : rest) === Number(digits[weights.length]);
+  };
+  if (!check(c.slice(0, 9), [8, 9, 2, 3, 4, 5, 6, 7])) return false;
+  return c.length === 9 || check(c, [2, 4, 8, 5, 0, 9, 7, 3, 6, 1, 2, 4, 8]);
+}
+
 // Days per month for the rodné číslo date check. February is 29 because the
 // century is not recoverable from a two-digit year, so a leap year cannot be
 // ruled out -- being permissive by one day is the right direction here.
@@ -647,6 +682,8 @@ export const VALIDATORS: Record<string, (candidate: string) => boolean> = {
   portuguese_nif: validatePortugueseNif,
   polish_pesel: validatePolishPesel,
   polish_nip: validatePolishNip,
+  polish_id_card: validatePolishIdCard,
+  polish_regon: validatePolishRegon,
   czech_birth_number: validateCzechBirthNumber,
   romanian_cnp: validateRomanianCnp,
   hungarian_taj: validateHungarianTaj,

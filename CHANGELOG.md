@@ -27,6 +27,14 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Added
+
+- Polish identity card (dowód osobisty, with its check digit) as `NATIONAL_ID`, REGON (9 or 14 digits, mod-11) as `CHAMBER_OF_COMMERCE`, and the driving-licence number and document number as `DRIVERS_LICENSE`, each behind its label; beside a passport mention they no longer come out as `[PASSPORT]`. *(rules-engine#75, #76, #77)*
+
+### Changed
+
+- A label touching a value rescues a failed checksum on a label-gated pattern too (`Numer dowodu osobistego ABA912345`), as it already did on the others. *(rules-engine#75)*
+
 ### Fixed
 
 - A Luxembourg matricule grouped other than compact or fully spaced was half-masked, or not at all, leaving the birth date readable: `19710314 12345` and `1971 0314 123 45` are now one `NATIONAL_ID`. *(rules-engine#49)*

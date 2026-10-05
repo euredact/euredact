@@ -338,6 +338,41 @@ def validate_nir_key_only(candidate: str) -> bool:
     return True
 
 
+def validate_polish_id_card(candidate: str) -> bool:
+    """Polish identity card (dowód osobisty): 3 letters + 6 digits.
+
+    The first digit is the check digit. Letters count A=10 … Z=35 and the
+    weights are 7,3,1,9,7,3,1,7,3; because the check digit's weight is 9, the
+    weighted sum of all nine characters is 0 mod 10 exactly when it is right.
+    No date component (rules-engine#75).
+    """
+    clean = re.sub(r"\s", "", candidate).upper()
+    if not re.fullmatch(r"[A-Z]{3}\d{6}", clean):
+        return False
+    values = [ord(c) - 55 if c.isalpha() else int(c) for c in clean]
+    return sum(v * w for v, w in zip(values, (7, 3, 1, 9, 7, 3, 1, 7, 3))) % 10 == 0
+
+
+def validate_polish_regon(candidate: str) -> bool:
+    """Polish REGON: 9 digits, or 14 for a local unit, each with a mod-11 check.
+
+    A remainder of 10 counts as 0. A 14-digit REGON begins with the 9-digit
+    REGON of its parent entity, which must be valid on its own
+    (rules-engine#76).
+    """
+    clean = re.sub(r"[\s\-]", "", candidate)
+    if not clean.isdigit() or len(clean) not in (9, 14):
+        return False
+
+    def check(digits: str, weights: tuple[int, ...]) -> bool:
+        rest = sum(int(d) * w for d, w in zip(digits, weights)) % 11
+        return (0 if rest == 10 else rest) == int(digits[len(weights)])
+
+    if not check(clean[:9], (8, 9, 2, 3, 4, 5, 6, 7)):
+        return False
+    return len(clean) == 9 or check(clean, (2, 4, 8, 5, 0, 9, 7, 3, 6, 1, 2, 4, 8))
+
+
 # Registry mapping validator names to functions
 def validate_swedish_pnr(candidate: str) -> bool:
     """Swedish personnummer: YYYYMMDD-XXXX or YYMMDD-XXXX, Luhn on 10-digit form.
@@ -949,6 +984,8 @@ VALIDATORS: dict[str, Callable[[str], bool]] = {
     "portuguese_nif": validate_portuguese_nif,
     "polish_pesel": validate_polish_pesel,
     "polish_nip": validate_polish_nip,
+    "polish_id_card": validate_polish_id_card,
+    "polish_regon": validate_polish_regon,
     "czech_birth_number": validate_czech_birth_number,
     "romanian_cnp": validate_romanian_cnp,
     "hungarian_taj": validate_hungarian_taj,

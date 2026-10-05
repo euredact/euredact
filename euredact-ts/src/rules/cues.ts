@@ -94,7 +94,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
 
   // National identity number.
   [EntityType.NATIONAL_ID,
-   /(?<![A-Za-z0-9_])(?:bsn|burgerservicenummer(?:\s*\(bsn\))?|personnummer|rijksregisternummer|nationaal\s*nummer|numéro\s*national|national\s*(?:id|number)|identiteitsnummer|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dni|rr|nn|nir|insz|niss|nis|matricule|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:bsn|burgerservicenummer(?:\s*\(bsn\))?|personnummer|rijksregisternummer|nationaal\s*nummer|numéro\s*national|national\s*(?:id|number)|identiteitsnummer|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dni|rr|nn|nir|insz|niss|nis|matricule|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Cyprus: "ID number" in both official languages, plus the Greek abbreviation
   // ΑΔΤ (Αστυνομική Ταυτότητα). Neither has a phone reading.
@@ -130,7 +130,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
   // Number" are written out: the tail allows a run-on *or* one qualifier word,
   // never a second word, so a three-word label needs to be spelled.
   [EntityType.CHAMBER_OF_COMMERCE,
-   /(?<![A-Za-z0-9_])(?:siren|siret|kbo|bce|kvk|ondernemingsnummer|ondernemingen\s+onder\s+nummer|kruispuntbank|numéro\s*d'entreprise|enterprise\s*number|handelsregister|companies\s*house(?:\s*(?:registration|reg|no|number))?|company\s*registration(?:\s*(?:number|no))?|company\s*(?:no|number|reg)|organisationsnummer|orgnr|i[čc]o|identifikační\s*číslo|ЕИК|eik|bulstat|cvr(?:-?nummer)?|virksomhedsnummer)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:siren|siret|kbo|bce|kvk|ondernemingsnummer|ondernemingen\s+onder\s+nummer|kruispuntbank|numéro\s*d'entreprise|enterprise\s*number|handelsregister|companies\s*house(?:\s*(?:registration|reg|no|number))?|company\s*registration(?:\s*(?:number|no))?|company\s*(?:no|number|reg)|organisationsnummer|orgnr|i[čc]o|identifikační\s*číslo|ЕИК|eik|bulstat|cvr(?:-?nummer)?|virksomhedsnummer|regon)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // VAT.
   [EntityType.VAT,
@@ -148,6 +148,10 @@ export const CUES: Array<[EntityType, RegExp]> = [
   // The tail admits the Belgian card category ("nr. B 565992336"), unmasked.
   [EntityType.RESIDENCE_PERMIT,
    /(?<![A-Za-z0-9_])(?:aufenthalts(?:titel|erlaubnis|karte|gestattung)|niederlassungs(?:erlaubnis|bewilligung)|verblijfs(?:vergunning|kaart|document|titel)|titre\s*de\s*s[ée]jour|carte\s*de\s*s[ée]jour|permis\s*de\s*s[ée]jour|carte\s*de\s*r[ée]sident|residence\s*(?:permit|card|document)|biometric\s*residence\s*permit|permesso\s*di\s*soggiorno|carta\s*di\s*soggiorno|karta\s*pobytu|uppehållstillstånd|opholdstilladelse|oppholdstillatelse|oleskelulupa)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*(?:[A-Z]\s+)?$/i],
+  // Driving licence: Polish labels; the document number has the passport
+  // shape, so without this cue it lost the span to the passport rule (rules-engine#77).
+  [EntityType.DRIVERS_LICENSE,
+   /(?<![A-Za-z0-9_])(?:(?:nr\s*dokumentu\s*)?(?:prawo|prawa|prawem)\s*jazdy|numer\s*blankietu\s*prawa\s*jazdy)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
   [EntityType.PASSPORT,
    /(?<![A-Za-z0-9_])(?:passport(?:\s*(?:no|number))?|paspoort(?:nummer)?|reisepass(?:nummer)?|passeport|passnummer)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 

@@ -26,6 +26,25 @@ class PLConfig(CountryConfig):
                        validator=None, description="Polish phone — compact"),
             PatternDef(entity_type=EntityType.PHONE, pattern=r"\+48\s?[5-8]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}",
                        validator=None, description="Polish international phone — +48"),
+            # Identity card (dowód osobisty), REGON and driving licence: each
+            # behind its own label. The card number and REGON carry check
+            # digits; a licence number has none, so the label is everything
+            # (rules-engine#75, #76, #77).
+            PatternDef(entity_type=EntityType.NATIONAL_ID, pattern=r"\b[A-Z]{3}\s?\d{6}\b",
+                       validator="polish_id_card", description="Polish identity card — 3 letters + 6 digits",
+                       context_keywords=["dowód osobisty", "dowodu osobistego", "dowodem osobistym", "dowód", "dowodu", "nr dowodu", "identity card", "ID card"], requires_context=True),
+            PatternDef(entity_type=EntityType.CHAMBER_OF_COMMERCE, pattern=r"\b\d{9}(?:\d{5})?\b",
+                       validator="polish_regon", description="Polish REGON — 9 or 14 digits",
+                       context_keywords=["REGON"], requires_context=True),
+            # Field 5 of the licence: digits in slash-separated groups, whose
+            # widths vary with the year of issue ("01234/12/1234").
+            PatternDef(entity_type=EntityType.DRIVERS_LICENSE, pattern=r"\b\d{3,6}/\d{2}/\d{3,7}\b",
+                       validator=None, description="Polish driving licence number — field 5",
+                       context_keywords=["prawo jazdy", "prawa jazdy", "prawem jazdy", "driving licence", "driving license"], requires_context=True),
+            # The document (blank) number: two letters and six or seven digits.
+            PatternDef(entity_type=EntityType.DRIVERS_LICENSE, pattern=r"\b[A-Z]{2}\s?\d{6,7}\b",
+                       validator=None, description="Polish driving licence document number",
+                       context_keywords=["prawo jazdy", "prawa jazdy", "prawem jazdy", "driving licence", "driving license"], requires_context=True),
             PatternDef(entity_type=EntityType.POSTAL_CODE, pattern=r"\b\d{2}-\d{3}\b",
                        validator=None, description="Polish postal code — XX-XXX",
                        context_keywords=["kod pocztowy", "adres", "ulica", "Postal:", "Address:"]),
