@@ -4332,6 +4332,118 @@
         "POSTAL_CODE"
       ],
       "notes": "Ditto for a policy number."
+    },
+    {
+      "id": "lu-matricule-grouped-8-5",
+      "text": "Numéro d'identification nationale : 19710314 12345",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "19710314 12345"
+        ]
+      },
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE"
+      ],
+      "expectRedactedText": "Numéro d'identification nationale : [NATIONAL_ID]"
+    },
+    {
+      "id": "lu-matricule-grouped-4-4-3-2",
+      "text": "Numéro d'identification nationale : 1971 0314 123 45",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "1971 0314 123 45"
+        ]
+      },
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE"
+      ],
+      "expectRedactedText": "Numéro d'identification nationale : [NATIONAL_ID]"
+    },
+    {
+      "id": "lu-matricule-grouped-4-2-2-5",
+      "text": "Numéro d'identification nationale : 1971 03 14 12345",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "1971 03 14 12345"
+        ]
+      },
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE"
+      ],
+      "expectRedactedText": "Numéro d'identification nationale : [NATIONAL_ID]"
+    },
+    {
+      "id": "lu-matricule-grouped-8-3-2",
+      "text": "Numéro d'identification nationale : 19710314 123 45",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "19710314 123 45"
+        ]
+      },
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE"
+      ],
+      "expectRedactedText": "Numéro d'identification nationale : [NATIONAL_ID]"
+    },
+    {
+      "id": "lu-matricule-grouped-spaced",
+      "text": "Numéro d'identification nationale : 1971 03 14 123 45",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "1971 03 14 123 45"
+        ]
+      },
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE"
+      ],
+      "expectRedactedText": "Numéro d'identification nationale : [NATIONAL_ID]"
+    },
+    {
+      "id": "lu-matricule-grouped-compact",
+      "text": "Numéro d'identification nationale : 1971031412345",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "1971031412345"
+        ]
+      },
+      "mustNotDetect": [
+        "POSTAL_CODE",
+        "PHONE"
+      ],
+      "expectRedactedText": "Numéro d'identification nationale : [NATIONAL_ID]"
+    },
+    {
+      "id": "lu-matricule-not-across-a-line-break",
+      "text": "Datum: 19710314\n12345 Exemplare",
+      "countries": [
+        "LU"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ]
     }
   ]
 }
