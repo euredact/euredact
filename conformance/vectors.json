@@ -4332,6 +4332,60 @@
         "POSTAL_CODE"
       ],
       "notes": "Ditto for a policy number."
+    },
+    {
+      "id": "plate-not-inside-a-longer-reference-fr",
+      "text": "Référence dossier : TF-284-KL-00874",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-not-inside-a-longer-reference-lu",
+      "text": "Titre de séjour n° LU-TS-2023-004512 — « travailleur salarié »",
+      "countries": [
+        "LU"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-not-after-a-glued-segment",
+      "text": "Dossier 2026-AB-123-CD",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-fr-still-detected-at-sentence-end",
+      "text": "Immatriculation du véhicule : AB-123-CD.",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "AB-123-CD"
+        ]
+      }
+    },
+    {
+      "id": "plate-fr-still-detected-before-a-spaced-dash",
+      "text": "Véhicule AB-123-CD - stationné rue de Paris",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "AB-123-CD"
+        ]
+      }
     }
   ]
 }

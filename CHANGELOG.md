@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- A licence plate was cut out of a longer hyphen-joined reference (`TF-284-KL-00874` → `[LICENSE_PLATE]-00874`); a plate candidate glued to more of the token by a hyphen is no longer a plate. *(rules-engine#50)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

@@ -11,6 +11,20 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **A licence plate was cut out of a longer reference.** `Référence dossier :
+  TF-284-KL-00874` became `[LICENSE_PLATE]-00874`, and `LU-TS-2023-004512`
+  became `[LICENSE_PLATE]-004512`: the plate patterns matched a plate-shaped run
+  that a hyphen joined to more letters or digits, so the reference was masked
+  under the wrong type and its tail stayed readable. A plate candidate glued by
+  a hyphen to a letter or digit on either side is now part of a longer token
+  and is not a plate; a spaced dash (`AB-123-CD - stationné`) does not join.
+  Plates in NL, BE, DE, FR and IT forms are unaffected. Five conformance
+  vectors. *(rules-engine#50)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added
