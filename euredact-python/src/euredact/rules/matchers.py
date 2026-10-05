@@ -257,6 +257,67 @@ class _ScanPlan:
     no_prefix: tuple[tuple[re.Pattern[str], PatternDef, str], ...]
 
 
+def _strip_lookarounds(pattern: str) -> str | None:
+    """*pattern* with every lookahead and lookbehind group removed.
+
+    Escapes and character classes are skipped over, so a literal "(" inside
+    "[(]" or "\\(" is not taken for a group. Returns None when a lookaround is
+    quantified ("(?=x)?"), where removal would leave a dangling quantifier.
+    """
+    out: list[str] = []
+    i, n = 0, len(pattern)
+    while i < n:
+        ch = pattern[i]
+        if ch == "\\":
+            out.append(pattern[i:i + 2])
+            i += 2
+            continue
+        if ch == "[":
+            j = i + 1
+            if j < n and pattern[j] == "^":
+                j += 1
+            if j < n and pattern[j] == "]":
+                j += 1
+            while j < n and pattern[j] != "]":
+                j += 2 if pattern[j] == "\\" else 1
+            out.append(pattern[i:j + 1])
+            i = j + 1
+            continue
+        if pattern.startswith(("(?=", "(?!", "(?<=", "(?<!"), i):
+            depth, j = 0, i
+            while j < n:
+                c = pattern[j]
+                if c == "\\":
+                    j += 2
+                    continue
+                if c == "[":
+                    j += 1
+                    if j < n and pattern[j] == "^":
+                        j += 1
+                    if j < n and pattern[j] == "]":
+                        j += 1
+                    while j < n and pattern[j] != "]":
+                        j += 2 if pattern[j] == "\\" else 1
+                    j += 1
+                    continue
+                if c == "(":
+                    depth += 1
+                elif c == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            if j >= n:
+                return None
+            if j + 1 < n and pattern[j + 1] in "?*+{":
+                return None
+            i = j + 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 class MultiPatternMatcher:
     """Compiles all active patterns and scans text adaptively."""
 
@@ -309,9 +370,10 @@ class MultiPatternMatcher:
         """Build the RE2 prefilter over every pattern it can express.
 
         Two kinds of pattern opt out and always run: those RE2 cannot compile
-        (lookbehind, lazy bounded repeats — 11 of 345 today, chiefly postal
-        codes and secrets), and those that can match further than the window
-        overlap, which the sliding window could otherwise straddle.
+        even with their lookarounds stripped (lazy bounded repeats and the
+        like), and those that can match further than the window overlap, which
+        the sliding window could otherwise straddle. A pattern RE2 rejects only
+        for a lookaround is added in its stripped form, a superset.
         """
         # The *original* source goes to RE2, not the rewritten one: RE2's \b is
         # already ASCII-only, so the semantics match, while the rewrite uses
@@ -327,8 +389,20 @@ class MultiPatternMatcher:
                 try:
                     automaton.Add(pdef.pattern)
                 except Exception:  # noqa: BLE001 - RE2 rejects some Python syntax
-                    slots.append(None)
-                    continue
+                    # RE2 has no lookaround. Removing one only drops a
+                    # constraint, so the stripped pattern matches a superset:
+                    # as a prefilter it can let a pattern run needlessly, never
+                    # skip a window where the exact pattern matches. A guard
+                    # like "(?![.,/:]\d)" used to cost a broad pattern its
+                    # prefilter entirely (rules-engine#72).
+                    superset = _strip_lookarounds(pdef.pattern)
+                    try:
+                        if superset is None:
+                            raise ValueError
+                        automaton.Add(superset)
+                    except Exception:  # noqa: BLE001 - still not RE2 syntax
+                        slots.append(None)
+                        continue
                 slots.append(added)
                 added += 1
             if added:

@@ -13,6 +13,19 @@ narrative lives. Sections here use that vocabulary
 
 ## Unreleased
 
+### Changed
+
+- **A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter**, via
+  the same pattern with its lookarounds stripped. Removing a lookaround only
+  drops a constraint, so the stripped form matches a superset: it can let a
+  pattern run needlessly, never skip a window where the exact pattern matches.
+  Patterns outside the prefilter fall from 35 to 23, including the three phone
+  patterns the #51/#60 guards had pushed out. Measured over 2,000 pipeline
+  documents with `[fast]`, this recovers about 0.25 s of the ~1.0 s the last
+  batch added; most of the remainder is the per-date label check from #52, not
+  the prefilter. *(Python only; the TypeScript SDK has no RE2 path.)*
+  *(rules-engine#72)*
+
 ### Fixed
 
 - **A licence plate was matched inside a reference joined by `/`, `.`, `_` or

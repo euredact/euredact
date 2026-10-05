@@ -1432,11 +1432,13 @@ detected — both are covered by `tests/test_scan_path_parity.py`, which runs
 every available scan path against the plain-Python one and requires them to
 agree:
 
-- **`google-re2`** builds a prefilter over every pattern it can express (334 of
-  345). One DFA pass per 1 KB window reports which patterns match anywhere in
+- **`google-re2`** builds a prefilter over every pattern it can express (324 of
+  347). One DFA pass per 1 KB window reports which patterns match anywhere in
   it — typically 42 of 314 for a real document — and only those are then run.
-  Patterns RE2 cannot express, such as the lookbehind-based `SECRET` rules,
-  always run.
+  A pattern RE2 rejects only for a lookaround is prefiltered by the same pattern
+  with its lookarounds removed, a superset that can never skip a real match.
+  The rest, chiefly the `SECRET` rules and patterns that can match further than
+  the window overlap, always run.
 
   Asking the question per window matters: over a long document nearly every
   pattern matches *somewhere*, so a whole-document prefilter stops filtering
