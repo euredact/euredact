@@ -27,6 +27,12 @@ def sdk():
 
 
 class TestTokens:
+    def test_the_alphabet_keeps_its_documented_contract(self):
+        # rules-engine#55: "no vowels, no 0/1/I/O" was documented while A, E, U
+        # and Y were in the alphabet, and a real call produced POSTAL_CODE_KENE.
+        assert not set(TOKEN_ALPHABET) & set("AEIOUY01")
+        assert len(set(TOKEN_ALPHABET)) == len(TOKEN_ALPHABET)
+
     def test_the_prompt_use_case_round_trips(self, sdk):
         result = sdk.redact(PROMPT, countries=["BE"], tokenize=True)
         assert "joren.janssens@euredact.be" not in result.redacted_text
@@ -79,15 +85,15 @@ class TestTokens:
 
     def test_a_document_that_already_holds_tokens_is_not_collided_with(self):
         """Redacting an LLM's reply to a tokenized prompt is the common case."""
-        text = "Reply to EMAIL_ABCD and jan@example.com"
+        text = "Reply to EMAIL_BCDF and jan@example.com"
         mapper = TokenMapper(text, [Detection(
             entity_type=EntityType.EMAIL, start=24, end=39, text="jan@example.com",
             source=DetectionSource.RULES, country=None)])
-        assert "EMAIL_ABCD" in mapper._taken
+        assert "EMAIL_BCDF" in mapper._taken
         seen = {mapper.get_token(d, "v%d" % i) for i, d in enumerate([Detection(
             entity_type=EntityType.EMAIL, start=0, end=1, text="", source=DetectionSource.RULES,
             country=None)] * 50)}
-        assert "EMAIL_ABCD" not in seen and len(seen) == 50
+        assert "EMAIL_BCDF" not in seen and len(seen) == 50
 
     def test_batch_and_iter_carry_tokens(self, sdk):
         texts = ["mail: jan@example.com", "tel +31 6 12345678"]

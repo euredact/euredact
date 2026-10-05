@@ -1158,8 +1158,8 @@ and two tokenized documents never reveal that they share a value. That is the
 opposite retention model from `referential_integrity`, which is why the two
 cannot be combined. Batch and iterator variants tokenize each text on its own.
 
-A token is `TYPE_` plus four characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`
-(no vowels, no `0`/`1`/`I`/`O`). Tokens are kept clear of any token-shaped
+A token is `TYPE_` plus four characters from `BCDFGHJKLMNPQRSTVWXZ23456789`
+(no vowels or `Y`, no `0`/`1`/`I`/`O`), about 615,000 suffixes. Tokens are kept clear of any token-shaped
 string already in the document, so an LLM's reply to a tokenized prompt can
 itself be redacted without `restore()` putting the wrong value back.
 `restore()` replaces every occurrence, including a token an LLM glued to other

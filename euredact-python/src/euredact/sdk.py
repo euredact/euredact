@@ -359,10 +359,11 @@ def _apply_allowlist(
     return kept, exempted
 
 
-#: Characters a token suffix is drawn from. No vowels, so a suffix never spells
-#: a word; no 0/1/I/O, so it survives being read back by a person; no
-#: underscore, so the type prefix stays unambiguous.
-TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+#: Characters a token suffix is drawn from. No vowels (and no Y), so a suffix
+#: never spells a word; no 0/1/I/O, so it survives being read back by a person;
+#: no underscore, so the type prefix stays unambiguous. A, E, U and Y were in it
+#: until rules-engine#55, against this comment: "POSTAL_CODE_KENE".
+TOKEN_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ23456789"
 TOKEN_SUFFIX_LENGTH = 4
 _TOKEN_MAX_DRAWS = 100
 
