@@ -96,6 +96,18 @@ for (const url of ["https://api.euredact.dev", "https://gw.example.com:8443",
     assert.equal(configure({ apiKey: "erk_test", baseUrl: url }).baseUrl, url);
   });
 }
+test("the TLS check does not depend on a URL global", () => {
+  const saved = globalThis.URL;
+  // Some minimal runtimes have no URL; https must still pass and http still fail.
+  (globalThis as { URL?: unknown }).URL = undefined;
+  try {
+    assert.doesNotThrow(() => requireSecureBaseUrl("https://api.euredact.dev"));
+    assert.doesNotThrow(() => requireSecureBaseUrl("http://[::1]:8000"));
+    assert.throws(() => requireSecureBaseUrl("http://api.example.com"), /must start with https:\/\//);
+  } finally {
+    globalThis.URL = saved;
+  }
+});
 test("a hand-built config is checked by the client too", () => {
   assert.throws(() => new CloudClient({ apiKey: "k", baseUrl: "http://api.example.com", timeoutMs: 1,
                                         pollTimeoutMs: 1, maxRetries: 0, headers: {} }),
