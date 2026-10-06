@@ -735,9 +735,10 @@ if outcome.status == "resolved":
   download is done, never when the batch is. `create()` does the local masking
   for every document, though, so running it on a thread also keeps that work
   off the event loop.
-- **Limits** checked before anything is uploaded: at most 5,000 documents,
-  unique `custom_id`s of at most 64 characters, one country per document, and
-  a 128 MB body. The 5,000-token limit per document is **not** checked by the
+- **Limits** checked before anything is masked or uploaded: at most 5,000
+  documents, unique `custom_id`s of 1-64 characters from `A-Z a-z 0-9 _ . : -`
+  (the gateway's rule, `euredact.cloud.batches.CUSTOM_ID`), one country per
+  document, and a 128 MB body. The 5,000-token limit per document is **not** checked by the
   SDK: it is counted by the model's tokenizer on the gateway, which the SDK does
   not have, and no character count decides it reliably. A document over it
   comes back as an error with code `too_long`, whose message says so; split

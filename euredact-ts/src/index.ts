@@ -11,6 +11,7 @@ export {
   CloudError,
   Batches,
   BatchError,
+  CUSTOM_ID,
   NotConfiguredError,
   QuotaExceededError,
   TooLargeError,

@@ -642,8 +642,9 @@ if (outcome.status === "resolved") {
   `read`, `write`, `delete` and `list`. In Node, `batchDir` moves the
   directory. `cipher` (`encrypt`/`decrypt`) encrypts the file at rest with a
   key you hold.
-- **Limits** checked before upload: 5,000 documents, unique `customId`s of at
-  most 64 characters, one country each, a 128 MB body. The 5,000-token limit
+- **Limits** checked before anything is masked or uploaded: 5,000 documents,
+  unique `customId`s of 1-64 characters from `A-Z a-z 0-9 _ . : -` (the
+  gateway's rule, exported as `CUSTOM_ID`), one country each, a 128 MB body. The 5,000-token limit
   per document is **not** checked by the SDK: it is counted by the model's
   tokenizer on the gateway. A document over it comes back as `too_long`, whose
   message says so; split it and submit the parts.

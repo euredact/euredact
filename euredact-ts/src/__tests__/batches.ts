@@ -128,7 +128,7 @@ test("what is sent is what cloud mode sends", async () => {
 
 for (const [name, input, message] of [
   ["duplicate", [{ customId: "a", text: "x", countries: ["BE"] }, { customId: "a", text: "x", countries: ["BE"] }], /duplicate customId/],
-  ["long id", [{ customId: "a".repeat(65), text: "x", countries: ["BE"] }], /longer than 64/],
+  ["long id", [{ customId: "a".repeat(65), text: "x", countries: ["BE"] }], /customId must be 1-64 characters/],
   ["two countries", [{ customId: "a", text: "x", countries: ["BE", "NL"] }], /exactly one country/],
   ["empty", [], /at least one document/],
 ] as const) {
@@ -309,6 +309,37 @@ test("vector: tampered original", async () => {
   gateway.override[c.id] = { type: "succeeded", masked_sha256: c.masked_sha256, entities: c.entities };
   gateway.status = "ended";
   assert.equal((await batches.results("bat_1")).documents[c.id].error, spec.expect_error);
+});
+
+// ── customId characters, checked before any masking (rules-engine#88) ──
+
+for (const customId of VECTORS.custom_ids.invalid as string[]) {
+  test(`an invalid customId is refused with the gateway's wording: ${JSON.stringify(customId)}`, async () => {
+    const { gateway, batches } = setup();
+    await assert.rejects(
+      batches.create([{ customId, text: TEXT, countries: ["BE"] }]),
+      /document 1: customId must be 1-64 characters of A-Z a-z 0-9 _ \. : -/,
+    );
+    assert.equal(gateway.rawBodies.length, 0);
+  });
+}
+
+for (const customId of VECTORS.custom_ids.valid as string[]) {
+  test(`a valid customId is accepted: ${customId.slice(0, 20)}`, async () => {
+    const { gateway, batches } = setup();
+    await batches.create([{ customId, text: TEXT, countries: ["BE"] }]);
+    assert.equal(gateway.uploaded[0].custom_id, customId);
+  });
+}
+
+test("nothing is masked before a late document is refused", async () => {
+  let calls = 0;
+  const engine = { redact: () => { calls++; throw new Error("masked before validating"); } };
+  const { gateway, batches } = setup({ sdk: engine as never });
+  const many = [...docs(50), { customId: "invoice 2291", text: TEXT, countries: ["BE"] }];
+  await assert.rejects(batches.create(many), /document 51: customId must be/);
+  assert.equal(calls, 0);
+  assert.equal(gateway.rawBodies.length, 0);
 });
 
 for (const [name, fn] of tests) {

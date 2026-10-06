@@ -26,7 +26,10 @@ narrative lives. Sections here use that vocabulary
   (`batchDir` to move it); a browser build passes `store`. `cipher` encrypts
   the file at rest. The file format and offsets (code points) are shared with
   Python, so either SDK can resolve the other's batch. The gateway endpoint
-  (euredact-inference#40) is not deployed yet. *(rules-engine#84)*
+  (euredact-inference#40) is not deployed yet. Every document is validated
+  before any is masked, and `customId`s are held to the gateway's rule (1-64
+  characters of `A-Z a-z 0-9 _ . : -`, `CUSTOM_ID`), so a bad id fails at once
+  instead of after masking and then at upload. *(rules-engine#84, #88)*
 
 - **About 10,400 BIC6 prefixes for the 31 supported countries**, from the GLEIF
   BIC-to-LEI mapping (September 2026), which SWIFT develops and licenses for

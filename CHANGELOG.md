@@ -29,7 +29,7 @@ which both test suites run.
 
 ### Added
 
-- Batches for the cloud tier: `create()` masks locally and uploads only masked text, keeping originals in a private local batch file; `results()` maps the answers back from it after a hash check, once, then wipes the originals. Both SDKs share the file format. *(rules-engine#84)*
+- Batches for the cloud tier: `create()` masks locally and uploads only masked text, keeping originals in a private local batch file; `results()` maps the answers back from it after a hash check, once, then wipes the originals. Both SDKs share the file format. `custom_id`s are checked against the gateway's character rule before any document is masked. *(rules-engine#84, #88)*
 - About 10,400 BIC6 prefixes for the 31 supported countries from the GLEIF BIC-to-LEI mapping (developed by SWIFT, redistributable under the BIC/LEI Mapping Table License Agreement; notice in `NOTICE`), with `scripts/refresh_bic_registry.py` to regenerate them. *(rules-engine#57)*
 
 - Polish identity card (dowód osobisty, with its check digit) as `NATIONAL_ID`, REGON (9 or 14 digits, mod-11) as `CHAMBER_OF_COMMERCE`, and the driving-licence number and document number as `DRIVERS_LICENSE`, each behind its label; beside a passport mention they no longer come out as `[PASSPORT]`. *(rules-engine#75, #76, #77)*

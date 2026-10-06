@@ -131,10 +131,10 @@ def test_what_is_sent_is_what_cloud_mode_sends(batches, gateway):
 
 @pytest.mark.parametrize("docs,message", [
     ([{"custom_id": "a", "text": "x", "countries": ["BE"]}] * 2, "duplicate custom_id"),
-    ([{"custom_id": "a" * 65, "text": "x", "countries": ["BE"]}], "longer than 64"),
+    ([{"custom_id": "a" * 65, "text": "x", "countries": ["BE"]}], "custom_id must be 1-64 characters"),
     ([{"custom_id": "a", "text": "x", "countries": ["BE", "NL"]}], "exactly one country"),
     ([{"custom_id": "a", "text": "x"}], "exactly one country"),
-    ([{"text": "x", "countries": ["BE"]}], "custom_id is required"),
+    ([{"text": "x", "countries": ["BE"]}], "custom_id must be 1-64 characters"),
     ([], "at least one document"),
 ])
 def test_limits_are_checked_before_anything_is_sent(batches, gateway, tmp_path, docs, message):
@@ -368,3 +368,39 @@ def test_batch_vector_tampered_original(gateway, tmp_path):
                                     "entities": case["entities"]}
     gateway.status = "ended"
     assert b.results("bat_1").documents[case["id"]].error == spec["expect_error"]
+
+
+# ── custom_id characters, checked before any masking (rules-engine#88) ──
+
+
+@pytest.mark.parametrize("custom_id", VECTORS["custom_ids"]["invalid"])
+def test_an_invalid_custom_id_is_refused_with_the_gateways_wording(custom_id, batches, gateway):
+    with pytest.raises(BatchError, match=r"document 1: custom_id must be 1-64 characters "
+                                         r"of A-Z a-z 0-9 _ \. : -"):
+        batches.create([{"custom_id": custom_id, "text": TEXT, "countries": ["BE"]}])
+    assert gateway.raw_bodies == []
+
+
+@pytest.mark.parametrize("custom_id", VECTORS["custom_ids"]["valid"])
+def test_a_valid_custom_id_is_accepted(custom_id, batches, gateway):
+    batches.create([{"custom_id": custom_id, "text": TEXT, "countries": ["BE"]}])
+    assert gateway.uploaded[0]["custom_id"] == custom_id
+
+
+def test_nothing_is_masked_before_a_late_document_is_refused(gateway, tmp_path):
+    """The bad custom_id is the last of many: no document may be masked first."""
+
+    class CountingEngine:
+        calls = 0
+
+        def redact(self, *args, **kwargs):
+            CountingEngine.calls += 1
+            raise AssertionError("masked a document before validating the batch")
+
+    client = httpx.Client(transport=httpx.MockTransport(gateway.handler))
+    b = Batches(CloudConfig(api_key="k", base_url="https://gw.test"),
+                batch_dir=tmp_path, client=client, sdk=CountingEngine())
+    docs = _docs(50) + [{"custom_id": "invoice 2291", "text": TEXT, "countries": ["BE"]}]
+    with pytest.raises(BatchError, match="document 51: custom_id must be"):
+        b.create(docs)
+    assert CountingEngine.calls == 0 and gateway.raw_bodies == []

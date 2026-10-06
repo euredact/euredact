@@ -21,6 +21,7 @@ export {
   BatchError,
   MAX_DOCUMENTS,
   MAX_CUSTOM_ID,
+  CUSTOM_ID,
   MAX_BODY_BYTES,
   MAX_DOCUMENT_TOKENS,
   type Batch,

@@ -37,6 +37,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import tempfile
 import uuid
 from dataclasses import dataclass, field
@@ -58,6 +59,9 @@ from euredact.types import Detection, DetectionSource, EntityType, RedactResult
 #: uploaded so a batch the gateway would refuse never leaves the machine.
 MAX_DOCUMENTS = 5000
 MAX_CUSTOM_ID = 64
+#: The gateway's custom_id rule (euredact-inference gateway/batches.py),
+#: matched against the whole string.
+CUSTOM_ID = re.compile(r"[A-Za-z0-9_.:\-]{1,64}")
 MAX_BODY_BYTES = 128 * 1024 * 1024
 #: Per document, counted by the model's tokenizer on the gateway. The SDK has
 #: no copy of it, and no character count decides it either way, so a document
@@ -406,18 +410,17 @@ class Batches(_BaseClient):
             raise BatchError(
                 f"{len(docs):,} documents; a batch holds at most {MAX_DOCUMENTS:,}"
             )
+        # Every document is checked before any is masked. Masking 5,000
+        # documents and then learning that the gateway refuses the batch for
+        # one bad custom_id wastes the whole pass (rules-engine#88).
         seen: set[str] = set()
-        lines: list[bytes] = []
-        entries: dict[str, dict[str, Any]] = {}
-        engine = self._engine()
+        checked: list[tuple[str, str, list[str], str]] = []
         for number, doc in enumerate(docs, start=1):
             custom_id = doc.get("custom_id")
-            if not isinstance(custom_id, str) or not custom_id:
-                raise BatchError(f"document {number}: custom_id is required")
-            if len(custom_id) > MAX_CUSTOM_ID:
+            if not isinstance(custom_id, str) or not CUSTOM_ID.fullmatch(custom_id):
                 raise BatchError(
-                    f"document {number}: custom_id is longer than "
-                    f"{MAX_CUSTOM_ID} characters"
+                    f"document {number}: custom_id must be 1-{MAX_CUSTOM_ID} "
+                    "characters of A-Z a-z 0-9 _ . : -"
                 )
             if custom_id in seen:
                 raise BatchError(
@@ -433,8 +436,12 @@ class Batches(_BaseClient):
                     f"document {number}: exactly one country is needed, "
                     "as in cloud mode"
                 )
-            language = doc.get("language") or ""
+            checked.append((custom_id, text, countries, doc.get("language") or ""))
 
+        lines: list[bytes] = []
+        entries: dict[str, dict[str, Any]] = {}
+        engine = self._engine()
+        for custom_id, text, countries, language in checked:
             # The same local pass as redact(mode="cloud"): dates on, no
             # allowlist, no tokens. What is sent is byte for byte what cloud
             # mode would send for this document.
@@ -704,6 +711,7 @@ class Batches(_BaseClient):
 
 
 __all__ = [
+    "CUSTOM_ID",
     "Batch",
     "BatchError",
     "BatchResults",

@@ -27,8 +27,11 @@ narrative lives. Sections here use that vocabulary
   `batch_dir=`, `store=` and `cipher=` choose where and how the file is kept.
   The file format is shared with the TypeScript SDK, so either can resolve
   the other's batch. The gateway endpoint (euredact-inference#40) is not
-  deployed yet. Shared conformance vectors in `conformance/batches.json`.
-  *(rules-engine#84)*
+  deployed yet. Every document is validated before any is masked, and
+  `custom_id`s are held to the gateway's rule (1-64 characters of
+  `A-Z a-z 0-9 _ . : -`, `CUSTOM_ID`), with its wording, so a bad id fails
+  at once instead of after masking and then at upload. Shared conformance vectors in
+  `conformance/batches.json`. *(rules-engine#84, #88)*
 
 - **About 10,400 BIC6 prefixes for the 31 supported countries**, from the GLEIF
   BIC-to-LEI mapping (September 2026), which SWIFT develops and licenses for

@@ -30,6 +30,8 @@ import { CloudError, NotConfiguredError, QuotaExceededError, TooLargeError } fro
 /** The gateway's limits (docs/BATCHES.md §2-§3), checked before upload. */
 export const MAX_DOCUMENTS = 5000;
 export const MAX_CUSTOM_ID = 64;
+/** The gateway's customId rule (euredact-inference gateway/batches.py), whole string. */
+export const CUSTOM_ID = /^[A-Za-z0-9_.:\-]{1,64}$/;
 export const MAX_BODY_BYTES = 128 * 1024 * 1024;
 /**
  * Per document, counted by the model's tokenizer on the gateway. The SDK has no
@@ -311,18 +313,18 @@ export class Batches {
         `${MAX_DOCUMENTS.toLocaleString("en-US")}`,
       );
     }
+    // Every document is checked before any is masked: masking 5,000 documents
+    // and then learning that the gateway refuses the batch for one bad customId
+    // wastes the whole pass (rules-engine#88).
     const seen = new Set<string>();
-    const lines: string[] = [];
-    const entries: Record<string, StoredEntry> = {};
-    const engine = this.engine();
+    const checked: Array<{ customId: string; text: string; countries: string[]; language: string }> = [];
     documents.forEach((doc, index) => {
       const number = index + 1;
       const customId = doc.customId;
-      if (typeof customId !== "string" || !customId) {
-        throw new BatchError(`document ${number}: customId is required`);
-      }
-      if (customId.length > MAX_CUSTOM_ID) {
-        throw new BatchError(`document ${number}: customId is longer than ${MAX_CUSTOM_ID} characters`);
+      if (typeof customId !== "string" || !CUSTOM_ID.test(customId)) {
+        throw new BatchError(
+          `document ${number}: customId must be 1-${MAX_CUSTOM_ID} characters of A-Z a-z 0-9 _ . : -`,
+        );
       }
       if (seen.has(customId)) {
         throw new BatchError(`document ${number}: duplicate customId ${JSON.stringify(customId)}`);
@@ -333,18 +335,23 @@ export class Batches {
       if (countries.length !== 1) {
         throw new BatchError(`document ${number}: exactly one country is needed, as in cloud mode`);
       }
-      const language = doc.language ?? "";
+      checked.push({ customId, text: doc.text, countries, language: doc.language ?? "" });
+    });
 
+    const lines: string[] = [];
+    const entries: Record<string, StoredEntry> = {};
+    const engine = this.engine();
+    for (const { customId, text, countries, language } of checked) {
       // The same local pass as redactAsync(..., { mode: "cloud" }): dates on, no
       // allowlist, no tokens. What is sent is what cloud mode would send.
-      const local = engine.redact(doc.text, { countries, detectDates: true, cache: false });
-      const [masked] = maskForCloud(doc.text, local.detections);
+      const local = engine.redact(text, { countries, detectDates: true, cache: false });
+      const [masked] = maskForCloud(text, local.detections);
       const line: Record<string, unknown> = { custom_id: customId, text: masked, countries };
       if (language) line.language = language;
       lines.push(JSON.stringify(line));
-      const cp = utf16ToCodePoints(doc.text);
+      const cp = utf16ToCodePoints(text);
       entries[customId] = {
-        text: doc.text,
+        text: text,
         masked_sha256: sha256Hex([masked]),
         countries,
         language,
@@ -352,7 +359,7 @@ export class Batches {
         detection_mode: local.detectionMode,
         inferred_countries: local.inferredCountries,
       };
-    });
+    }
 
     const body = encoder.encode(lines.join("\n") + "\n");
     if (body.length > MAX_BODY_BYTES) {

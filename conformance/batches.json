@@ -91,5 +91,26 @@
     "base": "iban-and-name",
     "original_override": "Geachte, gelieve BE68 5390 0754 7034 te crediteren voor Jan Peeters. Groeten.",
     "expect_error": "local_mismatch"
+  },
+  "custom_ids": {
+    "description": "The gateway's custom_id rule, ^[A-Za-z0-9_.:\\-]{1,64}$ matched against the whole string. Both SDKs refuse an invalid one before masking any document, with 'document N: custom_id must be 1-64 characters of A-Z a-z 0-9 _ . : -' (rules-engine#88).",
+    "valid": [
+      "invoice-2291",
+      "a.b:c-d_e",
+      "X",
+      "0000000000000000000000000000000000000000000000000000000000000000",
+      "scan_0007.v2:part-1"
+    ],
+    "invalid": [
+      "invoice 2291",
+      "a/b",
+      "é",
+      "naïve-id",
+      "a\n",
+      "",
+      "00000000000000000000000000000000000000000000000000000000000000000",
+      "tab\there",
+      "emoji😀"
+    ]
   }
 }
