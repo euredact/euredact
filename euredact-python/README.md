@@ -729,6 +729,12 @@ if outcome.status == "resolved":
   `list` (a key-value store, for example). `cipher=` takes an object with
   `encrypt(bytes)` and `decrypt(bytes)` to encrypt the file at rest with a key
   you hold; the SDK has no cryptography dependency and does not pick a scheme.
+- **In an asyncio application** (FastAPI, say), call the methods through
+  `asyncio.to_thread`, for example `batch = await asyncio.to_thread(batches.create,
+  docs)`. Each call is short: it returns when its own upload, status request or
+  download is done, never when the batch is. `create()` does the local masking
+  for every document, though, so running it on a thread also keeps that work
+  off the event loop.
 - **Limits** checked before anything is uploaded: at most 5,000 documents,
   unique `custom_id`s of at most 64 characters, one country per document, and
   a 128 MB body. The 5,000-token limit per document is **not** checked by the
