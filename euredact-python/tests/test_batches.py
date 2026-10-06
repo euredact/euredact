@@ -221,6 +221,9 @@ def test_a_gateway_error_passes_through(batches, gateway):
     gateway.status = "ended"
     outcome = batches.results(batch.id).documents["doc-0"]
     assert outcome.error == "too_long" and "6,212" in outcome.message
+    # The SDK says why it did not catch this before upload.
+    assert "counted by the model's tokenizer" in outcome.message
+    assert "cannot check it before upload" in outcome.message
 
 
 def test_results_gone_from_the_gateway_expire_the_file(batches, gateway, tmp_path):

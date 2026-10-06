@@ -389,9 +389,13 @@ class Batches(_BaseClient):
         """Mask every document here, upload only the masked text, keep the rest.
 
         Each document is ``{"custom_id", "text", "countries", "language"?}``
-        with exactly one country, as in cloud mode. Limits are checked before
-        anything is uploaded or written. The local batch file is written only
-        once the gateway has accepted the batch and named it.
+        with exactly one country, as in cloud mode. The document count,
+        ``custom_id``s, countries and body size are checked before anything is
+        uploaded or written. The 5,000-token limit per document is **not**: it
+        is counted by the model's tokenizer on the gateway, which the SDK does
+        not have, so a document over it comes back from :meth:`results` as an
+        error with code ``too_long`` that says so. The local batch file is
+        written only once the gateway has accepted the batch and named it.
         """
         from euredact.sdk import _mask_for_cloud
 
@@ -645,11 +649,15 @@ class Batches(_BaseClient):
         kind = result.get("type")
         if kind != "succeeded":
             error = result.get("error") or {}
-            return DocumentOutcome(
-                custom_id,
-                error=error.get("code") or kind or "errored",
-                message=error.get("message", ""),
-            )
+            code = error.get("code") or kind or "errored"
+            message = error.get("message", "")
+            if code == "too_long":
+                message = (
+                    f"{message}. The {MAX_DOCUMENT_TOKENS:,}-token limit is counted by "
+                    "the model's tokenizer on the gateway; the SDK cannot check it "
+                    "before upload. Split the document and submit the parts."
+                ).lstrip(". ")
+            return DocumentOutcome(custom_id, error=code, message=message)
         if entry is None:
             reason = (
                 "no local batch file on this machine"

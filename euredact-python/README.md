@@ -731,8 +731,11 @@ if outcome.status == "resolved":
   you hold; the SDK has no cryptography dependency and does not pick a scheme.
 - **Limits** checked before anything is uploaded: at most 5,000 documents,
   unique `custom_id`s of at most 64 characters, one country per document, and
-  a 128 MB body. The 5,000-token limit per document is counted by the model's
-  tokenizer, so a longer document comes back as an error with code `too_long`.
+  a 128 MB body. The 5,000-token limit per document is **not** checked by the
+  SDK: it is counted by the model's tokenizer on the gateway, which the SDK does
+  not have, and no character count decides it reliably. A document over it
+  comes back as an error with code `too_long`, whose message says so; split
+  it and submit the parts.
 
 ## `NAME` is now `PERSON_NAME`
 
