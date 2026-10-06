@@ -57,6 +57,10 @@ which both test suites run.
 - Token suffixes could contain `A`, `E`, `U` and `Y`, against the documented "no vowels" (`POSTAL_CODE_KENE`); the alphabet is now `BCDFGHJKLMNPQRSTVWXZ23456789`. *(rules-engine#55)*
 - The package can be bundled for a browser: `node:crypto` is no longer imported outside a platform module, and the `browser` field selects a Web-Crypto build. *(TypeScript only)* *(rules-engine#56)*
 
+### Security
+
+- The cloud base URL must use TLS: a non-`https` URL (from `configure`, `EUREDACT_BASE_URL` or a hand-built config) now raises instead of sending the API key and text over plain HTTP; `http://` stays allowed to `localhost`, `127.0.0.1` and `::1`. *(rules-engine#86)*
+
 ## [0.6.0] - 2026-10-05
 
 ### Added

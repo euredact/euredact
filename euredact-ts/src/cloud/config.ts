@@ -37,6 +37,32 @@ export interface ConfigureOptions {
   headers?: Record<string, string>;
 }
 
+/** Hosts a plain-HTTP base URL may name: a gateway or TLS proxy on this machine. */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/**
+ * Refuse a cloud address that would not use TLS. The API key and the text sent
+ * must travel encrypted; plain `http` is allowed only to a loopback host, for a
+ * local gateway or a TLS-terminating proxy on the same machine (rules-engine#86).
+ */
+export function requireSecureBaseUrl(baseUrl: string): void {
+  let url: URL | null = null;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    url = null;
+  }
+  if (url !== null) {
+    if (url.protocol === "https:" && url.hostname) return;
+    if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname.toLowerCase())) return;
+  }
+  throw new Error(
+    `refusing cloud base URL ${JSON.stringify(baseUrl)}: it must start with https:// ` +
+    "(plain http:// is allowed only to localhost, 127.0.0.1 or ::1), because the " +
+    "API key and document text would otherwise travel unencrypted",
+  );
+}
+
 let config: CloudConfig | null = null;
 
 /** Read an env var where there is an environment to read. Browsers have none. */
@@ -58,10 +84,12 @@ export function configure(options: ConfigureOptions = {}): CloudConfig {
       "no API key: pass configure({ apiKey }) or set EUREDACT_API_KEY",
     );
   }
+  const baseUrl = (options.baseUrl ?? env("EUREDACT_BASE_URL") ?? DEFAULT_BASE_URL)
+    .replace(/\/+$/, "");
+  requireSecureBaseUrl(baseUrl);
   config = {
     apiKey,
-    baseUrl: (options.baseUrl ?? env("EUREDACT_BASE_URL") ?? DEFAULT_BASE_URL)
-      .replace(/\/+$/, ""),
+    baseUrl,
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     pollTimeoutMs: options.pollTimeoutMs ?? DEFAULT_POLL_TIMEOUT_MS,
     maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,

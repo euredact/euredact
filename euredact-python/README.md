@@ -660,7 +660,7 @@ euredact.configure(
 | Parameter | Default | Environment variable | Description |
 |---|---|---|---|
 | `api_key` | — | `EUREDACT_API_KEY` | Your alpha key. Required; `configure()` raises without one. |
-| `base_url` | `https://api.euredact.dev` | `EUREDACT_BASE_URL` | Service endpoint. |
+| `base_url` | `https://api.euredact.dev` | `EUREDACT_BASE_URL` | Service endpoint. Must be `https://`; plain `http://` is refused except to `localhost`, `127.0.0.1` or `::1`, so the key and the text never travel unencrypted. |
 | `timeout_s` | `30.0` | — | Per-request timeout. |
 | `poll_timeout_s` | `300.0` | — | Ceiling for polling a document that outlives the synchronous window. |
 | `max_retries` | `3` | — | Retries for `429` and `5xx`. Each carries an `Idempotency-Key`, so a retry after a timeout cannot bill twice, and `Retry-After` is obeyed. |
