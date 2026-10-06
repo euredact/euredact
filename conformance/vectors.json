@@ -5435,6 +5435,137 @@
           "01 512 3456"
         ]
       }
+    },
+    {
+      "id": "plate-not-in-a-form-reference",
+      "text": "CPAM Cross-Border Pre-Authorization Form: S2 Form Ref #FR-S2-2026-009182 (Approved: 18/09/2026)",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-not-after-a-hash",
+      "text": "Ref #FR-S2 approved",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-not-after-a-number-sign",
+      "text": "Dossier n° FR-S2 approuvé",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-not-joined-by-a-slash",
+      "text": "Ref FR-S2/2026 approved",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-not-joined-by-a-slash-before",
+      "text": "Ref 2026/FR-S2 approved",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-not-joined-by-a-dot",
+      "text": "Ref FR-S2.2026 approved",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-not-joined-by-a-plus",
+      "text": "Ref FR-S2+7 approved",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ]
+    },
+    {
+      "id": "plate-still-at-a-sentence-end",
+      "text": "Das Fahrzeug hat das Kennzeichen B-AB 1234.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "B-AB 1234"
+        ]
+      }
+    },
+    {
+      "id": "plate-still-in-brackets",
+      "text": "Halter des Fahrzeugs (Kennzeichen B-AB 1234) ist unbekannt.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "B-AB 1234"
+        ]
+      }
+    },
+    {
+      "id": "plate-still-in-quotes",
+      "text": "Kennzeichen «B-AB 1234», Halter unbekannt",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "B-AB 1234"
+        ]
+      }
+    },
+    {
+      "id": "plate-two-separated-by-a-spaced-slash",
+      "text": "Plaques d'immatriculation : AB-123-CD / EF-456-GH",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "AB-123-CD",
+          "EF-456-GH"
+        ]
+      }
+    },
+    {
+      "id": "plate-after-a-number-sign-with-a-plate-cue",
+      "text": "Plaque d'immatriculation n° AB-123-CD, véhicule de service",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "AB-123-CD"
+        ]
+      }
     }
   ]
 }
