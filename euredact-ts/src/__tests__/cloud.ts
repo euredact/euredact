@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { EuRedact, restore } from "../sdk.js";
 import { redact, redactAsync } from "../index.js";
 import { CloudClient } from "../cloud/client.js";
-import { configure, reset } from "../cloud/config.js";
+import { configure, reset, requireSecureBaseUrl } from "../cloud/config.js";
 import {
   CloudError,
   NotConfiguredError,
@@ -82,6 +82,26 @@ const SUCCESS = {
 };
 
 // ── The bug this closes ────────────────────────────────────────────────────
+
+// ── TLS only (rules-engine#86) ────────────────────────────────────────
+for (const url of ["http://api.example.com", "http://api.euredact.dev", "ftp://api.example.com",
+                   "api.euredact.dev", "https://", "nohost"]) {
+  test(`a base URL without TLS is refused: ${url}`, () => {
+    assert.throws(() => configure({ apiKey: "erk_test", baseUrl: url }), /must start with https:\/\//);
+  });
+}
+for (const url of ["https://api.euredact.dev", "https://gw.example.com:8443",
+                   "http://localhost:8000", "http://127.0.0.1:8000", "http://[::1]:8000"]) {
+  test(`https and loopback http are accepted: ${url}`, () => {
+    assert.equal(configure({ apiKey: "erk_test", baseUrl: url }).baseUrl, url);
+  });
+}
+test("a hand-built config is checked by the client too", () => {
+  assert.throws(() => new CloudClient({ apiKey: "k", baseUrl: "http://api.example.com", timeoutMs: 1,
+                                        pollTimeoutMs: 1, maxRetries: 0, headers: {} }),
+                /must start with https:\/\//);
+  assert.doesNotThrow(() => requireSecureBaseUrl("https://api.euredact.dev"));
+});
 
 test("sync redact with mode:cloud throws instead of returning rules-only", () => {
   assert.throws(

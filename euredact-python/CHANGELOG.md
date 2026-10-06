@@ -222,6 +222,17 @@ narrative lives. Sections here use that vocabulary
   not the alphabet, so existing mappings keep working. A test holds the
   alphabet to its contract. *(rules-engine#55)*
 
+### Security
+
+- **The cloud base URL must use TLS.** `configure(base_url=...)`,
+  `EUREDACT_BASE_URL` and a hand-built config accepted any scheme, so a typo or
+  a test value left in production sent the API key and the document text over
+  plain `http://`. A non-`https` URL now raises at configuration, except
+  `http://` to `localhost`, `127.0.0.1` or `::1` for a local gateway or a
+  TLS-terminating proxy on the same machine. The default was and is
+  `https://api.euredact.dev`, with certificate verification on.
+  *(rules-engine#86)*
+
 ## 0.6.0 (2026-10-05)
 
 ### Added

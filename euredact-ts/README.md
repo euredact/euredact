@@ -473,6 +473,11 @@ result.detections.map(d => [d.entityType, d.text]);
 // [["PERSON_NAME", "Bas Verhoeven"], ["PHONE", "+32 ..."]]
 ```
 
+The endpoint defaults to `https://api.euredact.dev`; `baseUrl` (or
+`EUREDACT_BASE_URL`) overrides it. It must be `https://`: plain `http://` is
+refused except to `localhost`, `127.0.0.1` or `::1`, so the key and the text
+never travel unencrypted.
+
 **`redact()` is synchronous and cannot serve the cloud tier**, so
 `redact(text, { mode: "cloud" })` throws and names `redactAsync`. It never
 falls back to rules-only output: a caller who believes names and diagnoses were

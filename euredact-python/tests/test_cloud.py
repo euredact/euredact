@@ -598,3 +598,34 @@ def test_the_client_has_no_rules_only_switch():
     with _client(lambda r: _response(200, SUCCESS)) as client:
         with pytest.raises(TypeError):
             client.redact(DOC, country="BE", rules_only=True)
+
+
+# ── TLS only (rules-engine#86) ─────────────────────────────────────────
+
+
+@pytest.mark.parametrize("url", [
+    "http://api.example.com", "http://api.euredact.dev", "HTTP://api.example.com",
+    "ftp://api.example.com", "api.euredact.dev", "https://", "",
+])
+def test_a_base_url_without_tls_is_refused(url):
+    with pytest.raises(ValueError, match="must start with https://"):
+        cloud_config.configure(api_key="erk_test", base_url=url or "nohost")
+
+
+@pytest.mark.parametrize("url", [
+    "https://api.euredact.dev", "https://gw.example.com:8443/",
+    "http://localhost:8000", "http://127.0.0.1:8000", "http://[::1]:8000",
+])
+def test_https_and_loopback_http_are_accepted(url):
+    assert cloud_config.configure(api_key="erk_test", base_url=url).base_url == url.rstrip("/")
+
+
+def test_the_environment_variable_is_checked_too(monkeypatch):
+    monkeypatch.setenv("EUREDACT_BASE_URL", "http://api.example.com")
+    with pytest.raises(ValueError, match="must start with https://"):
+        cloud_config.configure(api_key="erk_test")
+
+
+def test_a_hand_built_config_is_checked_too():
+    with pytest.raises(ValueError, match="must start with https://"):
+        cloud_config.CloudConfig(api_key="erk_test", base_url="http://api.example.com")

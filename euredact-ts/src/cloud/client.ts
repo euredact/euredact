@@ -28,6 +28,7 @@
 import {
   type CloudConfig,
   getConfig,
+  requireSecureBaseUrl,
 } from "./config.js";
 import {
   CloudError,
@@ -182,6 +183,8 @@ export class CloudClient {
   constructor(config?: CloudConfig | null) {
     const resolved = config ?? getConfig();
     if (resolved === null) throw new NotConfiguredError();
+    // A config built by hand bypasses configure(), so check it here too.
+    requireSecureBaseUrl(resolved.baseUrl);
     this.config = resolved;
   }
 

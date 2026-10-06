@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 DEFAULT_BASE_URL = "https://api.euredact.dev"
 
@@ -40,6 +41,35 @@ class CloudConfig:
         if not self.api_key:
             raise ValueError("api_key must not be empty")
         object.__setattr__(self, "base_url", self.base_url.rstrip("/"))
+        require_secure_base_url(self.base_url)
+
+
+#: Hosts a plain-HTTP base URL may name: a gateway or TLS proxy on this machine.
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def require_secure_base_url(base_url: str) -> None:
+    """Refuse a cloud address that would not use TLS.
+
+    Everything sent to the cloud tier -- the API key, the masked text, and the
+    names and diagnoses in it that the model is there to find -- must travel
+    encrypted. The default is ``https``; this stops an override
+    (``configure(base_url=...)``, ``EUREDACT_BASE_URL``, a ``CloudConfig``
+    built by hand) from quietly turning that off. Plain ``http`` is allowed
+    only to a loopback host, for a local gateway or a TLS-terminating proxy on
+    the same machine (rules-engine#86).
+    """
+    parts = urlsplit(base_url)
+    scheme = parts.scheme.lower()
+    if scheme == "https" and parts.hostname:
+        return
+    if scheme == "http" and (parts.hostname or "").lower() in _LOOPBACK_HOSTS:
+        return
+    raise ValueError(
+        f"refusing cloud base URL {base_url!r}: it must start with https:// "
+        "(plain http:// is allowed only to localhost, 127.0.0.1 or ::1), "
+        "because the API key and document text would otherwise travel "
+        "unencrypted")
 
 
 _config: CloudConfig | None = None

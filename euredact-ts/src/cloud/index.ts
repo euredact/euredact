@@ -20,6 +20,7 @@ export {
   configure,
   getConfig,
   reset,
+  requireSecureBaseUrl,
   DEFAULT_BASE_URL,
   type CloudConfig,
   type ConfigureOptions,
