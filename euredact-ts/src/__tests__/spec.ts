@@ -72,7 +72,16 @@ test("BIC tier 2 keyword", () =>
 test("BIC tier 2 SWIFT-Code", () =>
   assert.deepEqual(of("SWIFT-Code: MEDBFRPP", "FR", EntityType.BIC), ["MEDBFRPP"]));
 test("BIC tier 2 IBAN same line", () =>
-  assert.deepEqual(of("Overboeking naar NL91 ABNA 0417 1643 00 via SOLAESMM.", "NL", EntityType.BIC), ["SOLAESMM"]));
+  assert.deepEqual(of("Overboeking naar NL91 ABNA 0417 1643 00 via SOLAESM2.", "NL", EntityType.BIC), ["SOLAESM2"]));
+// rules-engine#57: a letters-only registry miss needs a BIC/SWIFT label touching it.
+test("BIC letters-only unlisted code is not admitted by context alone", () =>
+  assert.deepEqual(of("Overboeking naar NL91 ABNA 0417 1643 00 via SOLAESMM.", "NL", EntityType.BIC), []));
+test("BIC letters-only unlisted code behind a label is detected", () =>
+  assert.deepEqual(of("IBAN NL91 ABNA 0417 1643 00, SWIFT-Code: SOLAESMM", "NL", EntityType.BIC), ["SOLAESMM"]));
+test("BIC: a bank the GLEIF mapping knows needs no label beside an IBAN", () =>
+  assert.deepEqual(of("Zahlung auf IBAN DE89 3704 0044 0532 0130 00 über COMMDEFF eingegangen.", "DE", EntityType.BIC), ["COMMDEFF"]));
+test("BIC: a word starting with a real prefix is not a BIC in prose", () =>
+  assert.deepEqual(of("Les DERNIERS chiffres sont publiés demain.", "FR", EntityType.BIC), []));
 test("BIC tier 2 cue several lines away in one record", () =>
   assert.deepEqual(
     of("Overzicht\nIBAN: NL91 ABNA 0417 1643 00\nBedrag: 1.250,00 EUR\nDe tegenpartij gebruikt BOREHU2B hiervoor.",
@@ -83,10 +92,10 @@ test("BIC label on line above (table layout)", () =>
 test("BIC no tier: mid-sentence, no cue", () =>
   assert.deepEqual(of("Das Projekt NEXALINK wurde gestartet.", "DE", EntityType.BIC), []));
 test("BIC registry provider is consulted", () => {
-  assert.deepEqual(of("NEXABE22 in het dossier.", "BE", EntityType.BIC), []);
-  setBicRegistry(["NEXABE"]);
+  assert.deepEqual(of("ZQXWBE22 in het dossier.", "BE", EntityType.BIC), []);
+  setBicRegistry(["ZQXWBE"]);
   sdk.clear();
-  assert.deepEqual(of("NEXABE22 in het dossier.", "BE", EntityType.BIC), ["NEXABE22"]);
+  assert.deepEqual(of("ZQXWBE22 in het dossier.", "BE", EntityType.BIC), ["ZQXWBE22"]);
   setBicRegistry(null);
   sdk.clear();
 });

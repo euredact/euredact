@@ -10,8 +10,7 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-from euredact.rules.bic_registry import is_registered_bic
-from euredact.rules.cues import cued_type
+from euredact.rules.bic_registry import is_known_institution, is_registered_bic
 from euredact.rules.de_districts import DE_DISTRICT_CODES
 from euredact.rules.matchers import RawMatch
 from euredact.types import EntityType
@@ -981,13 +980,22 @@ def suppress_phone_date_overlap(text: str, match: RawMatch) -> bool:
     return bool(_DATE_PATTERN_FULL.match(match.text.strip()))
 
 
-def _joined_by_hyphen(text: str, start: int, end: int) -> bool:
-    """A hyphen glues [start, end) to a letter or digit outside it."""
+#: Characters that join a token to more of an identifier: "FR-S2-2026",
+#: "FR-S2/2026", "FR-S2.2026", "FR_S2", "FR-S2+7". Only when a letter or digit
+#: follows on the far side; a spaced dash or slash ("A / B") does not join.
+_ID_CONNECTORS = "-/._+"
+
+#: A reference marker directly before the token: "#FR-S2", "№ …", "n° …".
+_REFERENCE_MARK_BEFORE = re.compile(r"(?:#|№|(?<![A-Za-z])[nN][°º])\s?$")
+
+
+def _joined_to_more(text: str, start: int, end: int) -> bool:
+    """A connector glues [start, end) to a letter or digit outside it."""
     after = text[end:end + 2]
     before = text[max(0, start - 2):start]
     return (
-        (len(after) == 2 and after[0] == "-" and after[1].isalnum())
-        or (len(before) == 2 and before[1] == "-" and before[0].isalnum())
+        (len(after) == 2 and after[0] in _ID_CONNECTORS and after[1].isalnum())
+        or (len(before) == 2 and before[1] in _ID_CONNECTORS and before[0].isalnum())
     )
 
 
@@ -1008,13 +1016,21 @@ def suppress_plate_in_compound(text: str, match: RawMatch) -> bool:
         if re.search(r"[A-Za-zÄÖÜäöüß]{2,}-$", three_before):
             return True
 
-    # Inside a longer hyphen-joined token: "TF-284-KL-00874",
-    # "LU-TS-2023-004512". A plate-shaped run with a hyphen glued to another
-    # letter or digit on either side is a segment of a reference, and taking it
-    # left the rest of the reference readable (rules-engine#50). A spaced dash
-    # ("AB-123-CD - stationné") does not join.
-    if _joined_by_hyphen(text, match.start, match.end):
+    # A plate is a token of its own. Inside a longer identifier -- "TF-284-KL-00874",
+    # "LU-TS-2023-004512" (rules-engine#50), and with any other connector,
+    # "FR-S2/2026", "FR-S2.2026" (rules-engine#81) -- a plate-shaped run is a
+    # segment of a reference, and taking it left the rest readable. A spaced
+    # dash or slash ("AB-123-CD / EF-456-GH") does not join.
+    if _joined_to_more(text, match.start, match.end):
         return True
+
+    # After a reference marker it is a reference ("Form Ref #FR-S2"), unless a
+    # plate cue says otherwise: "Plaque d'immatriculation n° AB-123-CD" is a
+    # plate (rules-engine#81).
+    if _REFERENCE_MARK_BEFORE.search(text[max(0, match.start - 4):match.start]):
+        before, after = _get_context(text, match.start, match.end)
+        if not _PLATE_CUE_NEAR.search(before + after):
+            return True
 
     matched = match.text.strip()
     parts = re.split(r"[\s\-]+", matched)
@@ -1317,6 +1333,13 @@ _TITLE_BEFORE = re.compile(
     r"\.?\s+$", re.IGNORECASE)
 
 
+#: A BIC/SWIFT label touching the token: "BIC: ", "SWIFT-Code:\n", "Code SWIFT : ",
+#: "BIC/SWIFT: ", "BIC Bank A: ", "(BIC ".
+_BIC_LABEL_BEFORE = re.compile(
+    r"(?<![A-Za-z])(?:bic|swift)(?:[\s/\-]*(?:code|swift|bic))?(?:\s+bank\s+\w{1,3})?"
+    r"[\s:.\-()]*$", re.IGNORECASE)
+
+
 def _bic_shaped_word(text: str, start: int, end: int, token: str) -> bool:
     """A registry miss sitting where only a word or a name can.
 
@@ -1328,9 +1351,11 @@ def _bic_shaped_word(text: str, start: int, end: int, token: str) -> bool:
     * joined to a word by a hyphen: "Dr. Joëlle NGUYEN-HOFFMANN" two lines under
       an IBAN, where masking HOFFMANN also broke the model's span for the name;
     * right after a personal title: "BIC: BCEELULL, Dr. HOFFMANN";
-    * eleven letters with no digit and no `XXX` branch, which is the shape of
-      `MAANDELIJKS`, `UNIVERSELLE` and `OBLIGATOIRE` -- an unlisted code of that
-      length needs a BIC/SWIFT label touching it.
+    * letters only -- eight, or eleven without the `XXX` branch -- which is the
+      only shape a word can have: `BETALING`, `MAANDELIJKS`, `JANSSENS`. Unless
+      the GLEIF mapping knows the institution (about 10,400 prefixes), such a
+      code needs a BIC/SWIFT label touching it. A code with a digit, or with an `XXX` branch, is no word and keeps the
+      context gate.
     """
     before = text[max(0, start - 2):start]
     after = text[end:end + 2]
@@ -1339,8 +1364,9 @@ def _bic_shaped_word(text: str, start: int, end: int, token: str) -> bool:
         return True
     if _TITLE_BEFORE.search(text[max(0, start - 8):start]):
         return True
-    return (len(token) == 11 and token.isalpha() and not token.endswith("XXX")
-            and cued_type(text, start) != EntityType.BIC)
+    return (token.isalpha() and not (len(token) == 11 and token.endswith("XXX"))
+            and not is_known_institution(token)
+            and not _BIC_LABEL_BEFORE.search(text[max(0, start - 30):start]))
 
 
 def suppress_bic_without_evidence(text: str, match: RawMatch) -> bool:

@@ -802,14 +802,23 @@ BIC is the only bank identifier here with **no check digit**, and characters
 | Stage | Condition | Result |
 |---|---|---|
 | Gate 0 | the token also occurs as an ordinary lowercase word in the same document | never emitted |
-| Tier 1 | registry hit on the BIC6 institution+country prefix | emitted |
+| Tier 1 | registry hit on the BIC6 institution+country prefix (your registry, or the bundled seed of major banks) | emitted |
 | Gate 2 | heading / shouted-word shape | never emitted |
-| Tier 2 | `BIC`/`SWIFT` keyword, an IBAN, or a bank block in the enclosing line, record or paragraph | emitted |
+| Tier 2 | `BIC`/`SWIFT` keyword, an IBAN, or a bank block in the enclosing line, record or paragraph | emitted — but a **letters-only** code (`BETALING`, `HOFFMANN`), unless the bundled GLEIF mapping knows the institution, also needs a `BIC`/`SWIFT` label touching it |
 | — | none of the above | never emitted |
 
-The package bundles **no licensed BIC data** — only a small seed list of BIC6
-prefixes compiled from publicly published bank data. Deployments holding a
-licensed directory install it at startup:
+The package bundles about **10,400 BIC6 prefixes** for the 31 supported countries,
+derived from the [GLEIF BIC-to-LEI mapping](https://www.gleif.org/en/lei-data/lei-mapping/download-bic-to-lei-relationship-files),
+which SWIFT develops and licenses for redistribution under the BIC/LEI Mapping
+Table License Agreement; its required notice is in `NOTICE`. They tell a real
+bank from an ordinary word next to an IBAN, but do not by themselves license a
+code in bare prose: with that many real prefixes, some words begin with one
+(`DERNIERS` → `DERN`+`IE`, an Irish institution). `scripts/refresh_bic_registry.py`
+regenerates the list; GLEIF publishes the mapping monthly.
+
+The complete SWIFTRef BIC Directory is a commercial product and is not
+bundled. Deployments holding it install it at startup, where it works like the
+seed — a hit is emitted without context:
 
 ```ts
 import { setBicRegistry } from "euredact";
@@ -819,10 +828,10 @@ setBicRegistry(bic => myDirectory.has(bic));          // membership callable
 setBicRegistry(null);                                 // remove
 ```
 
-The registry is an **accept** signal, never a filter: a code missing from it
-falls through to the context gate and is still detected when banking context is
-present. A stale list costs a little recall on bare, contextless BICs — it
-never causes a leak. Annual review is sufficient.
+The registry is mostly an **accept** signal: a code missing from it falls
+through to the context gate and is still detected when banking context is
+present — except a letters-only code, the only shape an ordinary word can take,
+which then also needs a `BIC`/`SWIFT` label touching it (rules-engine#57).
 
 ## `IBAN` is now `BANK_ACCOUNT`
 
@@ -1175,11 +1184,12 @@ bundler, edge-runtime and Deno compatibility — would buy nothing.
 
 | Package | |
 |---|---:|
-| Tarball | 150 kB |
-| Unpacked | 629 kB |
+| Tarball | 232 kB |
+| Unpacked | 817 kB |
 | Runtime dependencies | **0** |
 
-Measured with `npm pack --dry-run` at 0.5.1. A stale duplicate of this section
+Measured with `npm pack --dry-run` with the bundled BIC prefix list, which
+accounts for about 60 kB of the tarball (shipped in both the ESM and CJS builds). A stale duplicate of this section
 previously quoted 0.02 ms and 86 KB; both were wrong, and the figures above are
 the measured ones.
 

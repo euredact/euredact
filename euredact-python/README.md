@@ -881,9 +881,9 @@ frequently valid ISO 3166 country codes (`DRINGEND` → `GE`, `HOSPITAL` →
 | Stage | Condition | Result |
 |---|---|---|
 | Gate 0 | the token also occurs as an ordinary lowercase word in the same document | never emitted |
-| Tier 1 | registry hit on the BIC6 institution+country prefix | emitted |
+| Tier 1 | registry hit on the BIC6 institution+country prefix (your registry, or the bundled seed of major banks) | emitted |
 | Gate 2 | heading / shouted-word shape | never emitted |
-| Tier 2 | `BIC`/`SWIFT` keyword, an IBAN, or a bank block in the enclosing line, record or paragraph | emitted |
+| Tier 2 | `BIC`/`SWIFT` keyword, an IBAN, or a bank block in the enclosing line, record or paragraph | emitted — but a **letters-only** code (`BETALING`, `HOFFMANN`), unless the bundled GLEIF mapping knows the institution, also needs a `BIC`/`SWIFT` label touching it |
 | — | none of the above | never emitted |
 
 The context window is the enclosing **line, record or paragraph**, not a
@@ -892,13 +892,18 @@ CSV row.
 
 ### Supplying your own BIC registry
 
-The package bundles **no licensed BIC data**. The authoritative SWIFTRef BIC
-Directory is a commercial product, and redistributing it inside a package
-requires a specific redistribution licence. What ships is a small seed list of
-BIC6 prefixes for major European banks, compiled from publicly published bank
-data.
+The package bundles about **10,400 BIC6 prefixes** for the 31 supported countries,
+derived from the [GLEIF BIC-to-LEI mapping](https://www.gleif.org/en/lei-data/lei-mapping/download-bic-to-lei-relationship-files),
+which SWIFT develops and licenses for redistribution under the BIC/LEI Mapping
+Table License Agreement; its required notice is in `NOTICE`. They tell a real
+bank from an ordinary word next to an IBAN, but do not by themselves license a
+code in bare prose: with that many real prefixes, some words begin with one
+(`DERNIERS` → `DERN`+`IE`, an Irish institution). `scripts/refresh_bic_registry.py`
+regenerates the list; GLEIF publishes the mapping monthly.
 
-Deployments holding a licensed directory install it at startup:
+The complete SWIFTRef BIC Directory is a commercial product and is not
+bundled. Deployments holding it install it at startup, where it works like the
+seed — a hit is emitted without context:
 
 ```python
 import euredact
@@ -919,10 +924,12 @@ euredact.set_bic_registry(None)
 Entries may be full BIC8/BIC11 codes or bare BIC6 prefixes; both are matched,
 case-insensitively and ignoring spaces.
 
-The registry is an **accept** signal, never a filter. A code missing from it
-falls through to the context gate and is still detected when banking context
-is present, so a stale list costs a little recall on bare, contextless BICs —
-it never causes a leak. Annual review is sufficient.
+The registry is mostly an **accept** signal. A code missing from it falls
+through to the context gate and is still detected when banking context is
+present — except a letters-only code, the only shape an ordinary word can take,
+which then also needs a `BIC`/`SWIFT` label touching it. Context alone used to
+admit those, and surnames and words beside an IBAN were masked as `[BIC]`
+(rules-engine#57).
 
 ## Custom Patterns
 
@@ -1432,11 +1439,13 @@ detected — both are covered by `tests/test_scan_path_parity.py`, which runs
 every available scan path against the plain-Python one and requires them to
 agree:
 
-- **`google-re2`** builds a prefilter over every pattern it can express (334 of
-  345). One DFA pass per 1 KB window reports which patterns match anywhere in
+- **`google-re2`** builds a prefilter over every pattern it can express (324 of
+  347). One DFA pass per 1 KB window reports which patterns match anywhere in
   it — typically 42 of 314 for a real document — and only those are then run.
-  Patterns RE2 cannot express, such as the lookbehind-based `SECRET` rules,
-  always run.
+  A pattern RE2 rejects only for a lookaround is prefiltered by the same pattern
+  with its lookarounds removed, a superset that can never skip a real match.
+  The rest, chiefly the `SECRET` rules and patterns that can match further than
+  the window overlap, always run.
 
   Asking the question per window matters: over a long document nearly every
   pattern matches *somewhere*, so a whole-document prefilter stops filtering

@@ -15,6 +15,16 @@ narrative lives. Sections here use that vocabulary
 
 ### Added
 
+- **About 10,400 BIC6 prefixes for the 31 supported countries**, from the GLEIF
+  BIC-to-LEI mapping (September 2026), which SWIFT develops and licenses for
+  redistribution; its required notice ships in `NOTICE` and in the generated
+  module. `scripts/refresh_bic_registry.py` regenerates the list from the
+  monthly file. The mapping decides whether a letters-only code beside an IBAN
+  is a bank or a word; it does not license a code in bare prose, because some
+  ordinary words begin with a real prefix (`DERNIERS` → `DERN`+`IE`). That stays
+  the hand-kept seed's job. Adds about 54 kB to each package's source.
+  *(rules-engine#57)*
+
 - **Polish identity card, REGON and driving-licence numbers.** None had a
   pattern, so behind their own labels they were left in the clear, and beside a
   passport mention the passport rule took them: `dowód osobisty ABA212345` and
@@ -35,6 +45,17 @@ narrative lives. Sections here use that vocabulary
 
 ### Changed
 
+- **A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter**, via
+  the same pattern with its lookarounds stripped. Removing a lookaround only
+  drops a constraint, so the stripped form matches a superset: it can let a
+  pattern run needlessly, never skip a window where the exact pattern matches.
+  Patterns outside the prefilter fall from 35 to 23, including the three phone
+  patterns the #51/#60 guards had pushed out. Measured over 2,000 pipeline
+  documents with `[fast]`, this recovers about 0.25 s of the ~1.0 s the last
+  batch added; most of the remainder is the per-date label check from #52, not
+  the prefilter. *(Python only; the TypeScript SDK has no RE2 path.)*
+  *(rules-engine#72)*
+
 - **A label touching a value now rescues a failed checksum on a label-gated
   pattern too**, as it already did on the others. `Numer dowodu osobistego
   ABA912345` has a bad check digit and is still an identity card; before, a
@@ -44,6 +65,21 @@ narrative lives. Sections here use that vocabulary
   that gates the pattern. *(rules-engine#75)*
 
 ### Fixed
+
+- **A licence plate was matched inside a reference joined by `/`, `.`, `_` or
+  `+`, or after a reference marker.** #50 stopped plates inside hyphen-joined
+  references; the same fragment still fired with any other connector:
+  `#FR-S2-2026-009182` on 0.6.0, and on `main` `Ref #FR-S2`, `FR-S2/2026`,
+  `FR-S2.2026`, each `[LICENSE_PLATE]` through the German pattern (`FR` is the
+  Freiburg district code). A plate must now be a token of its own: a connector
+  (`- / . _ +`) joining it to a letter or digit on either side rules it out, and
+  so does a reference marker (`#`, `№`, `n°`) directly before it, unless a
+  plate cue is nearby (`Plaque d'immatriculation n° AB-123-CD` stays a plate).
+  Spaced separators, sentence punctuation, brackets and quotes still bound a
+  plate. On 7,571 pipeline documents this removed 133 false plates — `AVS 756`
+  cut out of Swiss AVS numbers, `Peugeot 308 SW 1.6`, `EUR 2.640,00 EUR 1`,
+  `BV-ZK-07/2021`, `CK 245 U/l` — and added none; corpus plate recall is
+  unchanged. Twelve conformance vectors. *(rules-engine#81)*
 
 - **A Luxembourg matricule in any grouping but two was half-masked, and its
   birth date stayed readable.** The pattern accepted the number compact
@@ -157,17 +193,19 @@ narrative lives. Sections here use that vocabulary
   conformance vectors. *(rules-engine#54)*
 
 - **Surnames and ALL-CAPS words near an IBAN were masked as `[BIC]`.** A BIC
-  missing from the registry is still emitted on banking context, which is what
-  catches unlisted bank codes, and that admitted any word whose letters 5-6 are
-  a country code: `Dr. Joëlle NGUYEN-[BIC]` two lines under an IBAN, which also
-  breaks the name apart for the model. Three positions no bank code takes are
-  now refused even with banking context: joined to a word by a hyphen, right
-  after a personal title (`Dr.`, `Mme`, `Herr`, …), and an eleven-letter token
-  without the `XXX` branch code and without a BIC/SWIFT label touching it
-  (`MAANDELIJKS`, `UNIVERSELLE`, `OBLIGATOIRE`). Eight-letter words in prose
-  beside an IBAN (`BETALING`) are not covered: they have the same shape and
-  position as the unlisted codes the context gate exists for. Eight conformance
-  vectors. *(rules-engine#57)*
+  missing from the registry was emitted on banking context alone, and that
+  admitted any word whose letters 5-6 are a country code: `Dr. Joëlle
+  NGUYEN-[BIC]` two lines under an IBAN (which also breaks the name apart for
+  the model), `BETALING`, `VIREMENT`, `DOCUMENT`, `JANSSENS`. Hyphen-joined
+  tokens and tokens right after a personal title are refused outright; any other
+  **letters-only** code (eight letters, or eleven without the `XXX` branch) that
+  misses the registry now needs a `BIC`/`SWIFT` label touching it, unless the
+  bundled GLEIF mapping knows the institution. Measured on 7,571 pipeline
+  documents: 38 false `[BIC]` removed, every real bank code kept, nothing else
+  changed. A code with a digit or an `XXX` branch is no word and keeps the
+  context gate. Five pinned tier-2 inputs were letters-only invented codes; they
+  now pin the label requirement, and the context gate keeps its coverage with
+  digit-bearing codes. *(rules-engine#57)*
 
 - **A phone number followed by a date took the date's day.** `Mob: 0170
   1234567 12.03.2024` became `[PHONE].03.2024`: the Austrian grouped phone
@@ -694,7 +732,6 @@ it previously accepted an identifier as found once its literal text was absent
 from the output. On equal terms — the 0.4.0 engine measured with the current
 harness — recall was 99.4% hinted and 99.2% blind, so this release adds
 **+0.16pp** and **+0.19pp** respectively.
-
 
 - **`make eval` measures whole-identifier masking.** A gold identifier counted
   as recalled once its literal text was absent from the output — which masking
@@ -1551,7 +1588,6 @@ labelled entities, false positives fell from 8,905 to 3,294 and misses from
     corpora. Conformance vectors pin named cases; this is the broad counterpart,
     and it is how a 19,014-character gap was found that no vector showed.
 
-
 ### Known issues
 
 - A checksum-invalid identifier occupying a span no other detector claims can
@@ -1728,7 +1764,6 @@ labelled entities, false positives fell from 8,905 to 3,294 and misses from
   document shows no trace of is now treated as coincidence rather than
   evidence. Entities that carry their own country still vouch for themselves,
   so a foreign IBAN in a domestic invoice keeps its rank.
-
 
 ### Fixed — security
 

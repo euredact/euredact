@@ -10,13 +10,19 @@ therefore gated:
 * **tier 1** — registry hit on the BIC6 institution+country prefix -> emit;
 * **gate 2** — heading / shouted-word shape -> reject;
 * **tier 2** — BIC/SWIFT keyword, IBAN or bank block in the enclosing line,
-  record or paragraph -> emit;
+  record or paragraph -> emit, except that a **letters-only** code (eight, or
+  eleven without the ``XXX`` branch) needs a BIC/SWIFT label touching it: that
+  is the only shape an ordinary word or surname can take ("BETALING",
+  "HOFFMANN"), and the registry bundles the GLEIF BIC-to-LEI mapping, so a
+  real bank rarely reaches this gate unlisted (rules-engine#57);
 * otherwise -> never emit.
 
 Every case below is a document plus the exact set of BIC values expected from
-it. Codes used in the tier 2 cases are deliberately *not* in the bundled seed
+it. Codes used in the tier 2 cases are deliberately *not* in the bundled
 registry, so they can only be detected through context — that is what keeps
-these cases honest.
+these cases honest. The context-only cases carry a digit in the location code;
+until rules-engine#57 five of them were letters-only, and those inputs now pin
+the label requirement in ``LETTERS_ONLY_UNLISTED_CASES`` instead.
 """
 
 import pytest
@@ -111,9 +117,9 @@ TIER2_CASES = [
     # --- an IBAN in the same line vouches for the code ---
     (
         "t2-iban-same-line",
-        "Overboeking naar NL91 ABNA 0417 1643 00 via SOLAESMM.",
+        "Overboeking naar NL91 ABNA 0417 1643 00 via SOLAESM2.",
         "NL",
-        ["SOLAESMM"],
+        ["SOLAESM2"],
     ),
     (
         "t2-iban-same-line-fr",
@@ -124,9 +130,9 @@ TIER2_CASES = [
     # --- an IBAN on an adjacent line of the same paragraph ---
     (
         "t2-iban-adjacent-line",
-        "Betaalgegevens\nIBAN: NL91 ABNA 0417 1643 00\nCorrespondentbank MERKCZPP.",
+        "Betaalgegevens\nIBAN: NL91 ABNA 0417 1643 00\nCorrespondentbank MERKCZP2.",
         "NL",
-        ["MERKCZPP"],
+        ["MERKCZP2"],
     ),
     (
         "t2-iban-line-above",
@@ -172,7 +178,7 @@ TIER2_CASES = [
         "NL",
         ["MISTIS2I"],
     ),
-    ("t2-block-compte", "Compte de la societe: HAVNFRPP", "FR", ["HAVNFRPP"]),
+    ("t2-block-compte", "Compte de la societe: HAVNFRP2", "FR", ["HAVNFRP2"]),
     (
         "t2-block-coordonnees",
         "Coordonnees bancaires du beneficiaire: RIVEBE22",
@@ -181,8 +187,8 @@ TIER2_CASES = [
     ),
     ("t2-block-account-number", "Account number and code: TERNGB22", "UK", ["TERNGB22"]),
     ("t2-block-bankgegevens", "Bankgegevens van de leverancier: DUINNL2A", "NL", ["DUINNL2A"]),
-    ("t2-block-zahlungsdaten", "Zahlungsdaten der Gegenstelle: HAINDEFF", "DE", ["HAINDEFF"]),
-    ("t2-block-bankleitzahl", "Bankleitzahl 12030000, Code MOORDEFF", "DE", ["MOORDEFF"]),
+    ("t2-block-zahlungsdaten", "Zahlungsdaten der Gegenstelle: HAINDEF1", "DE", ["HAINDEF1"]),
+    ("t2-block-bankleitzahl", "Bankleitzahl 12030000, Code MOORDEF1", "DE", ["MOORDEF1"]),
     # --- 11-character forms through the context gate ---
     ("t2-eleven-char", "BIC: STEINL2AXXX", "NL", ["STEINL2AXXX"]),
     # --- two codes in one bank block, both emitted ---
@@ -371,6 +377,67 @@ def test_tier1_registry_hit_is_detected(bic_sdk, text, country, expected):
 def test_tier2_context_gate_is_detected(bic_sdk, text, country, expected):
     """Tier 2: a non-registry code is emitted on banking context in its unit."""
     assert _bics(bic_sdk, text, country) == expected
+
+
+# The five tier-2 inputs that were letters-only before rules-engine#57, verbatim.
+# Banking context alone no longer admits a letters-only code that misses the
+# registry: it has the only shape a word can have, and with the GLEIF mapping
+# bundled a real bank rarely misses it. A label touching the code still admits
+# it, which the second test pins with the same codes.
+LETTERS_ONLY_UNLISTED_CASES = [
+    ("lo-iban-same-line", "Overboeking naar NL91 ABNA 0417 1643 00 via SOLAESMM.", "NL", "SOLAESMM"),
+    ("lo-iban-adjacent-line", "Betaalgegevens\nIBAN: NL91 ABNA 0417 1643 00\nCorrespondentbank MERKCZPP.", "NL", "MERKCZPP"),
+    ("lo-block-compte", "Compte de la societe: HAVNFRPP", "FR", "HAVNFRPP"),
+    ("lo-block-zahlungsdaten", "Zahlungsdaten der Gegenstelle: HAINDEFF", "DE", "HAINDEFF"),
+    ("lo-block-bankleitzahl", "Bankleitzahl 12030000, Code MOORDEFF", "DE", "MOORDEFF"),
+]
+
+
+@pytest.mark.parametrize(
+    "text,country,code",
+    [pytest.param(t, c, v, id=i) for i, t, c, v in LETTERS_ONLY_UNLISTED_CASES],
+)
+def test_letters_only_unlisted_code_needs_a_label(bic_sdk, text, country, code):
+    """rules-engine#57: context alone does not admit a word-shaped registry miss."""
+    assert _bics(bic_sdk, text, country) == []
+
+
+@pytest.mark.parametrize(
+    # A label on the line above is pinned by t2-label-above / t2-label-above-colon;
+    # after other content, a code alone on its line is gate 2's heading shape.
+    "label", ["BIC: ", "SWIFT: ", "SWIFT-Code: ", "Code SWIFT : ", "BIC/SWIFT: ", "(BIC "],
+)
+@pytest.mark.parametrize(
+    "code,country", [(v, c) for _, _, c, v in LETTERS_ONLY_UNLISTED_CASES],
+)
+def test_letters_only_unlisted_code_behind_a_label_is_detected(bic_sdk, label, code, country):
+    """The same codes are detected when a BIC/SWIFT label touches them."""
+    assert _bics(bic_sdk, f"IBAN NL91 ABNA 0417 1643 00, {label}{code}", country) == [code]
+
+
+def test_the_bundled_mapping_is_consulted():
+    """Banks absent from the hand-kept seed are known through the GLEIF mapping."""
+    from euredact.rules.bic_gleif import NOTICE, VERSION, bic6_prefixes
+    from euredact.rules.bic_registry import (
+        SEED_BIC6_PREFIXES, is_known_institution, is_registered_bic)
+
+    assert "COMMDE" not in SEED_BIC6_PREFIXES
+    assert is_known_institution("COMMDEFF") and is_known_institution("BNAGBEBB")
+    # Known is not registered: a GLEIF hit never licenses a code in bare prose.
+    assert not is_registered_bic("COMMDEFF")
+    assert len(bic6_prefixes()) > 5000
+    assert VERSION in NOTICE and "www.swift.com/bic" in NOTICE
+
+
+def test_a_word_that_starts_with_a_real_prefix_is_not_a_bic_in_prose(bic_sdk):
+    """DERNIERS begins with DERN+IE, a real Irish institution in the mapping."""
+    assert _bics(bic_sdk, "Les DERNIERS chiffres sont publiés demain.", "FR") == []
+
+
+def test_a_mapped_bank_beside_an_iban_needs_no_label(bic_sdk):
+    """A letters-only code the mapping knows is a bank, not a word."""
+    text = "Zahlung auf IBAN DE89 3704 0044 0532 0130 00 über COMMDEFF eingegangen."
+    assert _bics(bic_sdk, text, "DE") == ["COMMDEFF"]
 
 
 @pytest.mark.parametrize(

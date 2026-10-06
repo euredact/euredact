@@ -29,14 +29,19 @@ which both test suites run.
 
 ### Added
 
+- About 10,400 BIC6 prefixes for the 31 supported countries from the GLEIF BIC-to-LEI mapping (developed by SWIFT, redistributable under the BIC/LEI Mapping Table License Agreement; notice in `NOTICE`), with `scripts/refresh_bic_registry.py` to regenerate them. *(rules-engine#57)*
+
 - Polish identity card (dowód osobisty, with its check digit) as `NATIONAL_ID`, REGON (9 or 14 digits, mod-11) as `CHAMBER_OF_COMMERCE`, and the driving-licence number and document number as `DRIVERS_LICENSE`, each behind its label; beside a passport mention they no longer come out as `[PASSPORT]`. *(rules-engine#75, #76, #77)*
 
 ### Changed
+
+- A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter through a lookaround-free superset; patterns outside it fall from 35 to 23. *(Python only)* *(rules-engine#72)*
 
 - A label touching a value rescues a failed checksum on a label-gated pattern too (`Numer dowodu osobistego ABA912345`), as it already did on the others. *(rules-engine#75)*
 
 ### Fixed
 
+- A licence plate was matched inside a reference joined by `/`, `.`, `_` or `+`, or after `#`/`№`/`n°` (`Ref #FR-S2-2026-009182`, `FR-S2/2026`); a plate must now be a token of its own, unless a plate cue is nearby. *(rules-engine#81)*
 - A Luxembourg matricule grouped other than compact or fully spaced was half-masked, or not at all, leaving the birth date readable: `19710314 12345` and `1971 0314 123 45` are now one `NATIONAL_ID`. *(rules-engine#49)*
 - German phone numbers with trailing two-digit groups were cut short (`+49 170 1234567 85 21` left `85 21` readable), and a prefix set off by ` / ` was not detected at all. *(rules-engine#51)*
 - A postal code with a two-letter country prefix (`CH-8004 Zürich`, `DE-10115 Berlin`, `NL-1012 LG Amsterdam`) was not masked: the prefix was read as a reference tag. References such as `IR-43433` and `PV-2026-LU-09143` stay unmasked. *(rules-engine#58)*
@@ -46,7 +51,7 @@ which both test suites run.
 - A residence-permit number behind a permit label (`Aufenthaltstitel Nr.:`, `Verblijfsvergunning`, `Titre de séjour`, …) is typed `RESIDENCE_PERMIT` instead of the `NATIONAL_ID`, `PASSPORT` or `PHONE` pattern that happened to fit it; a Spanish NIE stays `NATIONAL_ID`. *(rules-engine#53)*
 - Every date in a document took its type from whichever date label the document carried (an admission date as `DATE_OF_DEATH`, a death date as `DOB`, an invoice date as `DOB`); a `DOB` or `DATE_OF_DEATH` keyword now counts only as the date's own label, or as its column header in a table. *(rules-engine#52)*
 - An insurance claim number behind its label (`Schadeclaim 2026-0412`, `numéro de sinistre`, `claim number`) was masked as a Cypriot `PHONE`; it is now `INTERNAL_ID`, like `Dossiernummer`. *(rules-engine#54)*
-- A surname or ALL-CAPS word near an IBAN was masked as `[BIC]` (`Dr. Joëlle NGUYEN-[BIC]`); a registry miss joined to a word by a hyphen, after a personal title, or eleven letters long without `XXX` or a BIC label is no longer a BIC. *(rules-engine#57)*
+- Surnames and ALL-CAPS words near an IBAN were masked as `[BIC]` (`Dr. Joëlle NGUYEN-[BIC]`, `BETALING`); a letters-only code that misses the registry now needs a `BIC`/`SWIFT` label, unless the bundled GLEIF mapping knows the institution, and a hyphen-joined token or one after a personal title is never a BIC. *(rules-engine#57)*
 - A phone number followed by a date took the date's day (`[PHONE].03.2024`); the Austrian grouped phone pattern no longer ends on the start of a date or time. *(rules-engine#60)*
 - Token suffixes could contain `A`, `E`, `U` and `Y`, against the documented "no vowels" (`POSTAL_CODE_KENE`); the alphabet is now `BCDFGHJKLMNPQRSTVWXZ23456789`. *(rules-engine#55)*
 - The package can be bundled for a browser: `node:crypto` is no longer imported outside a platform module, and the `browser` field selects a Web-Crypto build. *(TypeScript only)* *(rules-engine#56)*

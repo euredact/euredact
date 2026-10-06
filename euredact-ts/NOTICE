@@ -1,0 +1,11 @@
+euredact
+Copyright the euredact authors. Licensed under the Apache License 2.0;
+see LICENSE.
+
+This package bundles BIC6 prefixes derived from the BIC/LEI Mapping Table,
+published by GLEIF (https://www.gleif.org) and developed by SWIFT, used
+under the BIC/LEI Mapping Table License Agreement:
+
+SWIFT © and database rights September 2026. All rights reserved.
+This Mapping Table has been developed by SWIFT. Any use of the Mapping Table, in whole or in part, is subject to the BIC/LEI Mapping Table License Agreement as published with the Mapping Table available on GLEIF's website.
+The Mapping Table is updated monthly. For the latest BIC information and updates, always refer to www.swift.com/bic .

@@ -1,6 +1,5 @@
 import { EntityType, type PatternDef } from "../types.js";
-import { isRegisteredBic } from "./bicRegistry.js";
-import { cuedType } from "./cues.js";
+import { isKnownInstitution, isRegisteredBic } from "./bicRegistry.js";
 import { DE_DISTRICT_CODES } from "./deDistricts.js";
 
 const CONTEXT_CHARS = 150;
@@ -578,11 +577,17 @@ const CURRENCY_PLATE = /^(?:EUR|USD|GBP|CHF|SEK|NOK|DKK|ISK|CZK|PLN|HUF|RON|BGN|
 
 const ALNUM = /[\p{L}\p{N}]/u;
 
-/** A hyphen glues [start, end) to a letter or digit outside it. */
-function joinedByHyphen(text: string, start: number, end: number): boolean {
+/** Characters that join a token to more of an identifier (rules-engine#50, #81). */
+const ID_CONNECTORS = "-/._+";
+
+/** A reference marker directly before the token: "#FR-S2", "№ …", "n° …". */
+const REFERENCE_MARK_BEFORE = /(?:#|№|(?<![A-Za-z])[nN][°º])\s?$/;
+
+/** A connector glues [start, end) to a letter or digit outside it. */
+function joinedToMore(text: string, start: number, end: number): boolean {
   return (
-    (text[end] === "-" && end + 1 < text.length && ALNUM.test(text[end + 1])) ||
-    (start >= 2 && text[start - 1] === "-" && ALNUM.test(text[start - 2]))
+    (end + 1 < text.length && ID_CONNECTORS.includes(text[end]) && ALNUM.test(text[end + 1])) ||
+    (start >= 2 && ID_CONNECTORS.includes(text[start - 1]) && ALNUM.test(text[start - 2]))
   );
 }
 
@@ -594,9 +599,16 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
     const before = text.slice(Math.max(0, match.start - 10), match.start);
     if (/[A-Za-zÄÖÜäöüß]{2,}-$/.test(before)) return true;
   }
-  // Inside a longer hyphen-joined token ("TF-284-KL-00874"): a segment of a
-  // reference, not a plate (rules-engine#50). A spaced dash does not join.
-  if (joinedByHyphen(text, match.start, match.end)) return true;
+  // A plate is a token of its own: joined by a connector to more of an
+  // identifier ("TF-284-KL-00874", "FR-S2/2026") it is a segment of a reference
+  // (rules-engine#50, #81). A spaced dash or slash does not join.
+  if (joinedToMore(text, match.start, match.end)) return true;
+  // After a reference marker ("Ref #FR-S2") it is a reference, unless a plate
+  // cue says otherwise (rules-engine#81).
+  if (REFERENCE_MARK_BEFORE.test(text.slice(Math.max(0, match.start - 4), match.start))) {
+    const [b, a] = getContext(text, match.start, match.end);
+    if (!PLATE_CUE_NEAR.test(b + a)) return true;
+  }
   const matched = match.text.trim();
   const parts = matched.split(/[\s\-]+/);
 
@@ -930,18 +942,23 @@ function suppressBicWithoutEvidence(text: string, match: RawMatch, scratch?: Sup
 const TITLE_BEFORE = /(?<![A-Za-z])(?:dr|prof|mr|mrs|ms|mme|mlle|m|herr|frau|dhr|mevr|sig|sra?)\.?\s+$/i;
 const LETTER = /\p{L}/u;
 
+/** A BIC/SWIFT label touching the token: "BIC: ", "SWIFT-Code:\n", "Code SWIFT : ", "BIC Bank A: ". */
+const BIC_LABEL_BEFORE = /(?<![A-Za-z])(?:bic|swift)(?:[\s/\-]*(?:code|swift|bic))?(?:\s+bank\s+\w{1,3})?[\s:.\-()]*$/i;
+
 /**
  * A registry miss sitting where only a word or a name can (rules-engine#57):
  * joined to a word by a hyphen ("NGUYEN-HOFFMANN"), right after a personal
- * title ("Dr. HOFFMANN"), or eleven letters with no `XXX` branch and no
- * BIC/SWIFT label touching it ("MAANDELIJKS").
+ * title ("Dr. HOFFMANN"), or letters only (eight, or eleven without an `XXX`
+ * branch: "BETALING", "MAANDELIJKS") that the GLEIF mapping does not know and
+ * no BIC/SWIFT label touches.
  */
 function bicShapedWord(text: string, start: number, end: number, token: string): boolean {
   if ((start >= 2 && text[start - 1] === "-" && LETTER.test(text[start - 2])) ||
       (text[end] === "-" && end + 1 < text.length && LETTER.test(text[end + 1]))) return true;
   if (TITLE_BEFORE.test(text.slice(Math.max(0, start - 8), start))) return true;
-  return token.length === 11 && /^[A-Za-z]+$/.test(token) && !token.endsWith("XXX")
-    && cuedType(text, start) !== EntityType.BIC;
+  return /^[A-Za-z]+$/.test(token) && !(token.length === 11 && token.endsWith("XXX"))
+    && !isKnownInstitution(token)
+    && !BIC_LABEL_BEFORE.test(text.slice(Math.max(0, start - 30), start));
 }
 
 // ── Postal code: digits belonging to a longer identifier ────────────────
