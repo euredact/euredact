@@ -15,7 +15,7 @@ narrative lives. Sections here use that vocabulary
 
 ### Added
 
-- **Batches (Python; TypeScript to follow in this change).** `euredact.cloud.Batches`
+- **Batches.** `euredact.cloud.Batches`
   creates, tracks and resolves cloud batches while keeping the structured PII
   local: `create()` masks each document here and uploads only the masked
   text, writing a private local batch file (`~/.euredact/batches/<id>.json`,
@@ -25,8 +25,10 @@ narrative lives. Sections here use that vocabulary
   leaves a text-free receipt, so a batch is mapped once. `pending()`,
   `retrieve()`, `cancel()`, `purge()` and an expiry sweep round it out;
   `batch_dir=`, `store=` and `cipher=` choose where and how the file is kept.
-  The gateway endpoint (euredact-inference#40) is not deployed yet. Shared
-  conformance vectors in `conformance/batches.json`. *(rules-engine#84)*
+  The file format is shared with the TypeScript SDK, so either can resolve
+  the other's batch. The gateway endpoint (euredact-inference#40) is not
+  deployed yet. Shared conformance vectors in `conformance/batches.json`.
+  *(rules-engine#84)*
 
 - **About 10,400 BIC6 prefixes for the 31 supported countries**, from the GLEIF
   BIC-to-LEI mapping (September 2026), which SWIFT develops and licenses for

@@ -72,3 +72,21 @@ export function randomIndex(n: number): number {
     if (buf[0] < limit) return buf[0] % n;
   }
 }
+
+/** Mirrors `PlatformBatchStore` in platform.ts (rules-engine#84). */
+export interface PlatformBatchStore {
+  read(batchId: string): Promise<Uint8Array | null>;
+  write(batchId: string, data: Uint8Array): Promise<void>;
+  delete(batchId: string): Promise<void>;
+  list(): Promise<string[]>;
+}
+
+/** A page has no filesystem: the caller passes `store` to `Batches`. */
+export function defaultBatchStore(_directory?: string): PlatformBatchStore | null {
+  return null;
+}
+
+/** No synchronous gzip in a page; the batch is uploaded uncompressed. */
+export function gzip(_data: Uint8Array): Uint8Array | null {
+  return null;
+}

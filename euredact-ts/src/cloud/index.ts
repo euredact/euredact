@@ -17,6 +17,21 @@
 
 export { CloudClient, type CloudRedactOptions } from "./client.js";
 export {
+  Batches,
+  BatchError,
+  MAX_DOCUMENTS,
+  MAX_CUSTOM_ID,
+  MAX_BODY_BYTES,
+  MAX_DOCUMENT_TOKENS,
+  type Batch,
+  type BatchDocument,
+  type BatchResults,
+  type BatchStore,
+  type BatchesOptions,
+  type Cipher,
+  type DocumentOutcome,
+} from "./batches.js";
+export {
   configure,
   getConfig,
   reset,

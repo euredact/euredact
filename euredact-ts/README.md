@@ -595,6 +595,59 @@ either, no hosted model can help; run one yourself against
 `local.redactedText`.
 
 
+### Batches
+
+> **Not yet available:** the gateway's `/v1/batches` endpoint is still being
+> built (euredact-inference#40). The SDK side is here so both ship together.
+
+A batch hands up to 5,000 documents to the cloud tier and collects the answers
+within 24 hours, at a lower price and without your plan's concurrency limit.
+It keeps the same promise as `mode: "cloud"`: each document is masked **on
+your machine**, and only the masked text is uploaded. What is needed to map the
+answers back stays in a **local batch file**, `~/.euredact/batches/<batchId>.json`
+(directory `0700`, file `0600`): the originals, their local detections and a
+SHA-256 of the masked text sent. The file format is shared with the Python SDK,
+so a batch created by one can be resolved by the other.
+
+```ts
+import { configure, Batches } from "euredact";
+
+configure({ apiKey: "erk_..." });
+const batches = new Batches();
+const batch = await batches.create([
+  { customId: "invoice-2291", text: invoiceText, countries: ["BE"] },
+  { customId: "memo-17", text: memoText, countries: ["NL"] },
+]);
+
+// Later, possibly in another process:
+const outcome = await batches.results(batch.id);
+if (outcome.status === "resolved") {
+  for (const [customId, doc] of Object.entries(outcome.documents)) {
+    console.log(customId, doc.ok ? doc.result!.redactedText : `${doc.error}: ${doc.message}`);
+  }
+}
+```
+
+- **`results()`** returns `not_ended` while the batch runs and changes nothing.
+  Once it has ended it maps every document, wipes the originals and leaves a
+  text-free receipt; a second call returns `already_resolved`.
+- **Integrity.** Each masked text is rebuilt from the file and must match the
+  hash the gateway reports before a span is placed. An edited file, a missing
+  entry or no file is an error for that document (`local_mismatch`,
+  `missing_local_entry`), never the masked text passed off as a result.
+- **`pending()`**, **`retrieve(id)`**, **`cancel(id)`** (the file stays until
+  the finished documents are mapped) and **`purge(id)`**. Receipts and
+  unmapped files are cleaned up once the gateway's results expire.
+- **In a browser** there is no filesystem: pass `store`, any object with async
+  `read`, `write`, `delete` and `list`. In Node, `batchDir` moves the
+  directory. `cipher` (`encrypt`/`decrypt`) encrypts the file at rest with a
+  key you hold.
+- **Limits** checked before upload: 5,000 documents, unique `customId`s of at
+  most 64 characters, one country each, a 128 MB body. The 5,000-token limit
+  per document is **not** checked by the SDK: it is counted by the model's
+  tokenizer on the gateway. A document over it comes back as `too_long`, whose
+  message says so; split it and submit the parts.
+
 ## `NAME` is now `PERSON_NAME`
 
 The canonical type name is `PERSON_NAME`; `NAME` is a legacy alias, exactly as

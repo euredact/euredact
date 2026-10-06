@@ -9,12 +9,21 @@ export {
   getConfig,
   CloudClient,
   CloudError,
+  Batches,
+  BatchError,
   NotConfiguredError,
   QuotaExceededError,
   TooLargeError,
   type CloudConfig,
   type ConfigureOptions,
   type CloudRedactOptions,
+  type Batch,
+  type BatchDocument,
+  type BatchResults,
+  type BatchStore,
+  type BatchesOptions,
+  type Cipher,
+  type DocumentOutcome,
 } from "./cloud/index.js";
 
 import { EuRedact, type RedactOptions } from "./sdk.js";

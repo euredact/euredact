@@ -15,6 +15,19 @@ narrative lives. Sections here use that vocabulary
 
 ### Added
 
+- **Batches.** `Batches` creates, tracks and resolves cloud batches while
+  keeping the structured PII local, as the Python SDK does: `create()` masks
+  each document here and uploads only the masked text, writing a private local
+  batch file with the originals, the local detections and a SHA-256 of what was
+  sent; `results()` maps the service's spans back from that file once the batch
+  has ended, after checking the hash, then wipes the originals, so a batch is
+  mapped once. `pending()`, `retrieve()`, `cancel()`, `purge()` and an expiry
+  sweep round it out. In Node the file lives in `~/.euredact/batches`
+  (`batchDir` to move it); a browser build passes `store`. `cipher` encrypts
+  the file at rest. The file format and offsets (code points) are shared with
+  Python, so either SDK can resolve the other's batch. The gateway endpoint
+  (euredact-inference#40) is not deployed yet. *(rules-engine#84)*
+
 - **About 10,400 BIC6 prefixes for the 31 supported countries**, from the GLEIF
   BIC-to-LEI mapping (September 2026), which SWIFT develops and licenses for
   redistribution; its required notice ships in `NOTICE` and in the generated

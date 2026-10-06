@@ -62,7 +62,7 @@ export function applyReplacements(text: string, detections: Detection[], labelFo
  * text, and the extent of the original it replaced —
  * `[maskedStart, maskedEnd, start, end]`.
  */
-type WireLabel = [number, number, number, number];
+export type WireLabel = [number, number, number, number];
 
 /**
  * Bracket-mask `text` and record where each label landed.
@@ -76,7 +76,8 @@ type WireLabel = [number, number, number, number];
  * do not list it". A token or a numbered label would be read as ordinary text,
  * so the format on the wire is a model contract and not an output option.
  */
-function maskForCloud(text: string, detections: Detection[]): [string, WireLabel[]] {
+/** @internal Shared with cloud/batches.ts. */
+export function maskForCloud(text: string, detections: Detection[]): [string, WireLabel[]] {
   const parts: string[] = [];
   const labels: WireLabel[] = [];
   let pos = 0;
@@ -125,7 +126,8 @@ function labelBefore(labels: WireLabel[], offset: number, strict: boolean): numb
  * a span cannot be placed, and masking where it points would cover the wrong
  * characters and leave the right ones in the clear.
  */
-function ontoOriginal(
+/** @internal Shared with cloud/batches.ts. */
+export function ontoOriginal(
   spans: Detection[],
   masked: string,
   text: string,

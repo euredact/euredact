@@ -140,7 +140,8 @@ function toEntityType(raw: string): EntityType | string {
  * Returns the identity when the text has none, which is the common case and
  * costs one regex test.
  */
-function codePointOffsets(text: string): (cp: number) => number {
+/** @internal Shared with cloud/batches.ts. */
+export function codePointOffsets(text: string): (cp: number) => number {
   if (!/[\uD800-\uDBFF]/.test(text)) return cp => cp;
   const units: number[] = [];
   let i = 0;
@@ -152,7 +153,8 @@ function codePointOffsets(text: string): (cp: number) => number {
   return cp => units[Math.min(cp, units.length - 1)];
 }
 
-function toResult(payload: WireResult, text: string): RedactResult {
+/** @internal Shared with cloud/batches.ts. */
+export function toResult(payload: WireResult, text: string): RedactResult {
   const offset = codePointOffsets(text);
   const detections: Detection[] = (payload.entities ?? []).map(span => ({
     entityType: toEntityType(span.type),
