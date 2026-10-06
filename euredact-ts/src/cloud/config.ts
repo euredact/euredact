@@ -46,15 +46,14 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
  * local gateway or a TLS-terminating proxy on the same machine (rules-engine#86).
  */
 export function requireSecureBaseUrl(baseUrl: string): void {
-  let url: URL | null = null;
-  try {
-    url = new URL(baseUrl);
-  } catch {
-    url = null;
-  }
-  if (url !== null) {
-    if (url.protocol === "https:" && url.hostname) return;
-    if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname.toLowerCase())) return;
+  // Parsed by hand rather than with `URL`: a runtime without that global would
+  // otherwise refuse every address, https included, with a misleading message.
+  const m = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/?#]*@)?(\[[^\]]*\]|[^:/?#]*)/i.exec(baseUrl);
+  if (m !== null) {
+    const scheme = m[1].toLowerCase();
+    const host = m[2].toLowerCase();
+    if (scheme === "https" && host) return;
+    if (scheme === "http" && LOOPBACK_HOSTS.has(host)) return;
   }
   throw new Error(
     `refusing cloud base URL ${JSON.stringify(baseUrl)}: it must start with https:// ` +
