@@ -676,6 +676,64 @@ Options the service cannot honour raise rather than being ignored: multiple
 and `coref`. `tokenize`, `allowlist` and `allowlist_domains` are honoured: the SDK applies them to
 the spans the service returns and rebuilds the text from those.
 
+### Batches
+
+> **Not yet available:** the gateway's `/v1/batches` endpoint is still being
+> built (euredact-inference#40). The SDK side is here so both ship together.
+
+A batch hands up to 5,000 documents to the cloud tier and collects the answers
+within 24 hours, at a lower price and without your plan's concurrency limit.
+It keeps the same promise as `mode="cloud"`: the rules engine masks each
+document **on your machine**, and only the masked text is uploaded.
+
+Because the answers arrive hours later, the SDK keeps what it needs to map
+them back in a **local batch file**, `~/.euredact/batches/<batch_id>.json`
+(directory `0700`, file `0600`). It holds each original, its local detections
+and a SHA-256 of the masked text that was sent. None of it is uploaded.
+
+```python
+from euredact.cloud import Batches
+
+batches = Batches()                     # uses euredact.configure(...)
+batch = batches.create([
+    {"custom_id": "invoice-2291", "text": invoice_text, "countries": ["BE"]},
+    {"custom_id": "memo-17",      "text": memo_text,    "countries": ["NL"]},
+])
+
+# Later, possibly in another process on the same machine or share:
+outcome = batches.results(batch.id)
+if outcome.status == "resolved":
+    for custom_id, doc in outcome.documents.items():
+        if doc.ok:
+            print(custom_id, doc.result.redacted_text)
+        else:
+            print(custom_id, "failed:", doc.error, doc.message)
+```
+
+- **`results()`** returns `not_ended` while the batch runs, and changes
+  nothing. Once the batch has ended it maps every document, wipes the originals
+  and leaves a text-free receipt; a second call returns `already_resolved`. A
+  batch is never mapped twice.
+- **Integrity.** Each document's masked text is rebuilt from the local file
+  and must match the hash the gateway reports before a span is placed. An
+  edited file, a missing entry or no file at all (another machine, a purged
+  batch) is an error for that document (`local_mismatch`,
+  `missing_local_entry`) — never the masked text passed off as a result.
+- **`pending()`** lists batches whose local file still waits to be mapped, so
+  a restarted worker can resume. `retrieve(id)` and `cancel(id)` talk to the
+  gateway; cancelling keeps the file until the finished documents are mapped.
+- **Clean-up.** Receipts are deleted, and unmapped files expired and wiped,
+  once the gateway's results expire; `purge(id)` deletes a file by hand.
+- **Where the file lives.** `Batches(batch_dir=...)` for a directory several
+  workers share, or `store=` for any object with `read`, `write`, `delete` and
+  `list` (a key-value store, for example). `cipher=` takes an object with
+  `encrypt(bytes)` and `decrypt(bytes)` to encrypt the file at rest with a key
+  you hold; the SDK has no cryptography dependency and does not pick a scheme.
+- **Limits** checked before anything is uploaded: at most 5,000 documents,
+  unique `custom_id`s of at most 64 characters, one country per document, and
+  a 128 MB body. The 5,000-token limit per document is counted by the model's
+  tokenizer, so a longer document comes back as an error with code `too_long`.
+
 ## `NAME` is now `PERSON_NAME`
 
 The canonical type name is `PERSON_NAME`; `NAME` is a legacy alias, exactly as

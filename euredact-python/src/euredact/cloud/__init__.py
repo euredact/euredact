@@ -15,6 +15,14 @@ Requires the ``cloud`` extra::
     pip install 'euredact[cloud]'
 """
 
+from euredact.cloud.batches import (
+    Batch,
+    BatchError,
+    Batches,
+    BatchResults,
+    DocumentOutcome,
+    FileBatchStore,
+)
 from euredact.cloud.client import (
     AsyncCloudClient,
     CloudClient,
@@ -27,9 +35,15 @@ from euredact.cloud.config import CloudConfig, configure, get_config, reset
 
 __all__ = [
     "AsyncCloudClient",
+    "Batch",
+    "BatchError",
+    "BatchResults",
+    "Batches",
     "CloudClient",
     "CloudConfig",
     "CloudError",
+    "DocumentOutcome",
+    "FileBatchStore",
     "NotConfiguredError",
     "QuotaExceededError",
     "TooLargeError",

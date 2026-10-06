@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "description": "Batch local-file contract (rules-engine#84). For each case: the masked text create() must send, its SHA-256, the model's spans on the masked text as the gateway returns them, and the redacted text results() must map them to. Both SDKs run this file, so a batch created by one maps identically in the other.",
+  "cases": [
+    {
+      "id": "iban-and-name",
+      "text": "Beste, gelieve BE68 5390 0754 7034 te crediteren voor Jan Peeters. Groeten.",
+      "countries": [
+        "BE"
+      ],
+      "masked": "Beste, gelieve [BANK_ACCOUNT] te crediteren voor Jan Peeters. Groeten.",
+      "masked_sha256": "62602527136ce822a97b00408767ed64808fc25e961036307abcc8e9ccc368a7",
+      "entities": [
+        {
+          "type": "PERSON_NAME",
+          "start": 49,
+          "end": 60,
+          "text": "Jan Peeters",
+          "source": "model"
+        }
+      ],
+      "redacted_text": "Beste, gelieve [BANK_ACCOUNT] te crediteren voor [PERSON_NAME]. Groeten."
+    },
+    {
+      "id": "name-around-a-postal-code",
+      "text": "Bitte an Anna Schmidt, Hauptstraße 5, 10115 Berlin senden.",
+      "countries": [
+        "DE"
+      ],
+      "masked": "Bitte an Anna Schmidt, Hauptstraße 5, [POSTAL_CODE] Berlin senden.",
+      "masked_sha256": "bdc454c853d18665f25bfb12739aea88bd2aca79b3c8effa7068c80df761bdc3",
+      "entities": [
+        {
+          "type": "PERSON_NAME",
+          "start": 9,
+          "end": 21,
+          "text": "Anna Schmidt",
+          "source": "model"
+        },
+        {
+          "type": "ADDRESS",
+          "start": 23,
+          "end": 58,
+          "text": "Hauptstraße 5, [POSTAL_CODE] Berlin",
+          "source": "model"
+        }
+      ],
+      "redacted_text": "Bitte an [PERSON_NAME], [ADDRESS] senden."
+    },
+    {
+      "id": "astral-characters",
+      "text": "Klant 😀 Pieter de Vries, IBAN NL91 ABNA 0417 1643 00, tel 06 12345678.",
+      "countries": [
+        "NL"
+      ],
+      "masked": "Klant 😀 Pieter de Vries, IBAN [BANK_ACCOUNT], tel [PHONE].",
+      "masked_sha256": "0627cf1e5552fcc536b73950283c5eb0f8e40733e29606b4f3af95b7ce05a8e7",
+      "entities": [
+        {
+          "type": "PERSON_NAME",
+          "start": 8,
+          "end": 23,
+          "text": "Pieter de Vries",
+          "source": "model"
+        }
+      ],
+      "redacted_text": "Klant 😀 [PERSON_NAME], IBAN [BANK_ACCOUNT], tel [PHONE]."
+    },
+    {
+      "id": "nothing-local",
+      "text": "Le dossier de Marie Curie est clos.",
+      "countries": [
+        "FR"
+      ],
+      "masked": "Le dossier de Marie Curie est clos.",
+      "masked_sha256": "06255eb062ac08501188a5660937e110b8d1ee7e83953793f25219a94978e4f9",
+      "entities": [
+        {
+          "type": "PERSON_NAME",
+          "start": 14,
+          "end": 25,
+          "text": "Marie Curie",
+          "source": "model"
+        }
+      ],
+      "redacted_text": "Le dossier de [PERSON_NAME] est clos."
+    }
+  ],
+  "mismatch": {
+    "id": "tampered-original",
+    "base": "iban-and-name",
+    "original_override": "Geachte, gelieve BE68 5390 0754 7034 te crediteren voor Jan Peeters. Groeten.",
+    "expect_error": "local_mismatch"
+  }
+}
