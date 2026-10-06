@@ -980,13 +980,22 @@ def suppress_phone_date_overlap(text: str, match: RawMatch) -> bool:
     return bool(_DATE_PATTERN_FULL.match(match.text.strip()))
 
 
-def _joined_by_hyphen(text: str, start: int, end: int) -> bool:
-    """A hyphen glues [start, end) to a letter or digit outside it."""
+#: Characters that join a token to more of an identifier: "FR-S2-2026",
+#: "FR-S2/2026", "FR-S2.2026", "FR_S2", "FR-S2+7". Only when a letter or digit
+#: follows on the far side; a spaced dash or slash ("A / B") does not join.
+_ID_CONNECTORS = "-/._+"
+
+#: A reference marker directly before the token: "#FR-S2", "№ …", "n° …".
+_REFERENCE_MARK_BEFORE = re.compile(r"(?:#|№|(?<![A-Za-z])[nN][°º])\s?$")
+
+
+def _joined_to_more(text: str, start: int, end: int) -> bool:
+    """A connector glues [start, end) to a letter or digit outside it."""
     after = text[end:end + 2]
     before = text[max(0, start - 2):start]
     return (
-        (len(after) == 2 and after[0] == "-" and after[1].isalnum())
-        or (len(before) == 2 and before[1] == "-" and before[0].isalnum())
+        (len(after) == 2 and after[0] in _ID_CONNECTORS and after[1].isalnum())
+        or (len(before) == 2 and before[1] in _ID_CONNECTORS and before[0].isalnum())
     )
 
 
@@ -1007,13 +1016,21 @@ def suppress_plate_in_compound(text: str, match: RawMatch) -> bool:
         if re.search(r"[A-Za-zÄÖÜäöüß]{2,}-$", three_before):
             return True
 
-    # Inside a longer hyphen-joined token: "TF-284-KL-00874",
-    # "LU-TS-2023-004512". A plate-shaped run with a hyphen glued to another
-    # letter or digit on either side is a segment of a reference, and taking it
-    # left the rest of the reference readable (rules-engine#50). A spaced dash
-    # ("AB-123-CD - stationné") does not join.
-    if _joined_by_hyphen(text, match.start, match.end):
+    # A plate is a token of its own. Inside a longer identifier -- "TF-284-KL-00874",
+    # "LU-TS-2023-004512" (rules-engine#50), and with any other connector,
+    # "FR-S2/2026", "FR-S2.2026" (rules-engine#81) -- a plate-shaped run is a
+    # segment of a reference, and taking it left the rest readable. A spaced
+    # dash or slash ("AB-123-CD / EF-456-GH") does not join.
+    if _joined_to_more(text, match.start, match.end):
         return True
+
+    # After a reference marker it is a reference ("Form Ref #FR-S2"), unless a
+    # plate cue says otherwise: "Plaque d'immatriculation n° AB-123-CD" is a
+    # plate (rules-engine#81).
+    if _REFERENCE_MARK_BEFORE.search(text[max(0, match.start - 4):match.start]):
+        before, after = _get_context(text, match.start, match.end)
+        if not _PLATE_CUE_NEAR.search(before + after):
+            return True
 
     matched = match.text.strip()
     parts = re.split(r"[\s\-]+", matched)

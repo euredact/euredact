@@ -21,6 +21,7 @@ from euredact.rules.matchers import (
     _RE2_OVERLAP,
     _extract_literal_prefix,
     _max_match_width,
+    _strip_lookarounds,
 )
 from euredact.rules.registry import CountryRegistry
 from euredact.sdk import EuRedact
@@ -38,6 +39,12 @@ PARITY_DOCS = [
     "Rekening: BE68 5390 0754 7034 - BIC: GEBABEBB",
     "Anschrift: Hauptstrasse 5, 1010 Wien\nSV-Nummer: 1268 040390",
     "Tel: +43 664 8213 907, mail petras_ž@example.com",
+    # Lookaround-guarded patterns, now prefiltered by their stripped superset
+    # (rules-engine#72): a guard that holds, one that refuses, and the CH
+    # postal lookbehinds -- once inside a window and once across a boundary.
+    "Mob: 0170 1234567 12.03.2024, Tel. 0664 1234567 85 21",
+    "Tel. 01 5123456 14:30 Uhr; Hauptstrasse 5, CH-8004 Zürich",
+    "x" * 1010 + " Mob: +49 170 1234567 85 21 am 12.03.2024, Hauptstrasse 5, CH-8004 Zürich",
 ]
 
 
@@ -239,3 +246,40 @@ def test_pem_private_key_survives_the_prefilter():
     result = sdk.redact(text, cache=False)
     assert PEM_BODY not in result.redacted_text
     assert any(d.entity_type == EntityType.SECRET for d in result.detections)
+
+
+# ── Lookarounds and the prefilter (rules-engine#72) ──────────────────────
+
+
+@pytest.mark.parametrize("pattern,expected", [
+    (r"\d{2}(?![.,/:]\d)", r"\d{2}"),
+    (r"(?:(?<=, )|(?<=, CH-))[1-9]\d{3}(?= [A-Z])", r"(?:|)[1-9]\d{3}"),
+    (r"(?<![A-Za-z0-9_])tel(?=(?:a|b))x", r"telx"),
+    # An escaped paren and a character class are not groups.
+    (r"\(?!x\)[(?=]y", r"\(?!x\)[(?=]y"),
+    (r"[\](?!]z", r"[\](?!]z"),
+])
+def test_strip_lookarounds(pattern, expected):
+    assert _strip_lookarounds(pattern) == expected
+
+
+def test_a_quantified_lookaround_is_not_stripped():
+    # Removing it would leave the quantifier dangling on the previous atom.
+    assert _strip_lookarounds(r"a(?=b)?c") is None
+    assert _strip_lookarounds(r"a(?!b") is None
+
+
+@pytest.mark.skipif(not matchers._HAS_RE2, reason="google-re2 not installed")
+def test_lookahead_guarded_phone_patterns_keep_the_prefilter():
+    """The #51/#60 guards cost these broad patterns their prefilter."""
+    matcher = _all_countries_matcher()
+    guarded = [
+        (slot, pdef.description)
+        for slot, (_c, pdef, _code) in zip(matcher._plan.re2_slot, matcher._plan.patterns)
+        if pdef.description in (
+            "German national phone number", "German international phone — +49",
+            "Austrian national phone — short area code, grouped",
+        )
+    ]
+    assert len(guarded) == 3
+    assert all(slot is not None for slot, _ in guarded), guarded

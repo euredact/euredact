@@ -31,8 +31,13 @@ which both test suites run.
 
 - About 10,400 BIC6 prefixes for the 31 supported countries from the GLEIF BIC-to-LEI mapping (developed by SWIFT, redistributable under the BIC/LEI Mapping Table License Agreement; notice in `NOTICE`), with `scripts/refresh_bic_registry.py` to regenerate them. *(rules-engine#57)*
 
+### Changed
+
+- A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter through a lookaround-free superset; patterns outside it fall from 35 to 23. *(Python only)* *(rules-engine#72)*
+
 ### Fixed
 
+- A licence plate was matched inside a reference joined by `/`, `.`, `_` or `+`, or after `#`/`№`/`n°` (`Ref #FR-S2-2026-009182`, `FR-S2/2026`); a plate must now be a token of its own, unless a plate cue is nearby. *(rules-engine#81)*
 - A Luxembourg matricule grouped other than compact or fully spaced was half-masked, or not at all, leaving the birth date readable: `19710314 12345` and `1971 0314 123 45` are now one `NATIONAL_ID`. *(rules-engine#49)*
 - German phone numbers with trailing two-digit groups were cut short (`+49 170 1234567 85 21` left `85 21` readable), and a prefix set off by ` / ` was not detected at all. *(rules-engine#51)*
 - A postal code with a two-letter country prefix (`CH-8004 Zürich`, `DE-10115 Berlin`, `NL-1012 LG Amsterdam`) was not masked: the prefix was read as a reference tag. References such as `IR-43433` and `PV-2026-LU-09143` stay unmasked. *(rules-engine#58)*

@@ -27,6 +27,21 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A licence plate was matched inside a reference joined by `/`, `.`, `_` or
+  `+`, or after a reference marker.** #50 stopped plates inside hyphen-joined
+  references; the same fragment still fired with any other connector:
+  `#FR-S2-2026-009182` on 0.6.0, and on `main` `Ref #FR-S2`, `FR-S2/2026`,
+  `FR-S2.2026`, each `[LICENSE_PLATE]` through the German pattern (`FR` is the
+  Freiburg district code). A plate must now be a token of its own: a connector
+  (`- / . _ +`) joining it to a letter or digit on either side rules it out, and
+  so does a reference marker (`#`, `№`, `n°`) directly before it, unless a
+  plate cue is nearby (`Plaque d'immatriculation n° AB-123-CD` stays a plate).
+  Spaced separators, sentence punctuation, brackets and quotes still bound a
+  plate. On 7,571 pipeline documents this removed 133 false plates — `AVS 756`
+  cut out of Swiss AVS numbers, `Peugeot 308 SW 1.6`, `EUR 2.640,00 EUR 1`,
+  `BV-ZK-07/2021`, `CK 245 U/l` — and added none; corpus plate recall is
+  unchanged. Twelve conformance vectors. *(rules-engine#81)*
+
 - **A Luxembourg matricule in any grouping but two was half-masked, and its
   birth date stayed readable.** The pattern accepted the number compact
   (`1971031412345`) or fully spaced (`1971 03 14 123 45`) and nothing between,

@@ -25,7 +25,35 @@ narrative lives. Sections here use that vocabulary
   the hand-kept seed's job. Adds about 54 kB to each package's source.
   *(rules-engine#57)*
 
+### Changed
+
+- **A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter**, via
+  the same pattern with its lookarounds stripped. Removing a lookaround only
+  drops a constraint, so the stripped form matches a superset: it can let a
+  pattern run needlessly, never skip a window where the exact pattern matches.
+  Patterns outside the prefilter fall from 35 to 23, including the three phone
+  patterns the #51/#60 guards had pushed out. Measured over 2,000 pipeline
+  documents with `[fast]`, this recovers about 0.25 s of the ~1.0 s the last
+  batch added; most of the remainder is the per-date label check from #52, not
+  the prefilter. *(Python only; the TypeScript SDK has no RE2 path.)*
+  *(rules-engine#72)*
+
 ### Fixed
+
+- **A licence plate was matched inside a reference joined by `/`, `.`, `_` or
+  `+`, or after a reference marker.** #50 stopped plates inside hyphen-joined
+  references; the same fragment still fired with any other connector:
+  `#FR-S2-2026-009182` on 0.6.0, and on `main` `Ref #FR-S2`, `FR-S2/2026`,
+  `FR-S2.2026`, each `[LICENSE_PLATE]` through the German pattern (`FR` is the
+  Freiburg district code). A plate must now be a token of its own: a connector
+  (`- / . _ +`) joining it to a letter or digit on either side rules it out, and
+  so does a reference marker (`#`, `№`, `n°`) directly before it, unless a
+  plate cue is nearby (`Plaque d'immatriculation n° AB-123-CD` stays a plate).
+  Spaced separators, sentence punctuation, brackets and quotes still bound a
+  plate. On 7,571 pipeline documents this removed 133 false plates — `AVS 756`
+  cut out of Swiss AVS numbers, `Peugeot 308 SW 1.6`, `EUR 2.640,00 EUR 1`,
+  `BV-ZK-07/2021`, `CK 245 U/l` — and added none; corpus plate recall is
+  unchanged. Twelve conformance vectors. *(rules-engine#81)*
 
 - **A Luxembourg matricule in any grouping but two was half-masked, and its
   birth date stayed readable.** The pattern accepted the number compact
