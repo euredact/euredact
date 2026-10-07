@@ -73,6 +73,19 @@ narrative lives. Sections here use that vocabulary
 
 ### Changed
 
+- **About a quarter faster on long documents.** The label lookup that ranks
+  candidates ran up to 17 anchored regexes per candidate, and most candidates
+  share their start with others (every country's pattern for the same digits)
+  and have no label at all: over the pipeline documents, 38,400 lookups covered
+  8,500 offsets, 543 of them labelled. The lookup is now read once per offset,
+  and a single union of all labels answers "none here" before the table is
+  walked. Over 2,000 pipeline documents (three alternating runs, `google-re2`)
+  the run takes 13.5 s against 18.3 s on the previous `main` and 16.9 s on
+  0.6.0. Output is identical on the 152,468-document corpus and the 8,810
+  pipeline documents. The per-date label check named in the issue was 3% of
+  the time and is unchanged. The TypeScript lookup showed no measurable gain
+  from the same change and was left as it was. *(rules-engine#79)*
+
 - **A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter**, via
   the same pattern with its lookarounds stripped. Removing a lookaround only
   drops a constraint, so the stripped form matches a superset: it can let a
@@ -94,6 +107,37 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A Polish domestic account number (NRB) was not detected.** The NRB is
+  the PL IBAN without its country code, and the form Polish invoices and bank
+  letters print; 0 of 160 generated NRBs were masked whole, and in the spaced
+  form the last eight digits came out as `[PHONE]`, leaving 18 digits readable.
+  A PL pattern for the 26 digits (spaced `2+4x6` or compact) validated by the
+  IBAN's own mod-97 now types it `BANK_ACCOUNT`, with or without a country.
+  An NRB whose check digits fail is not masked, as for an IBAN. *(rules-engine#93)*
+- **A Polish NIP in the personal grouping was not detected.** The PL pattern
+  accepted only the company grouping `XXX-XXX-XX-XX`; `XXX-XX-XX-XXX`, used
+  for natural persons, is now `TAX_ID` too, with the same check. *(rules-engine#94)*
+- **A Swiss AVS/AHV number with a bad check digit was left in the clear behind
+  its own label.** `Numéro AVS 756.2209.8834.13` produced no detection: the
+  EAN-13 check failed, and no cue named `AVS` or `AHV`, so the label could not
+  rescue it. `AHV`, `AHV-Nr.`, `AHV-Nummer` and `AVS` are now `NATIONAL_ID`
+  cues, and the dotted form `756.XXXX.XXXX.XX` is accepted without its check
+  digit when `AVS` or `AHV` appears nearby, which covers `AVS (756.…)`,
+  ``AHV-Nummer `756.…` `` and `AVS de l'assurée : 756.…`. The same number
+  with no such word is still declined. *(rules-engine#82)*
+- **A Polish KRS number was masked as `PHONE`.** `KRS: 0000123456` had no
+  Polish pattern and no cue, so a phone pattern took the ten digits. A KRS
+  pattern (ten digits beginning `00`, behind `KRS`) and a `KRS` cue now type it
+  `CHAMBER_OF_COMMERCE`, like REGON. *(rules-engine#90)*
+- **A value at the end of a line was left unmasked when the next line began
+  with a bullet or a Markdown rule.** The math-context check looked for an
+  operator after the value with `\s*`, which crosses the line break, so
+  `"- BSN: 111222333\n- Adres"` and `"Telefoon: 06 12345678\n- Notitie"`
+  were read as subtractions and printed in full. The check now stays on the
+  value's own line. Over the 8,810 rebuilt pipeline documents, 1,134 more
+  values are masked (663 phones, 268 postal codes, 130 national IDs, 45 social
+  security numbers) and none are unmasked; the 152,300-document generation
+  corpus is unchanged. *(rules-engine#91)*
 - **A licence plate was matched inside a reference joined by `/`, `.`, `_` or
   `+`, or after a reference marker.** #50 stopped plates inside hyphen-joined
   references; the same fragment still fired with any other connector:

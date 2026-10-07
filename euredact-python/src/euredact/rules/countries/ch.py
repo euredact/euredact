@@ -20,6 +20,20 @@ class CHConfig(CountryConfig):
                 validator="swiss_ahv",
                 description="Swiss AHV number — 756.XXXX.XXXX.XY with EAN-13 check",
             ),
+            # The dotted form with a bad check digit, when the document names
+            # it anywhere nearby. The cue rescues a label touching the value;
+            # this covers "AVS (756.…)", "AHV-Nummer `756.…`" and "AVS de
+            # l'assurée : 756.…", which a cue cannot reach. The dotted
+            # 756.XXXX.XXXX.XX shape plus the word is specific enough on its
+            # own (rules-engine#82).
+            PatternDef(
+                entity_type=EntityType.NATIONAL_ID,
+                pattern=r"\b756\.\d{4}\.\d{4}\.\d{2}\b",
+                validator=None,
+                description="Swiss AHV number — dotted, check digit not required beside AVS/AHV",
+                context_keywords=["AVS", "AHV"],
+                requires_context=True,
+            ),
             # AHV compact (no dots)
             PatternDef(
                 entity_type=EntityType.NATIONAL_ID,

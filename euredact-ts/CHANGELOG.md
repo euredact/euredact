@@ -81,6 +81,37 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A Polish domestic account number (NRB) was not detected.** The NRB is
+  the PL IBAN without its country code, and the form Polish invoices and bank
+  letters print; 0 of 160 generated NRBs were masked whole, and in the spaced
+  form the last eight digits came out as `[PHONE]`, leaving 18 digits readable.
+  A PL pattern for the 26 digits (spaced `2+4x6` or compact) validated by the
+  IBAN's own mod-97 now types it `BANK_ACCOUNT`, with or without a country.
+  An NRB whose check digits fail is not masked, as for an IBAN. *(rules-engine#93)*
+- **A Polish NIP in the personal grouping was not detected.** The PL pattern
+  accepted only the company grouping `XXX-XXX-XX-XX`; `XXX-XX-XX-XXX`, used
+  for natural persons, is now `TAX_ID` too, with the same check. *(rules-engine#94)*
+- **A Swiss AVS/AHV number with a bad check digit was left in the clear behind
+  its own label.** `Numéro AVS 756.2209.8834.13` produced no detection: the
+  EAN-13 check failed, and no cue named `AVS` or `AHV`, so the label could not
+  rescue it. `AHV`, `AHV-Nr.`, `AHV-Nummer` and `AVS` are now `NATIONAL_ID`
+  cues, and the dotted form `756.XXXX.XXXX.XX` is accepted without its check
+  digit when `AVS` or `AHV` appears nearby, which covers `AVS (756.…)`,
+  ``AHV-Nummer `756.…` `` and `AVS de l'assurée : 756.…`. The same number
+  with no such word is still declined. *(rules-engine#82)*
+- **A Polish KRS number was masked as `PHONE`.** `KRS: 0000123456` had no
+  Polish pattern and no cue, so a phone pattern took the ten digits. A KRS
+  pattern (ten digits beginning `00`, behind `KRS`) and a `KRS` cue now type it
+  `CHAMBER_OF_COMMERCE`, like REGON. *(rules-engine#90)*
+- **A value at the end of a line was left unmasked when the next line began
+  with a bullet or a Markdown rule.** The math-context check looked for an
+  operator after the value with `\s*`, which crosses the line break, so
+  `"- BSN: 111222333\n- Adres"` and `"Telefoon: 06 12345678\n- Notitie"`
+  were read as subtractions and printed in full. The check now stays on the
+  value's own line. Over the 8,810 rebuilt pipeline documents, 1,134 more
+  values are masked (663 phones, 268 postal codes, 130 national IDs, 45 social
+  security numbers) and none are unmasked; the 152,300-document generation
+  corpus is unchanged. *(rules-engine#91)*
 - **A licence plate was matched inside a reference joined by `/`, `.`, `_` or
   `+`, or after a reference marker.** #50 stopped plates inside hyphen-joined
   references; the same fragment still fired with any other connector:

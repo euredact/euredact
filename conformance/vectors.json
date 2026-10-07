@@ -5603,6 +5603,231 @@
       ]
     },
     {
+      "id": "ch-avs-failed-checksum-behind-its-label",
+      "text": "Numéro AVS 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.2209.8834.13"
+        ]
+      },
+      "mustNotDetect": [
+        "LICENSE_PLATE",
+        "POSTAL_CODE"
+      ],
+      "expectRedactedText": "Numéro AVS [NATIONAL_ID]"
+    },
+    {
+      "id": "ch-ahv-nr-failed-checksum-behind-its-label",
+      "text": "AHV-Nr. 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.2209.8834.13"
+        ]
+      }
+    },
+    {
+      "id": "ch-ahv-nummer-compact-failed-checksum",
+      "text": "AHV-Nummer: 7562209883413",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "7562209883413"
+        ]
+      }
+    },
+    {
+      "id": "ch-avs-n-degree-failed-checksum",
+      "text": "n° AVS: 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.2209.8834.13"
+        ]
+      }
+    },
+    {
+      "id": "ch-avs-valid-behind-its-label",
+      "text": "Numéro AVS 756.1234.5678.97",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.1234.5678.97"
+        ]
+      }
+    },
+    {
+      "id": "ch-ahv-failed-checksum-without-a-label-is-not-rescued",
+      "text": "Referenz 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ]
+    },
+    {
+      "id": "ch-avs-failed-checksum-in-parentheses-after-its-label",
+      "text": "Numéro AVS (756.4823.9107.34), adresse inchangée",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.4823.9107.34"
+        ]
+      }
+    },
+    {
+      "id": "ch-ahv-failed-checksum-in-backticks",
+      "text": "Bitte die AHV-Nummer `756.4923.8810.47` im Register abfragen.",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.4923.8810.47"
+        ]
+      }
+    },
+    {
+      "id": "ch-avs-failed-checksum-after-a-phrase",
+      "text": "Le numéro AVS de l'assurée : 756.8821.4037.19",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.8821.4037.19"
+        ]
+      }
+    },
+    {
+      "id": "pl-krs-behind-its-label",
+      "text": "NIP: 123-456-32-18 (VAT: PL1234563218). REGON: 123456785. KRS: 0000123456.",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "123-456-32-18"
+        ],
+        "VAT": [
+          "PL1234563218"
+        ],
+        "CHAMBER_OF_COMMERCE": [
+          "123456785",
+          "0000123456"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE",
+        "PASSPORT"
+      ]
+    },
+    {
+      "id": "pl-krs-in-running-prose",
+      "text": "wpisana do rejestru przedsiębiorców pod numerem KRS 0000987654",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "0000987654"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "pl-nrb-spaced-behind-its-label",
+      "text": "Nr rachunku: 26 7951 1522 6129 0981 9561 1337",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "26 7951 1522 6129 0981 9561 1337"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "expectRedactedText": "Nr rachunku: [BANK_ACCOUNT]"
+    },
+    {
+      "id": "pl-nrb-compact-in-a-payment-request",
+      "text": "Proszę o wpłatę na konto 79294945371102911140393962 do 15.11.",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "79294945371102911140393962"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "pl-nrb-without-a-country-hint",
+      "text": "Numer konta: 79 2949 4537 1102 9111 4039 3962",
+      "countries": null,
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "79 2949 4537 1102 9111 4039 3962"
+        ]
+      }
+    },
+    {
+      "id": "pl-nrb-bad-check-digits-is-not-an-account",
+      "text": "Nr rachunku: 27 7951 1522 6129 0981 9561 1337",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "BANK_ACCOUNT",
+        "IBAN"
+      ]
+    },
+    {
+      "id": "pl-nip-personal-grouping",
+      "text": "NIP: 469-48-06-061",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "469-48-06-061"
+        ]
+      }
+    },
+    {
+      "id": "pl-nip-company-grouping-still-detected",
+      "text": "NIP: 469-480-60-61",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "469-480-60-61"
+        ]
+      }
+    },
+    {
       "id": "bic-letters-only-word-beside-an-iban",
       "text": "IBAN NL91 ABNA 0417 1643 00 — BETALING via automatische incasso",
       "countries": [
@@ -5786,6 +6011,80 @@
           "AB-123-CD"
         ]
       }
+    },
+    {
+      "id": "math-bullet-on-the-next-line-is-not-a-minus-nl-bsn",
+      "text": "- BSN: 111222333\n- Adres: Dorpsstraat 1",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "111222333"
+        ]
+      }
+    },
+    {
+      "id": "math-bullet-on-the-next-line-is-not-a-minus-phone",
+      "text": "Telefoon: 06 12345678\n- Notitie: terugbellen",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "06 12345678"
+        ]
+      }
+    },
+    {
+      "id": "math-markdown-rule-on-the-next-line-is-not-a-minus",
+      "text": "Kontakt: +43 664 3847291\n\n---\n\nBeschreibung",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "+43 664 3847291"
+        ]
+      }
+    },
+    {
+      "id": "math-asterisk-bullet-on-the-next-line-is-not-a-product",
+      "text": "Rijksregisternummer: 85.07.30-033.28\n* volgende punt",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "85.07.30-033.28"
+        ]
+      },
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "math-ahv-before-a-bulleted-line-is-whole",
+      "text": "- AHV-Nummer: 756.1234.5678.97\n- 7 Jahre Erfahrung",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.1234.5678.97"
+        ]
+      },
+      "expectRedactedText": "- AHV-Nummer: [NATIONAL_ID]\n- 7 Jahre Erfahrung"
+    },
+    {
+      "id": "math-an-operator-on-the-same-line-still-suppresses",
+      "text": "total = 0612345678",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "PHONE"
+      ]
     }
   ]
 }

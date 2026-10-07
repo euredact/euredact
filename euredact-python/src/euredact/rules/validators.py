@@ -693,6 +693,18 @@ def validate_polish_nip(candidate: str) -> bool:
     return total % 11 == d[9]
 
 
+def validate_polish_nrb(candidate: str) -> bool:
+    """Polish domestic account number (NRB): the PL IBAN without its "PL".
+
+    26 digits, the first two being the IBAN check digits, so the IBAN's own
+    mod-97 decides it (rules-engine#93).
+    """
+    clean = re.sub(r"[\s\-]", "", candidate)
+    if len(clean) != 26 or not clean.isdigit():
+        return False
+    return validate_iban("PL" + clean)
+
+
 #: Days per month for the rodné číslo date check. February is 29 because the
 #: century is not recoverable from a two-digit year, so a leap year cannot be
 #: ruled out -- being permissive by one day is the right direction here.
@@ -984,6 +996,7 @@ VALIDATORS: dict[str, Callable[[str], bool]] = {
     "portuguese_nif": validate_portuguese_nif,
     "polish_pesel": validate_polish_pesel,
     "polish_nip": validate_polish_nip,
+    "polish_nrb": validate_polish_nrb,
     "polish_id_card": validate_polish_id_card,
     "polish_regon": validate_polish_regon,
     "czech_birth_number": validate_czech_birth_number,

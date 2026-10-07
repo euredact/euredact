@@ -63,8 +63,9 @@ const POSTAL_PREFIX_COUNTRIES = new Set([
 
 const LEGAL_BEFORE = /(?:Art(?:ikel|icle|\.)|§|Artikel|Section|Sectie|Afdeling|paragraaf|Absatz|alinéa|punt|point|Punkt|lid)\s*$/i;
 
-const MATH_BEFORE = /[=+\-×÷*/]\s*$/;
-const MATH_AFTER = /^\s*[=+\-×÷*/]/;
+// An operator on the same line only: a bullet or "---" on the next line is not a minus sign (rules-engine#91).
+const MATH_BEFORE = /[=+\-×÷*/][^\S\r\n]*$/;
+const MATH_AFTER = /^[^\S\r\n]*[=+\-×÷*/]/;
 
 // "A-1010", "B-2000", "L-1234", "CH-8000", "D-10115": a country prefix on a
 // postal code, not a minus sign.

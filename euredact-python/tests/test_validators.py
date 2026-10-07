@@ -270,7 +270,7 @@ class TestNoDateBearingValidatorAcceptsAnImpossibleDate:
         "belgian_vat", "bic", "bsn", "croatian_oib", "danish_vat", "e164",
         "finnish_business_id", "german_tax_id", "greek_afm", "high_entropy",
         "hungarian_taj", "iban", "imei", "irish_pps", "kvk", "luhn",
-        "norwegian_org", "polish_id_card", "polish_nip", "polish_regon", "portuguese_nif", "spanish_dni",
+        "norwegian_org", "polish_id_card", "polish_nip", "polish_nrb", "polish_regon", "portuguese_nif", "spanish_dni",
         "spanish_nie", "swiss_ahv", "uk_nhs", "vat_de", "vat_fr", "vat_lu",
         "vat_nl", "vin",
     ]

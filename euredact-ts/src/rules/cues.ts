@@ -94,7 +94,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
 
   // National identity number.
   [EntityType.NATIONAL_ID,
-   /(?<![A-Za-z0-9_])(?:bsn|burgerservicenummer(?:\s*\(bsn\))?|personnummer|rijksregisternummer|nationaal\s*nummer|numéro\s*national|national\s*(?:id|number)|identiteitsnummer|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dni|rr|nn|nir|insz|niss|nis|matricule|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:bsn|burgerservicenummer(?:\s*\(bsn\))?|personnummer|rijksregisternummer|nationaal\s*nummer|numéro\s*national|national\s*(?:id|number)|identiteitsnummer|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dni|rr|nn|nir|insz|niss|nis|matricule|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu|ahv(?:-?(?:nr|nummer))?|avs)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Cyprus: "ID number" in both official languages, plus the Greek abbreviation
   // ΑΔΤ (Αστυνομική Ταυτότητα). Neither has a phone reading.
@@ -130,7 +130,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
   // Number" are written out: the tail allows a run-on *or* one qualifier word,
   // never a second word, so a three-word label needs to be spelled.
   [EntityType.CHAMBER_OF_COMMERCE,
-   /(?<![A-Za-z0-9_])(?:siren|siret|kbo|bce|kvk|ondernemingsnummer|ondernemingen\s+onder\s+nummer|kruispuntbank|numéro\s*d'entreprise|enterprise\s*number|handelsregister|companies\s*house(?:\s*(?:registration|reg|no|number))?|company\s*registration(?:\s*(?:number|no))?|company\s*(?:no|number|reg)|organisationsnummer|orgnr|i[čc]o|identifikační\s*číslo|ЕИК|eik|bulstat|cvr(?:-?nummer)?|virksomhedsnummer|regon)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:siren|siret|kbo|bce|kvk|ondernemingsnummer|ondernemingen\s+onder\s+nummer|kruispuntbank|numéro\s*d'entreprise|enterprise\s*number|handelsregister|companies\s*house(?:\s*(?:registration|reg|no|number))?|company\s*registration(?:\s*(?:number|no))?|company\s*(?:no|number|reg)|organisationsnummer|orgnr|i[čc]o|identifikační\s*číslo|ЕИК|eik|bulstat|cvr(?:-?nummer)?|virksomhedsnummer|regon|krs)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // VAT.
   [EntityType.VAT,

@@ -179,9 +179,19 @@ def _validate_custom_pattern(pattern: str) -> None:
 # rescue of a declined identifier below, and the re-typing in _deduplicate.
 
 
-def _local_cue_bonus(text: str, start: int, entity_type: object) -> int:
-    """1 when a cue naming *entity_type* sits immediately before the span."""
-    return 1 if cues.cued_type(text, start) == entity_type else 0
+def _local_cue_bonus(
+    text: str, start: int, entity_type: object, seen: dict[int, object],
+) -> int:
+    """1 when a cue naming *entity_type* sits immediately before the span.
+
+    *seen* holds the cue already read at each start offset of this document:
+    candidates share starts -- every country's pattern for the same digits --
+    and over the pipeline documents 38,400 lookups covered 8,500 offsets
+    (rules-engine#79).
+    """
+    if start not in seen:
+        seen[start] = cues.cued_type(text, start)
+    return 1 if seen[start] == entity_type else 0
 
 
 # ── Re-typing: which claims a cue may overrule ──────────────────────────
@@ -691,6 +701,7 @@ class RuleEngine:
             tuple[int, int, int, float, int, int, int, RawMatch | None,
                   Detection | None, str, str]
         ] = []
+        cue_at: dict[int, object] = {}
         for match, has_valid_validator in validated:
             # A validator-less match inside a failed-validation span used to be
             # deleted outright. Measured across the corpus, that mechanism
@@ -788,7 +799,7 @@ class RuleEngine:
 
             in_scope = 1 if (declared is None or match.country_code in declared) else 0
             country_score = country_scores.get(match.country_code, 0.0)
-            cue = _local_cue_bonus(text, match.start, match.pattern_def.entity_type)
+            cue = _local_cue_bonus(text, match.start, match.pattern_def.entity_type, cue_at)
             candidates.append(
                 (blind_priority, cue, priority, country_score, in_scope,
                  match.start, match.end, match, None, "high",

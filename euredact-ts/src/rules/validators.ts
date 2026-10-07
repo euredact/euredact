@@ -423,6 +423,13 @@ export function validatePolishPesel(candidate: string): boolean {
   return d[10] === (10 - (total % 10)) % 10;
 }
 
+/** Polish domestic account number (NRB): the PL IBAN without its "PL", so the IBAN's mod-97 decides it (rules-engine#93). */
+export function validatePolishNrb(candidate: string): boolean {
+  const c = candidate.replace(/[\s\-]/g, "");
+  if (!/^\d{26}$/.test(c)) return false;
+  return validateIban("PL" + c);
+}
+
 export function validatePolishNip(candidate: string): boolean {
   const c = candidate.replace(/[\s\-]/g, "");
   if (c.length !== 10 || !/^\d{10}$/.test(c)) return false;
@@ -682,6 +689,7 @@ export const VALIDATORS: Record<string, (candidate: string) => boolean> = {
   portuguese_nif: validatePortugueseNif,
   polish_pesel: validatePolishPesel,
   polish_nip: validatePolishNip,
+  polish_nrb: validatePolishNrb,
   polish_id_card: validatePolishIdCard,
   polish_regon: validatePolishRegon,
   czech_birth_number: validateCzechBirthNumber,

@@ -126,8 +126,12 @@ _LEGAL_BEFORE = re.compile(
 
 # ── Mathematical / formula ──────────────────────────────────────────────
 
-_MATH_BEFORE = re.compile(r"[=+\-×÷*/]\s*$")
-_MATH_AFTER = re.compile(r"^\s*[=+\-×÷*/]")
+# An operator on the same line only. ``\s`` crossed the line break, so a list
+# bullet or a Markdown rule on the next line ("- Adres", "---") read as a minus
+# sign and dropped the value at the end of the line above it: 1,134 values in
+# 782 of 8,810 pipeline documents (rules-engine#91).
+_MATH_BEFORE = re.compile(r"[=+\-×÷*/][^\S\r\n]*$")
+_MATH_AFTER = re.compile(r"^[^\S\r\n]*[=+\-×÷*/]")
 
 # "A-1010", "B-2000", "L-1234", "CH-8000", "D-10115": a country prefix on a
 # postal code, not a minus sign.

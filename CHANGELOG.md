@@ -30,6 +30,7 @@ which both test suites run.
 ### Added
 
 - Cloud results carry `usage`: the tokens a request was charged, its billing rate, the credits debited and the reasons as factor codes, as the service reports them; absent on rules-only results and from services that do not report it. *(rules-engine#89)*
+- Regression records for the corpus (`euredact-python/tests/regression_corpus.py`, `make regression-corpus`): 168 records over the layouts of #82, #90, #91, #93 and #94, which the generated corpus did not contain, with values that must stay unmasked beside those that must be masked. `make check` runs them as a gate; written into `EUREDACT_CORPUS` they reach `sweep`, `parity` and `eval`. *(rules-engine#82, #90, #91, #93, #94)*
 - Batches for the cloud tier: `create()` masks locally and uploads only masked text, keeping originals in a private local batch file; `results()` maps the answers back from it after a hash check, once, then wipes the originals. Both SDKs share the file format. `custom_id`s are checked against the gateway's character rule before any document is masked. *(rules-engine#84, #88)*
 - About 10,400 BIC6 prefixes for the 31 supported countries from the GLEIF BIC-to-LEI mapping (developed by SWIFT, redistributable under the BIC/LEI Mapping Table License Agreement; notice in `NOTICE`), with `scripts/refresh_bic_registry.py` to regenerate them. *(rules-engine#57)*
 
@@ -37,12 +38,18 @@ which both test suites run.
 
 ### Changed
 
+- The Python engine is about a quarter faster on long documents: the label lookup that ranks candidates is read once per offset and skipped in one search where no label exists; output unchanged. *(Python only)* *(rules-engine#79)*
 - A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter through a lookaround-free superset; patterns outside it fall from 35 to 23. *(Python only)* *(rules-engine#72)*
 
 - A label touching a value rescues a failed checksum on a label-gated pattern too (`Numer dowodu osobistego ABA912345`), as it already did on the others. *(rules-engine#75)*
 
 ### Fixed
 
+- A Polish domestic account number (NRB, the IBAN without `PL`) was not detected, and an 8-digit fragment of it was masked as `PHONE`; it is now `BANK_ACCOUNT`, spaced or compact, validated by the IBAN check digits. *(rules-engine#93)*
+- A Polish NIP in the grouping used for natural persons (`XXX-XX-XX-XXX`) was not detected; it is now `TAX_ID`, like the company grouping. *(rules-engine#94)*
+- A Swiss AVS/AHV number with a bad check digit was left in the clear even behind its own label (`Numéro AVS`, `AHV-Nr.`, `n° AVS`); the label, or `AVS`/`AHV` nearby for the dotted form, now masks it as `NATIONAL_ID`. *(rules-engine#82)*
+- A Polish KRS number was masked as `PHONE`; behind its `KRS` label it is now `CHAMBER_OF_COMMERCE`. *(rules-engine#90)*
+- A phone number or identifier at the end of a line was left unmasked when the next line began with a list bullet or a Markdown rule (`- `, `* `, `---`): the math-context check read the bullet as a minus sign across the line break. *(rules-engine#91)*
 - A licence plate was matched inside a reference joined by `/`, `.`, `_` or `+`, or after `#`/`№`/`n°` (`Ref #FR-S2-2026-009182`, `FR-S2/2026`); a plate must now be a token of its own, unless a plate cue is nearby. *(rules-engine#81)*
 - A Luxembourg matricule grouped other than compact or fully spaced was half-masked, or not at all, leaving the birth date readable: `19710314 12345` and `1971 0314 123 45` are now one `NATIONAL_ID`. *(rules-engine#49)*
 - German phone numbers with trailing two-digit groups were cut short (`+49 170 1234567 85 21` left `85 21` readable), and a prefix set off by ` / ` was not detected at all. *(rules-engine#51)*
