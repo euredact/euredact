@@ -71,6 +71,15 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A value at the end of a line was left unmasked when the next line began
+  with a bullet or a Markdown rule.** The math-context check looked for an
+  operator after the value with `\s*`, which crosses the line break, so
+  `"- BSN: 111222333\n- Adres"` and `"Telefoon: 06 12345678\n- Notitie"`
+  were read as subtractions and printed in full. The check now stays on the
+  value's own line. Over the 8,810 rebuilt pipeline documents, 1,134 more
+  values are masked (663 phones, 268 postal codes, 130 national IDs, 45 social
+  security numbers) and none are unmasked; the 152,300-document generation
+  corpus is unchanged. *(rules-engine#91)*
 - **A licence plate was matched inside a reference joined by `/`, `.`, `_` or
   `+`, or after a reference marker.** #50 stopped plates inside hyphen-joined
   references; the same fragment still fired with any other connector:
