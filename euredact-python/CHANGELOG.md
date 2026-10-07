@@ -88,7 +88,10 @@ narrative lives. Sections here use that vocabulary
   its own label.** `Numéro AVS 756.2209.8834.13` produced no detection: the
   EAN-13 check failed, and no cue named `AVS` or `AHV`, so the label could not
   rescue it. `AHV`, `AHV-Nr.`, `AHV-Nummer` and `AVS` are now `NATIONAL_ID`
-  cues; the same number without a label is still declined. *(rules-engine#82)*
+  cues, and the dotted form `756.XXXX.XXXX.XX` is accepted without its check
+  digit when `AVS` or `AHV` appears nearby, which covers `AVS (756.…)`,
+  ``AHV-Nummer `756.…` `` and `AVS de l'assurée : 756.…`. The same number
+  with no such word is still declined. *(rules-engine#82)*
 - **A Polish KRS number was masked as `PHONE`.** `KRS: 0000123456` had no
   Polish pattern and no cue, so a phone pattern took the ten digits. A KRS
   pattern (ten digits beginning `00`, behind `KRS`) and a `KRS` cue now type it

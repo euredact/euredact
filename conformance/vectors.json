@@ -5678,6 +5678,42 @@
       ]
     },
     {
+      "id": "ch-avs-failed-checksum-in-parentheses-after-its-label",
+      "text": "Numéro AVS (756.4823.9107.34), adresse inchangée",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.4823.9107.34"
+        ]
+      }
+    },
+    {
+      "id": "ch-ahv-failed-checksum-in-backticks",
+      "text": "Bitte die AHV-Nummer `756.4923.8810.47` im Register abfragen.",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.4923.8810.47"
+        ]
+      }
+    },
+    {
+      "id": "ch-avs-failed-checksum-after-a-phrase",
+      "text": "Le numéro AVS de l'assurée : 756.8821.4037.19",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.8821.4037.19"
+        ]
+      }
+    },
+    {
       "id": "pl-krs-behind-its-label",
       "text": "NIP: 123-456-32-18 (VAT: PL1234563218). REGON: 123456785. KRS: 0000123456.",
       "countries": [

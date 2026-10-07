@@ -393,6 +393,8 @@ const CH: CountryConfig = {
   name: "Switzerland",
   patterns: [
     p(EntityType.NATIONAL_ID, String.raw`\b756\.\d{4}\.\d{4}\.\d{2}\b`, "swiss_ahv"),
+    // Dotted, check digit not required when the document names it nearby (rules-engine#82).
+    p(EntityType.NATIONAL_ID, String.raw`\b756\.\d{4}\.\d{4}\.\d{2}\b`, null, "Swiss AHV number — dotted, beside AVS/AHV", ["AVS", "AHV"], true),
     p(EntityType.NATIONAL_ID, String.raw`\b756\d{10}\b`, "swiss_ahv"),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\bCHE[\-\s]?\d{3}\.?\d{3}\.?\d{3}\b`),
     p(EntityType.VAT, String.raw`\bCHE[\-\s]?\d{3}\.?\d{3}\.?\d{3}\s?(?:MWST|TVA|IVA)\b`),
