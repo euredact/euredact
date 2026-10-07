@@ -6011,6 +6011,80 @@
           "AB-123-CD"
         ]
       }
+    },
+    {
+      "id": "math-bullet-on-the-next-line-is-not-a-minus-nl-bsn",
+      "text": "- BSN: 111222333\n- Adres: Dorpsstraat 1",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "111222333"
+        ]
+      }
+    },
+    {
+      "id": "math-bullet-on-the-next-line-is-not-a-minus-phone",
+      "text": "Telefoon: 06 12345678\n- Notitie: terugbellen",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "06 12345678"
+        ]
+      }
+    },
+    {
+      "id": "math-markdown-rule-on-the-next-line-is-not-a-minus",
+      "text": "Kontakt: +43 664 3847291\n\n---\n\nBeschreibung",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "+43 664 3847291"
+        ]
+      }
+    },
+    {
+      "id": "math-asterisk-bullet-on-the-next-line-is-not-a-product",
+      "text": "Rijksregisternummer: 85.07.30-033.28\n* volgende punt",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "85.07.30-033.28"
+        ]
+      },
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "math-ahv-before-a-bulleted-line-is-whole",
+      "text": "- AHV-Nummer: 756.1234.5678.97\n- 7 Jahre Erfahrung",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.1234.5678.97"
+        ]
+      },
+      "expectRedactedText": "- AHV-Nummer: [NATIONAL_ID]\n- 7 Jahre Erfahrung"
+    },
+    {
+      "id": "math-an-operator-on-the-same-line-still-suppresses",
+      "text": "total = 0612345678",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "PHONE"
+      ]
     }
   ]
 }
