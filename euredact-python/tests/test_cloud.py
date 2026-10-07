@@ -9,6 +9,7 @@ a plausible redacted document, and shipped it with the PII still in it.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -629,3 +630,49 @@ def test_the_environment_variable_is_checked_too(monkeypatch):
 def test_a_hand_built_config_is_checked_too():
     with pytest.raises(ValueError, match="must start with https://"):
         cloud_config.CloudConfig(api_key="erk_test", base_url="http://api.example.com")
+
+
+# -- what a request cost (rules-engine#89) -----------------------------------
+
+USAGE = json.loads(
+    (Path(__file__).resolve().parents[2] / "conformance" / "cloud_usage.json").read_text())
+
+
+def _as_wire(usage):
+    if usage is None:
+        return None
+    return {"tokens": usage.tokens, "billing_rate": usage.billing_rate,
+            "credits": usage.credits,
+            "factors": [{"code": f.code, "detail": f.detail,
+                         "types": list(f.types) if f.types is not None else None}
+                        for f in usage.factors]}
+
+
+@pytest.mark.parametrize("case", USAGE["cases"], ids=lambda c: c["id"])
+def test_the_usage_block_is_read_as_both_sdks_read_it(case):
+    payload = dict(SUCCESS)
+    if "usage" in case:
+        payload["usage"] = case["usage"]
+    with _client(lambda r: _response(200, payload)) as client:
+        result = client.redact(DOC, country="BE")
+    assert _as_wire(result.usage) == case["expect"]
+
+
+def test_usage_reaches_the_caller_through_cloud_mode(wire, monkeypatch):
+    usage = USAGE["cases"][0]["usage"]
+    original = wire.handler
+
+    def with_usage(request):
+        response = original(request)
+        return _response(200, dict(response.json(), usage=usage))
+    monkeypatch.setattr(wire, "handler", with_usage)
+    result = euredact.EuRedact().redact(PAYMENT, countries=["NL"], mode="cloud")
+    assert result.usage == euredact.Usage(
+        tokens=3644, billing_rate=1.0, credits=3644,
+        factors=tuple(euredact.UsageFactor(code=f["code"], detail=f["detail"],
+                                           types=tuple(f["types"]) if "types" in f else None)
+                      for f in usage["factors"]))
+
+
+def test_a_rules_result_has_no_usage():
+    assert euredact.redact(DOC, countries=["BE"]).usage is None

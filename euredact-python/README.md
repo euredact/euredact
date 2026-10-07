@@ -643,6 +643,31 @@ either, no hosted model can help; run one yourself against
 `local.redacted_text`.
 
 
+### What a request cost
+
+A cloud result carries `usage`: the total the request was charged and the
+reasons for it, as the service reported them. Never a cost per step.
+
+```python
+result = euredact.redact(text, countries=["BE"], mode="cloud")
+if result.usage:
+    print(result.usage.tokens, result.usage.billing_rate, result.usage.credits)
+    for factor in result.usage.factors:
+        print(factor.code, factor.types or "", factor.detail)
+# 3644 1.0 3644
+# document_length  The length of the text sent: every token of it is read by the model.
+# instructions  A fixed set of instructions accompanies every document the model reads.
+# special_category_check ('MEDICAL_CONDITION',) The document mentions special-category data ...
+```
+
+`credits` is `round(tokens × billing_rate)`, the formula the service debits by.
+The factor codes are `rules_only`, `document_length`, `instructions`,
+`dense_document`, `special_category_check` (with the `types` that triggered
+it), `long_document` and `batch_rate`; a code added later on the service still
+arrives, as its string. `usage` is `None` on a rules-only result, and on a cloud
+result from a service that does not report it or reported it malformed: a cost
+report never fails a redaction. Batch results do not carry it yet.
+
 ### `euredact.configure()`
 
 ```python

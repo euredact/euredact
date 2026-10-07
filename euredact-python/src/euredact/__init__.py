@@ -34,6 +34,8 @@ from euredact.types import (
     EntityType,
     Exemption,
     RedactResult,
+    Usage,
+    UsageFactor,
 )
 
 __all__ = [
@@ -56,6 +58,8 @@ __all__ = [
     "redact_iter",
     "RedactResult",
     "restore",
+    "Usage",
+    "UsageFactor",
 ]
 
 # ---------------------------------------------------------------------------

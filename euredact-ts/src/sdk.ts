@@ -665,6 +665,7 @@ export class EuRedact {
       source: "cloud",
       tokens: tokenMapper ? tokenMapper.tokens : {},
       exempted,
+      ...(remote.usage ? { usage: remote.usage } : {}),
     };
   }
 

@@ -32,7 +32,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from euredact.cloud.config import CloudConfig, get_config
-from euredact.types import Detection, DetectionSource, EntityType, RedactResult
+from euredact.types import (
+    Detection,
+    DetectionSource,
+    EntityType,
+    RedactResult,
+    Usage,
+    UsageFactor,
+)
 
 _RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
 _MAX_BACKOFF_S = 30.0
@@ -131,6 +138,46 @@ def _entity_type(raw: str) -> EntityType | str:
         return raw
 
 
+def _integer(value: object) -> int | None:
+    """A JSON integer, or None. ``True`` is not one, nor is ``1.5``."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value) if float(value).is_integer() else None
+
+
+def _usage(raw: object) -> Usage | None:
+    """The ``usage`` block, or None when absent or malformed.
+
+    Shared rules with the TypeScript SDK (``conformance/cloud_usage.json``):
+    ``tokens`` and ``credits`` are integers, ``billing_rate`` a number,
+    ``factors`` a list whose entries carry a string ``code``. Anything else in
+    those four places drops the whole block rather than reporting a cost
+    nobody can trust; keys the SDK does not know are ignored.
+    """
+    if not isinstance(raw, dict):
+        return None
+    tokens, credits = _integer(raw.get("tokens")), _integer(raw.get("credits"))
+    rate = raw.get("billing_rate")
+    factors_raw = raw.get("factors")
+    if (tokens is None or credits is None or isinstance(rate, bool)
+            or not isinstance(rate, (int, float)) or not isinstance(factors_raw, list)):
+        return None
+    factors = []
+    for f in factors_raw:
+        if not isinstance(f, dict) or not isinstance(f.get("code"), str):
+            return None
+        detail = f.get("detail")
+        types = f.get("types")
+        factors.append(UsageFactor(
+            code=f["code"],
+            detail=detail if isinstance(detail, str) else "",
+            types=(tuple(x for x in types if isinstance(x, str))
+                   if isinstance(types, list) else None),
+        ))
+    return Usage(tokens=tokens, billing_rate=float(rate), credits=credits,
+                 factors=tuple(factors))
+
+
 def _to_result(payload: dict, *, text: str) -> RedactResult:
     """Translate the wire response into the library's own types."""
     detections: list[Detection] = []
@@ -151,6 +198,7 @@ def _to_result(payload: dict, *, text: str) -> RedactResult:
         redacted_text=payload.get("redacted_text", text),
         detections=detections,
         source="cloud",
+        usage=_usage(payload.get("usage")),
     )
 
 

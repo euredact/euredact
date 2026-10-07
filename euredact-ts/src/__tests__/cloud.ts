@@ -21,7 +21,8 @@ import {
   QuotaExceededError,
   TooLargeError,
 } from "../cloud/errors.js";
-import { canonicalType, DetectionSource, EntityType } from "../types.js";
+import { readFileSync } from "node:fs";
+import { canonicalType, DetectionSource, EntityType, type Usage } from "../types.js";
 
 const DOC = "Patiënt Bas Verhoeven, tel +32 475 12 34 56, mail bas@example.be";
 
@@ -385,7 +386,7 @@ interface Wire {
  * relying on it.
  */
 async function withWire(
-  script: { found?: Record<string, string>; entities?: unknown[] },
+  script: { found?: Record<string, string>; entities?: unknown[]; usage?: unknown },
   fn: (wire: Wire) => Promise<void>,
 ): Promise<void> {
   const realFetch = globalThis.fetch;
@@ -409,7 +410,10 @@ async function withWire(
       }
     }
     return new Response(
-      JSON.stringify({ job_id: "job-1", status: "succeeded", redacted_text: text, entities, unlocated: [] }),
+      JSON.stringify({
+        job_id: "job-1", status: "succeeded", redacted_text: text, entities, unlocated: [],
+        ...(script.usage !== undefined ? { usage: script.usage } : {}),
+      }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );
   };
@@ -610,6 +614,41 @@ testAsync("the client has no rulesOnly switch", async () => {
 });
 
 // ── Report ─────────────────────────────────────────────────────────────────
+
+// ── What a request cost (rules-engine#89) ──────────────────────────────────
+
+const USAGE = JSON.parse(
+  readFileSync(new URL("../../../conformance/cloud_usage.json", import.meta.url), "utf8"),
+) as { cases: Array<{ id: string; usage?: unknown; expect: unknown }> };
+
+/** The parsed Usage in the wire's snake_case, to compare with the shared expectation. */
+function asWire(usage: Usage | undefined): unknown {
+  if (!usage) return null;
+  return {
+    tokens: usage.tokens, billing_rate: usage.billingRate, credits: usage.credits,
+    factors: usage.factors.map(f => ({ code: f.code, detail: f.detail, types: f.types ?? null })),
+  };
+}
+
+for (const c of USAGE.cases) {
+  testAsync(`the usage block is read as both SDKs read it: ${c.id}`, async () => {
+    configure({ apiKey: "erk_test", baseUrl: "https://api.test" });
+    const body = "usage" in c ? { ...SUCCESS, usage: c.usage } : SUCCESS;
+    const { impl } = scripted([{ status: 200, body }]);
+    const r = await new CloudClient().redact(DOC, { country: "BE", fetchImpl: impl });
+    assert.deepEqual(asWire(r.usage), c.expect);
+  });
+}
+
+testAsync("usage reaches the caller through cloud mode", () =>
+  withWire({ usage: USAGE.cases[0].usage }, async () => {
+    const r = await new EuRedact().redactAsync(PAYMENT, cloudNL);
+    assert.deepEqual(asWire(r.usage), USAGE.cases[0].expect);
+  }));
+
+test("a rules result has no usage", () => {
+  assert.equal(redact(DOC, { countries: ["BE"] }).usage, undefined);
+});
 
 const run = async (): Promise<void> => {
   for (const [name, fn] of asyncTests) {

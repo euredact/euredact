@@ -15,6 +15,16 @@ narrative lives. Sections here use that vocabulary
 
 ### Added
 
+- **`RedactResult.usage` on cloud results**: what the request cost and why,
+  as the service reports it (euredact-inference#53): `tokens`, `billing_rate`,
+  `credits` (`round(tokens × billing_rate)`, the debit's formula) and
+  `factors`, each a `UsageFactor` with a `code`, a one-sentence `detail` and,
+  for `special_category_check`, the `types` that triggered it. A total and its
+  reasons, never a cost per step. `None` on a rules-only result and when the
+  service does not report it or reports it malformed; a cost report never
+  fails a redaction. `Usage` and `UsageFactor` are exported. The parsing rules
+  are shared with TypeScript through `conformance/cloud_usage.json`.
+  *(rules-engine#89)*
 - **Batches.** `euredact.cloud.Batches`
   creates, tracks and resolves cloud batches while keeping the structured PII
   local: `create()` masks each document here and uploads only the masked

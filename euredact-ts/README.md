@@ -595,6 +595,27 @@ either, no hosted model can help; run one yourself against
 `local.redactedText`.
 
 
+### What a request cost
+
+A cloud result carries `usage`: the total the request was charged and the
+reasons for it, as the service reported them. Never a cost per step.
+
+```ts
+const result = await redactAsync(text, { countries: ["BE"], mode: "cloud" });
+if (result.usage) {
+  const { tokens, billingRate, credits, factors } = result.usage;
+  for (const f of factors) console.log(f.code, f.types ?? "", f.detail);
+}
+```
+
+`credits` is `round(tokens × billingRate)`, the formula the service debits by.
+The factor codes are `rules_only`, `document_length`, `instructions`,
+`dense_document`, `special_category_check` (with the `types` that triggered
+it), `long_document` and `batch_rate`; a code added later on the service still
+arrives, as its string. `usage` is absent on a rules-only result, and on a cloud
+result from a service that does not report it or reported it malformed: a cost
+report never fails a redaction. Batch results do not carry it yet.
+
 ### Batches
 
 > **Not yet available:** the gateway's `/v1/batches` endpoint is still being

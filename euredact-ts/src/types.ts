@@ -173,6 +173,32 @@ export interface Exemption {
   ruleKind: "value" | "domain";
 }
 
+/**
+ * One reason a cloud request cost what it did. `code` is one of the service's
+ * factor codes (`rules_only`, `document_length`, `instructions`,
+ * `dense_document`, `special_category_check`, `long_document`, `batch_rate`),
+ * kept as a string so a code added later on the service still arrives.
+ */
+export interface UsageFactor {
+  code: string;
+  /** One sentence explaining the factor, written by the service. */
+  detail: string;
+  /** `special_category_check` only: the kinds of data that triggered it. */
+  types?: string[];
+}
+
+/**
+ * What a cloud request cost, and why (rules-engine#89). A total and its
+ * reasons, never a cost per step; `credits` is `round(tokens * billingRate)`,
+ * the formula the service debits by.
+ */
+export interface Usage {
+  tokens: number;
+  billingRate: number;
+  credits: number;
+  factors: UsageFactor[];
+}
+
 export interface RedactResult {
   redactedText: string;
   detections: Detection[];
@@ -210,6 +236,13 @@ export interface RedactResult {
   /** Detections the allowlist kept out of the output, with the rule that
    *  matched. Empty unless an allowlist was in force. */
   exempted: Exemption[];
+  /**
+   * What the cloud request cost and why, as the service reported it. Absent
+   * on a rules-only result, and on a cloud result from a service that does not
+   * report it (older versions) or reported it malformed: a cost report never
+   * fails a redaction.
+   */
+  usage?: Usage;
 }
 
 export interface PatternDef {

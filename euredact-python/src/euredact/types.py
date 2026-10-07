@@ -175,6 +175,37 @@ class Exemption:
     rule_kind: str = "value"
 
 
+@dataclass(frozen=True)
+class UsageFactor:
+    """One reason a cloud request cost what it did.
+
+    ``code`` is one of the service's factor codes -- ``rules_only``,
+    ``document_length``, ``instructions``, ``dense_document``,
+    ``special_category_check``, ``long_document``, ``batch_rate`` -- kept as a
+    string so a code added later on the service still arrives.
+    """
+
+    code: str
+    #: One sentence explaining the factor, written by the service.
+    detail: str = ""
+    #: ``special_category_check`` only: the kinds of data that triggered it.
+    types: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
+class Usage:
+    """What a cloud request cost, and why (rules-engine#89).
+
+    A total and its reasons, never a cost per step. ``credits`` is
+    ``round(tokens * billing_rate)``, the formula the service debits by.
+    """
+
+    tokens: int
+    billing_rate: float
+    credits: int
+    factors: tuple[UsageFactor, ...] = ()
+
+
 @dataclass
 class RedactResult:
     """Returned by redact()."""
@@ -210,6 +241,14 @@ class RedactResult:
     """Detections the allowlist kept out of the output, with the rule that
     matched. Empty unless an allowlist was in force. See
     :class:`Exemption`."""
+
+    usage: Usage | None = None
+    """What the cloud request cost and why, as the service reported it.
+
+    ``None`` for a rules-only result, and for a cloud result from a service
+    that does not report it (older versions) or reported it malformed: a cost
+    report never fails a redaction.
+    """
 
     tokens: dict[str, str] = field(default_factory=dict)
     """Token -> original text, populated by ``redact(tokenize=True)``.

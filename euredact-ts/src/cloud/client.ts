@@ -42,6 +42,8 @@ import {
   EntityType,
   type Detection,
   type RedactResult,
+  type Usage,
+  type UsageFactor,
 } from "../types.js";
 
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -66,6 +68,7 @@ interface WireResult {
   unlocated?: Array<{ text: string; type: string }>;
   model_version?: string | null;
   stats?: Record<string, unknown>;
+  usage?: unknown;
   error?: string;
   detail?: Record<string, unknown>;
   location?: string;
@@ -153,6 +156,35 @@ export function codePointOffsets(text: string): (cp: number) => number {
   return cp => units[Math.min(cp, units.length - 1)];
 }
 
+function isInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value);
+}
+
+/**
+ * The `usage` block, or undefined when absent or malformed. Shared rules with
+ * the Python SDK (`conformance/cloud_usage.json`): `tokens` and `credits` are
+ * integers, `billing_rate` a number, `factors` a list whose entries carry a
+ * string `code`. Anything else there drops the whole block rather than
+ * reporting a cost nobody can trust; unknown keys are ignored.
+ * @internal Exported for the conformance test.
+ */
+export function toUsage(raw: unknown): Usage | undefined {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const u = raw as Record<string, unknown>;
+  if (!isInteger(u.tokens) || !isInteger(u.credits) || typeof u.billing_rate !== "number"
+      || !Array.isArray(u.factors)) return undefined;
+  const factors: UsageFactor[] = [];
+  for (const f of u.factors as unknown[]) {
+    if (f === null || typeof f !== "object" || Array.isArray(f)) return undefined;
+    const r = f as Record<string, unknown>;
+    if (typeof r.code !== "string") return undefined;
+    const factor: UsageFactor = { code: r.code, detail: typeof r.detail === "string" ? r.detail : "" };
+    if (Array.isArray(r.types)) factor.types = r.types.filter((t): t is string => typeof t === "string");
+    factors.push(factor);
+  }
+  return { tokens: u.tokens, billingRate: u.billing_rate, credits: u.credits, factors };
+}
+
 /** @internal Shared with cloud/batches.ts. */
 export function toResult(payload: WireResult, text: string): RedactResult {
   const offset = codePointOffsets(text);
@@ -166,6 +198,7 @@ export function toResult(payload: WireResult, text: string): RedactResult {
     confidence: span.confidence ?? "high",
   }));
   detections.sort((a, b) => a.start - b.start || b.end - a.end);
+  const usage = toUsage(payload.usage);
   return {
     redactedText: payload.redacted_text ?? text,
     detections,
@@ -176,6 +209,7 @@ export function toResult(payload: WireResult, text: string): RedactResult {
     detectionMode: "declared",
     tokens: {},
     exempted: [],
+    ...(usage ? { usage } : {}),
   };
 }
 

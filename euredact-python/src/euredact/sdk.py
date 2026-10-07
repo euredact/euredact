@@ -776,6 +776,7 @@ class EuRedact:
                 text, detections, self._label_for(False, token_mapper)),
             detections=detections,
             source="cloud",
+            usage=remote.usage,
             tokens=token_mapper.tokens if token_mapper is not None else {},
             exempted=exempted,
         )

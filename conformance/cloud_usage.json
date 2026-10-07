@@ -1,0 +1,284 @@
+{
+  "version": 1,
+  "description": "How both SDKs read the `usage` block of a cloud response (rules-engine#89; gateway contract euredact-inference#53, docs/CONSOLE_AND_DEMO_API.md). `usage` is the wire value (a case without the key is a response without it); `expect` is the parsed Usage in snake_case, or null for no usage. A missing, null or malformed block is null -- a cost report never fails a redaction; unknown factor codes and extra keys pass.",
+  "cases": [
+    {
+      "id": "full-block",
+      "usage": {
+        "tokens": 3644,
+        "billing_rate": 1.0,
+        "credits": 3644,
+        "factors": [
+          {
+            "code": "document_length",
+            "detail": "The length of the text sent: every token of it is read by the model."
+          },
+          {
+            "code": "instructions",
+            "detail": "A fixed set of instructions accompanies every document the model reads."
+          },
+          {
+            "code": "special_category_check",
+            "types": [
+              "MEDICAL_CONDITION"
+            ],
+            "detail": "The document mentions special-category data or quasi-identifiers, which were checked against the people in the document."
+          }
+        ]
+      },
+      "expect": {
+        "tokens": 3644,
+        "billing_rate": 1.0,
+        "credits": 3644,
+        "factors": [
+          {
+            "code": "document_length",
+            "detail": "The length of the text sent: every token of it is read by the model.",
+            "types": null
+          },
+          {
+            "code": "instructions",
+            "detail": "A fixed set of instructions accompanies every document the model reads.",
+            "types": null
+          },
+          {
+            "code": "special_category_check",
+            "detail": "The document mentions special-category data or quasi-identifiers, which were checked against the people in the document.",
+            "types": [
+              "MEDICAL_CONDITION"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "rules-only-is-free",
+      "usage": {
+        "tokens": 0,
+        "billing_rate": 1.0,
+        "credits": 0,
+        "factors": [
+          {
+            "code": "rules_only",
+            "detail": "Only the local rules ran; no model was used and nothing is charged."
+          }
+        ]
+      },
+      "expect": {
+        "tokens": 0,
+        "billing_rate": 1.0,
+        "credits": 0,
+        "factors": [
+          {
+            "code": "rules_only",
+            "detail": "Only the local rules ran; no model was used and nothing is charged.",
+            "types": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "batch-rate-integer-rate-is-a-number",
+      "usage": {
+        "tokens": 5120,
+        "billing_rate": 1,
+        "credits": 5120,
+        "factors": [
+          {
+            "code": "document_length",
+            "detail": "The length of the text sent: every token of it is read by the model."
+          }
+        ]
+      },
+      "expect": {
+        "tokens": 5120,
+        "billing_rate": 1.0,
+        "credits": 5120,
+        "factors": [
+          {
+            "code": "document_length",
+            "detail": "The length of the text sent: every token of it is read by the model.",
+            "types": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "batch-rate",
+      "usage": {
+        "tokens": 4000,
+        "billing_rate": 0.75,
+        "credits": 3000,
+        "factors": [
+          {
+            "code": "document_length",
+            "detail": "The length of the text sent: every token of it is read by the model."
+          },
+          {
+            "code": "batch_rate",
+            "detail": "Submitted as part of a batch: tokens are charged at the batch rate."
+          }
+        ]
+      },
+      "expect": {
+        "tokens": 4000,
+        "billing_rate": 0.75,
+        "credits": 3000,
+        "factors": [
+          {
+            "code": "document_length",
+            "detail": "The length of the text sent: every token of it is read by the model.",
+            "types": null
+          },
+          {
+            "code": "batch_rate",
+            "detail": "Submitted as part of a batch: tokens are charged at the batch rate.",
+            "types": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "unknown-factor-code-and-extra-keys-pass",
+      "usage": {
+        "tokens": 10,
+        "billing_rate": 1.0,
+        "credits": 10,
+        "currency": "credits",
+        "factors": [
+          {
+            "code": "future_reason",
+            "detail": "Something new.",
+            "weight": 3
+          }
+        ]
+      },
+      "expect": {
+        "tokens": 10,
+        "billing_rate": 1.0,
+        "credits": 10,
+        "factors": [
+          {
+            "code": "future_reason",
+            "detail": "Something new.",
+            "types": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "factor-without-detail",
+      "usage": {
+        "tokens": 10,
+        "billing_rate": 1.0,
+        "credits": 10,
+        "factors": [
+          {
+            "code": "instructions"
+          }
+        ]
+      },
+      "expect": {
+        "tokens": 10,
+        "billing_rate": 1.0,
+        "credits": 10,
+        "factors": [
+          {
+            "code": "instructions",
+            "detail": "",
+            "types": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "absent-from-an-older-service",
+      "expect": null
+    },
+    {
+      "id": "null",
+      "usage": null,
+      "expect": null
+    },
+    {
+      "id": "not-an-object",
+      "usage": "3644 credits",
+      "expect": null
+    },
+    {
+      "id": "tokens-not-an-integer",
+      "usage": {
+        "tokens": "3644",
+        "billing_rate": 1.0,
+        "credits": 3644,
+        "factors": []
+      },
+      "expect": null
+    },
+    {
+      "id": "tokens-fractional",
+      "usage": {
+        "tokens": 3644.5,
+        "billing_rate": 1.0,
+        "credits": 3644,
+        "factors": []
+      },
+      "expect": null
+    },
+    {
+      "id": "tokens-boolean",
+      "usage": {
+        "tokens": true,
+        "billing_rate": 1.0,
+        "credits": 1,
+        "factors": []
+      },
+      "expect": null
+    },
+    {
+      "id": "credits-missing",
+      "usage": {
+        "tokens": 3644,
+        "billing_rate": 1.0,
+        "factors": []
+      },
+      "expect": null
+    },
+    {
+      "id": "rate-not-a-number",
+      "usage": {
+        "tokens": 3644,
+        "billing_rate": "1.0",
+        "credits": 3644,
+        "factors": []
+      },
+      "expect": null
+    },
+    {
+      "id": "factors-not-a-list",
+      "usage": {
+        "tokens": 3644,
+        "billing_rate": 1.0,
+        "credits": 3644,
+        "factors": {
+          "code": "instructions"
+        }
+      },
+      "expect": null
+    },
+    {
+      "id": "factor-without-a-code",
+      "usage": {
+        "tokens": 3644,
+        "billing_rate": 1.0,
+        "credits": 3644,
+        "factors": [
+          {
+            "detail": "x"
+          }
+        ]
+      },
+      "expect": null
+    }
+  ]
+}
