@@ -63,6 +63,19 @@ narrative lives. Sections here use that vocabulary
 
 ### Changed
 
+- **About a quarter faster on long documents.** The label lookup that ranks
+  candidates ran up to 17 anchored regexes per candidate, and most candidates
+  share their start with others (every country's pattern for the same digits)
+  and have no label at all: over the pipeline documents, 38,400 lookups covered
+  8,500 offsets, 543 of them labelled. The lookup is now read once per offset,
+  and a single union of all labels answers "none here" before the table is
+  walked. Over 2,000 pipeline documents (three alternating runs, `google-re2`)
+  the run takes 13.5 s against 18.3 s on the previous `main` and 16.9 s on
+  0.6.0. Output is identical on the 152,468-document corpus and the 8,810
+  pipeline documents. The per-date label check named in the issue was 3% of
+  the time and is unchanged. The TypeScript lookup showed no measurable gain
+  from the same change and was left as it was. *(rules-engine#79)*
+
 - **A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter**, via
   the same pattern with its lookarounds stripped. Removing a lookaround only
   drops a constraint, so the stripped form matches a superset: it can let a

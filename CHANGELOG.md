@@ -37,6 +37,7 @@ which both test suites run.
 
 ### Changed
 
+- The Python engine is about a quarter faster on long documents: the label lookup that ranks candidates is read once per offset and skipped in one search where no label exists; output unchanged. *(Python only)* *(rules-engine#79)*
 - A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter through a lookaround-free superset; patterns outside it fall from 35 to 23. *(Python only)* *(rules-engine#72)*
 
 - A label touching a value rescues a failed checksum on a label-gated pattern too (`Numer dowodu osobistego ABA912345`), as it already did on the others. *(rules-engine#75)*

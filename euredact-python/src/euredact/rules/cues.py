@@ -328,6 +328,15 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
 )
 
 
+#: Every cue as one pattern, to answer "is there any cue here" in one search.
+#: Most candidates have none, and for them this replaces one search per cue.
+#: It cannot say *which* cue matched -- a union finds the leftmost match, while
+#: the table's order decides between two cues -- so a hit still walks the table
+#: (rules-engine#79).
+_ANY_CUE = re.compile(
+    "|".join(f"(?:{pattern.pattern})" for _type, pattern in CUES), re.IGNORECASE)
+
+
 def cued_type(text: str, start: int) -> EntityType | None:
     """The entity type a label immediately before *start* names, if any.
 
@@ -336,6 +345,8 @@ def cued_type(text: str, start: int) -> EntityType | None:
     further away is about some other value.
     """
     before = text[max(0, start - CUE_WINDOW):start]
+    if not _ANY_CUE.search(before):
+        return None
     for entity_type, pattern in CUES:
         if pattern.search(before):
             return entity_type
