@@ -122,6 +122,7 @@ euredact.redact(
     coref: bool = False,
     coref_model: str = "default",
     cache: bool = True,
+    idempotency_key: str | None = None,
 ) -> RedactResult
 ```
 
@@ -154,6 +155,7 @@ The three output styles are mutually exclusive in practice — pick at most one.
 | Parameter | Default | Description |
 |---|---|---|
 | `mode` | `"rules"` | `"rules"` runs locally. `"cloud"` masks locally first, then sends the masked text to the euRedact service, which adds the model-only types (person names, organisations, job titles, diagnoses). See [Cloud tier](#cloud-tier). |
+| `idempotency_key` | `None` | `mode="cloud"` only: sent as the request's `Idempotency-Key`, so the same key returns the same job instead of running and billing the document again. Generated per call when omitted. Raises `ValueError` in rules mode. See [What the service said](#what-the-service-said-resultcloud). |
 | `context` | `None` | Share country evidence across the chunks of one document, so a chunk with no country signal of its own is still scored against the rest. Pass the same [`DocumentContext`](#documentcontext) to every chunk. Disables the cache. See [Chunked documents](#chunked-documents). |
 | `chunk_offset` | `0` | Where this chunk starts in the whole document. Used only to rebase spans recorded in `context`; returned detections are always relative to `text`. |
 | `cache` | `True` | Reuse the result for an identical input and configuration. Set `False` for one-off calls on sensitive text, or when timing the engine. |
@@ -339,6 +341,8 @@ class RedactResult:
                                                             # "inferred" otherwise
     tokens: dict[str, str] = {}                             # token -> original value; only with tokenize=True
     exempted: list[Exemption] = []                          # spans the allowlist kept, with the rule that matched
+    cloud: CloudInfo | None = None                          # mode="cloud" only: job id, model, cost,
+                                                            # unplaced findings — see "What the service said"
 ```
 
 #### `Detection`
@@ -679,44 +683,235 @@ if usage:
   `usage`, which belong to the batch (`Batch.tokens`, `Batch.credits_charged`,
   `Batch.billing_rate`).
 
+All four types are frozen dataclasses, exported from `euredact`:
+
+```python
+@dataclass(frozen=True)
+class CloudInfo:
+    job_id: str | None = None          # None for a batch document
+    model_version: str | None = None   # None when only rules ran
+    usage: Usage | None = None         # None from older services, batch documents, or a malformed block
+    unlocated: tuple[Unlocated, ...] = ()
+
+@dataclass(frozen=True)
+class Unlocated:
+    text: str                          # what the model reported
+    entity_type: EntityType | str      # e.g. EntityType.PERSON_NAME; unknown types stay strings
+
+@dataclass(frozen=True)
+class Usage:
+    tokens: int                        # every model call the document triggered
+    billing_rate: float                # 1.0, or e.g. 0.75 for a batch
+    credits: int                       # round(tokens * billing_rate): what was debited
+    factors: tuple[UsageFactor, ...] = ()
+
+@dataclass(frozen=True)
+class UsageFactor:
+    code: str                          # see the list above; new codes arrive as strings
+    detail: str = ""                   # one sentence from the service
+    types: tuple[str, ...] | None = None  # special_category_check only
+```
+
+**Retrying safely.** Pass your own `idempotency_key` when your code may send the
+same document twice: after a timeout of your own, from a retried queue message
+or a restarted worker. Derive it from something stable (an invoice number plus
+a version), not from a random value per attempt. A replay returns the same
+`result.cloud.job_id` and is not billed again.
+
 ### Account, past jobs and the batch list
 
 Everything an API key may do on the service is reachable from the SDK. What
 needs a signed-in person (logging in, minting keys, settings, members, terms)
 is not, because a key cannot do it.
 
+| Call | Service endpoint | Returns |
+|---|---|---|
+| `Account().summary()` | `GET /v1/account` | `AccountSummary` |
+| `Account().credits()` | `GET /v1/account/credits` | `Credits` |
+| `Account().credit_history(limit=50)` | `GET /v1/account/credits/history` | `list[CreditEntry]`, newest first; `limit` 1–500 |
+| `Account().usage(days=30)` | `GET /v1/account/usage` | `list[UsageDay]` |
+| `Account().usage_by_key(days=30)` | `GET /v1/account/usage/by-key` | `list[KeyUsage]` |
+| `Account().keys()` | `GET /v1/account/keys` | `list[ApiKey]` |
+| `Account().revoke_key(key_id)` | `POST /v1/account/keys/{id}/revoke` | `KeyRevocation` |
+| `Jobs().retrieve(job_id)` | `GET /v1/jobs/{id}` | `Job` |
+| `Batches().list(limit=20)` | `GET /v1/batches` | `list[Batch]`, newest first; `limit` 1–100 |
+
 ```python
 from euredact.cloud import Account, Batches, Jobs
 
 with Account() as account:
-    summary = account.summary()          # plan, retention, quota used
-    print(summary.quota_remaining, summary.retention_mode)
-    account.credits()                    # balance, granted, spent
-    account.credit_history(limit=50)     # newest first
-    account.usage(days=30)               # per day
-    account.usage_by_key(days=30)        # per key
+    summary = account.summary()
+    if summary.quota_remaining is not None and summary.quota_remaining < 100:
+        print(f"{summary.quota_remaining} documents left today")
+    print(account.credits().balance)
+    for day in account.usage(days=7):
+        print(day.day, day.documents, day.tokens, day.failures)
     for key in account.keys():
-        print(key.id, key.name, key.active)
-    account.revoke_key(7)                # e.g. a key that leaked
+        print(key.id, key.name, key.active, key.last_used_at)
 
 with Jobs() as jobs:
-    job = jobs.retrieve("job-7f3a…")     # status, and result once it has one
+    job = jobs.retrieve("job-7f3a…")
+    if job.result is not None:
+        print(job.result.redacted_text)
 
 with Batches() as batches:
     for batch in batches.list(limit=20):
-        print(batch.id, batch.status, batch.credits_charged)
+        print(batch.id, batch.status, batch.documents, batch.credits_charged)
 ```
 
-- **Typed values:** each has a `raw` field with the service's JSON, so a field
-  the SDK does not know yet is still reachable.
-- **A retrieved job's result** is over the text the service received. Under
-  `mode="cloud"` that is the locally masked text, not your original.
-- **Errors:** an expired result raises `ResultExpiredError` (410) rather than
-  reading as an empty document. An unknown job or key, or another account's,
-  raises `NotFoundError`.
-- **Revoking:** `revoke_key` is sent once and never retried. Revoking the
-  key the client itself uses works, and is reported by `self_revoked`.
-- **Retries:** reads are retried like `redact`.
+#### Creating the clients
+
+`Account`, `Jobs`, `Batches`, `CloudClient` and `AsyncCloudClient` all read the
+configuration `euredact.configure()` set (or `EUREDACT_API_KEY`). Each also
+accepts:
+
+- **`config=`**, a `CloudConfig` of its own, for a second key or another
+  endpoint: `Account(config=euredact.cloud.CloudConfig(api_key="erk_…"))`.
+- **`client=`**, an `httpx.Client` you own: for a proxy, custom TLS, or a mock
+  transport in your tests. A client you pass in is not closed by the SDK.
+
+Use them as context managers, or call `close()`, so the connection pool is
+released. One instance can make any number of calls.
+
+**From asyncio code** (FastAPI and the like): `Account` and `Jobs` are
+synchronous. Each call is one short request, so run it on a thread:
+
+```python
+summary = await asyncio.to_thread(account.summary)
+job = await asyncio.to_thread(jobs.retrieve, job_id)
+```
+
+#### What each call returns
+
+Every value is a frozen dataclass. Each has `raw`, the service's JSON as
+received, so a field the SDK does not type yet is still reachable; and every
+field is `None` when the service left it out or sent the wrong type, rather
+than the call failing.
+
+```python
+class AccountSummary:
+    tenant_id: str | None; tenant_name: str | None; active: bool | None
+    member_since: str | None          # ISO date
+    role: str | None
+    retention_mode: str | None        # "ttl", or "none": text discarded on delivery
+    payload_ttl_hours: int | None     # 0 under "none"
+    documents_today: int | None; documents_this_month: int | None
+    tokens_this_month: int | None; failures_24h: int | None
+    daily_quota: int | None           # None: no daily quota on this account
+    quota_remaining: int | None
+    active_keys: int | None
+    batches_available: bool | None    # batches need retention ("ttl")
+
+class Credits:
+    balance: int | None; granted: int | None; spent: int | None
+    unit: str | None                  # "tokens"
+
+class CreditEntry:                    # rolled up per minute, reason and direction
+    at: str | None                    # ISO timestamp
+    delta: int | None                 # negative for a debit
+    reason: str | None; count: int | None
+    job_id: str | None; source_ref: str | None
+
+class UsageDay:
+    day: str | None                   # ISO date
+    documents: int | None; tokens: int | None
+    failures: int | None; rules_only: int | None   # None inside a KeyUsage series
+
+class KeyUsage:                       # the busiest keys one by one; the rest
+    key_id: int | None                # rolled into one entry with key_id None
+    name: str | None
+    documents: int | None; tokens: int | None; failures: int | None
+    series: tuple[UsageDay, ...]
+
+class ApiKey:                         # never the secret: shown once, when minted
+    id: int | None; name: str | None; created_by: str | None
+    created_at: str | None; last_used_at: str | None; revoked_at: str | None
+    active: bool | None
+
+class KeyRevocation:
+    id: int | None
+    keys_remaining: int | None
+    locked_out: bool | None           # True: no active key left; mint one in the console
+    self_revoked: bool | None         # True: you revoked the key this client uses
+
+class Job:
+    job_id: str
+    status: str                       # "queued", "running" or "succeeded"
+    created_at: str | None
+    result: RedactResult | None       # set once succeeded
+```
+
+`Batch` gained four fields beside `id`, `status`, `counts` and the timestamps:
+`documents` (int), `tokens` (`{"prompt": n, "completion": n}`),
+`credits_charged` (int) and `billing_rate` (float, e.g. `0.75`).
+
+#### Retrieving a job
+
+`redact(mode="cloud")` already waits for its job, polling past the service's
+synchronous window, so most code never needs `Jobs`. It is for:
+
+- **Support and audits:** look up `result.cloud.job_id` later.
+- **A caller that stopped waiting:** a job the client gave up polling on
+  (`poll_timeout_s`) may still finish; retrieve it by id.
+
+A failed or rejected job raises (`CloudError` with status 502, `TooLargeError`)
+rather than returning a status. The result is over the text the service
+received: under `mode="cloud"` that is the locally masked text, so its offsets
+and `redacted_text` are not your original's. Results are kept for the
+account's retention period (`AccountSummary.payload_ttl_hours`), and not at all
+under `retention_mode == "none"`; after that, `ResultExpiredError`.
+
+#### Revoking a key
+
+`revoke_key` is the one write an API key may make, for a key that leaked. It
+is sent once and never retried. Revoking the key the client itself uses
+succeeds and reports `self_revoked=True`; every later call with it fails with
+status 401. When `locked_out` is `True`, no active key is left and only a
+person in the console can mint one.
+
+#### Handling errors
+
+All errors derive from `euredact.cloud.CloudError`, which carries `status`
+(the HTTP status, or `None` for a network failure) and `detail` (the service's
+JSON detail). Catch the specific ones first: `RateLimitedError` is a subclass
+of `QuotaExceededError`.
+
+```python
+from euredact.cloud import (
+    CloudError, NotFoundError, QuotaExceededError, RateLimitedError,
+    ResultExpiredError, TooLargeError,
+)
+
+try:
+    result = euredact.redact(text, countries=["BE"], mode="cloud",
+                             idempotency_key=f"invoice-{invoice.id}-v{invoice.version}")
+except RateLimitedError:
+    ...  # rate limit still hit after every retry: back off, then retry the same key
+except QuotaExceededError as exc:
+    ...  # daily quota used up (exc.detail["used"], exc.detail["limit"]): wait for tomorrow
+except TooLargeError:
+    ...  # over the input cap: split the document and send the parts
+except CloudError as exc:
+    ...  # anything else; exc.status says what
+```
+
+| Error | Status | When | Retried by the SDK |
+|---|---|---|---|
+| `NotConfiguredError` | — | no API key configured, or `httpx` missing | no |
+| `CloudError` | 401 | the key is wrong or revoked | no |
+| `CloudError` | 403 | the service refused the call. Account calls are accepted with an API key while the service does not require a browser `Origin`; if that changes they answer 403 | no |
+| `NotFoundError` | 404 | no such job, batch or key — or another account's; also every batch call, `list()` included, while batches are not enabled on the service (`batches_not_enabled`) | no |
+| `CloudError` | 409 | `revoke_key` on a key already revoked | no |
+| `ResultExpiredError` | 410 | the job's result is past retention | no |
+| `TooLargeError` | 413 | the document is over the input cap; also a rejected job | no |
+| `QuotaExceededError` | 429 | the daily document quota is used up | **no**: it will not clear before the day does |
+| `RateLimitedError` | 429 | the edge's rate limit, still hit after every retry | yes, `max_retries` times with backoff |
+| `CloudError` | 5xx, `None` | the service or the network failed | yes for reads and `redact`; never for `revoke_key` |
+
+**Availability:** like the rest of the cloud tier, these calls are in private
+alpha, and the response shapes may still change between releases. The batch
+calls, `Batches.list()` included, answer `NotFoundError` until batches are
+enabled on the service (see [Batches](#batches)).
 
 ### `euredact.configure()`
 

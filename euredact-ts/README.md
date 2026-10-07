@@ -114,6 +114,7 @@ interface RedactOptions {
   allowlistDomains?: string[] | null; // domains never redacted (EMAIL/URL)
   detectDates?: boolean;            // include DOB / date of death
   cache?: boolean;                  // reuse results for identical input
+  idempotencyKey?: string;          // mode: "cloud" only; see the table below
 }
 ```
 
@@ -141,6 +142,7 @@ interface RedactOptions {
 | Parameter | Default | Description |
 |---|---|---|
 | `mode` | `"rules"` | `"rules"` runs locally and synchronously. `"cloud"` must go through [`redactAsync()`](#redactasynctext-options) — `redact()` is synchronous and a network call cannot be. See [Cloud tier](#cloud-tier). |
+| `idempotencyKey` | generated | `mode: "cloud"` only (through `redactAsync`): sent as the request's `Idempotency-Key`, so the same key returns the same job instead of running and billing the document again. Throws in rules mode. See [What the service said](#what-the-service-said-resultcloud). |
 | `context` | `null` | Share country evidence across the chunks of one document. Pass the same `DocumentContext` to every chunk. Disables the cache. See [Chunked documents](#chunked-documents). |
 | `chunkOffset` | `0` | Where this chunk starts in the whole document. Only rebases spans recorded in `context`; returned detections stay relative to `text`. |
 | `cache` | `true` | Reuse the result for an identical input and configuration. |
@@ -248,10 +250,18 @@ instance, which is what makes one instance per tenant the right default.
 interface RedactResult {
   redactedText: string;       // The input text with PII replaced
   detections: Detection[];    // All PII spans found
-  source: string;             // Detection backend ("rules")
+  source: string;             // "rules" or "cloud"
   degraded: boolean;          // True if the engine fell back to a simpler mode
+
+  // Country inference — see "Country-independent detection"
+  inferredCountries: Array<[string, number]>; // [country, confidence], strongest first
+  evidence: CountryEvidence[];                // every signal, with the span behind it
+  detectionMode: string;                      // "declared" if countries was passed,
+                                              // "inferred" otherwise
   tokens: Record<string, string>; // token -> original value; only with tokenize: true
   exempted: Exemption[];          // spans the allowlist kept, with the rule that matched
+  cloud?: CloudInfo;              // mode: "cloud" only: job id, model, cost, unplaced
+                                  // findings — see "What the service said"
 }
 ```
 
@@ -293,24 +303,6 @@ A `"low"` detection is the honest description of a mistyped, OCR'd or invented
 identifier: the shape and the label agree, the check digit does not. Earlier
 versions dropped these, which meant a redaction library printed in full an
 identifier it had recognised and rejected.
-
-#### `RedactResult`
-
-```ts
-interface RedactResult {
-  redactedText: string;
-  detections: Detection[];
-  source: string;
-  degraded: boolean;
-
-  // Country inference — see "Country-independent detection"
-  inferredCountries: Array<[string, number]>; // [country, confidence], strongest first
-  evidence: CountryEvidence[];                // every signal, with the span behind it
-  detectionMode: string;                      // "declared" if countries was passed,
-                                              // "inferred" otherwise
-  tokens: Record<string, string>;             // token -> original value; only with tokenize: true
-}
-```
 
 #### `EntityType`
 
@@ -632,35 +624,222 @@ if (usage) {
   `usage`, which belong to the batch (`batch.tokens`, `batch.creditsCharged`,
   `batch.billingRate`).
 
+All four types are exported from `euredact`:
+
+```ts
+interface CloudInfo {
+  jobId: string | null;          // null for a batch document
+  modelVersion: string | null;   // null when only rules ran
+  usage?: Usage;                 // absent from older services, batch documents, or a malformed block
+  unlocated: Unlocated[];
+}
+
+interface Unlocated {
+  text: string;                  // what the model reported
+  entityType: EntityType | string; // e.g. "PERSON_NAME"; unknown types stay strings
+}
+
+interface Usage {
+  tokens: number;                // every model call the document triggered
+  billingRate: number;           // 1, or e.g. 0.75 for a batch
+  credits: number;               // round(tokens * billingRate): what was debited
+  factors: UsageFactor[];
+}
+
+interface UsageFactor {
+  code: string;                  // see the list above; new codes arrive as strings
+  detail: string;                // one sentence from the service ("" if none)
+  types?: string[];              // special_category_check only
+}
+```
+
+**Retrying safely.** Pass your own `idempotencyKey` when your code may send the
+same document twice: after a timeout of your own, from a retried queue message
+or a restarted worker. Derive it from something stable (an invoice number plus
+a version), not from a random value per attempt. A replay returns the same
+`result.cloud.jobId` and is not billed again.
+
 ### Account, past jobs and the batch list
 
 Everything an API key may do on the service is reachable from the SDK. What
 needs a signed-in person (logging in, minting keys, settings, members, terms)
-is not, because a key cannot do it.
+is not, because a key cannot do it. Every call returns a `Promise`.
+
+| Call | Service endpoint | Resolves to |
+|---|---|---|
+| `new Account().summary()` | `GET /v1/account` | `AccountSummary` |
+| `new Account().credits()` | `GET /v1/account/credits` | `Credits` |
+| `new Account().creditHistory(limit = 50)` | `GET /v1/account/credits/history` | `CreditEntry[]`, newest first; `limit` 1–500 |
+| `new Account().usage(days = 30)` | `GET /v1/account/usage` | `UsageDay[]` |
+| `new Account().usageByKey(days = 30)` | `GET /v1/account/usage/by-key` | `KeyUsage[]` |
+| `new Account().keys()` | `GET /v1/account/keys` | `ApiKey[]` |
+| `new Account().revokeKey(keyId)` | `POST /v1/account/keys/{id}/revoke` | `KeyRevocation` |
+| `new Jobs().retrieve(jobId)` | `GET /v1/jobs/{id}` | `Job` |
+| `new Batches().list(limit = 20)` | `GET /v1/batches` | `Batch[]`, newest first; `limit` 1–100 |
 
 ```ts
 import { Account, Batches, Jobs } from "euredact";
 
 const account = new Account();
-const summary = await account.summary();   // plan, retention, quota used
-await account.credits();                   // balance, granted, spent
-await account.creditHistory(50);           // newest first
-await account.usage(30);                   // per day
-await account.usageByKey(30);              // per key
-for (const key of await account.keys()) console.log(key.id, key.name, key.active);
-await account.revokeKey(7);                // e.g. a key that leaked
+const summary = await account.summary();
+if (summary.quotaRemaining !== null && summary.quotaRemaining < 100) {
+  console.log(`${summary.quotaRemaining} documents left today`);
+}
+console.log((await account.credits()).balance);
+for (const day of await account.usage(7)) console.log(day.day, day.documents, day.tokens);
+for (const key of await account.keys()) console.log(key.id, key.name, key.active, key.lastUsedAt);
 
-const job = await new Jobs().retrieve("job-7f3a…");  // status, and result once it has one
-for (const batch of await new Batches().list(20)) console.log(batch.id, batch.creditsCharged);
+const job = await new Jobs().retrieve("job-7f3a…");
+if (job.result) console.log(job.result.redactedText);
+
+for (const batch of await new Batches().list(20)) {
+  console.log(batch.id, batch.status, batch.documents, batch.creditsCharged);
+}
 ```
 
-- **Typed values:** each has a `raw` field with the service's JSON.
-- **A retrieved job's result** is over the text the service received. Under
-  `mode: "cloud"` that is the locally masked text.
-- **Errors:** an expired result throws `ResultExpiredError` (410). An unknown
-  job or key, or another account's, throws `NotFoundError`.
-- **Revoking:** `revokeKey` is sent once and never retried.
-- **Retries:** reads are retried like `redactAsync`.
+#### Creating the clients
+
+`Account` and `Jobs` read the configuration `configure()` set (or
+`EUREDACT_API_KEY`). Both take two optional arguments:
+`new Account(config?, { fetchImpl? })`. `config` is a `CloudConfig` of its own,
+for a second key or another endpoint: a plain object with `apiKey`, `baseUrl`,
+`timeoutMs`, `pollTimeoutMs`, `maxRetries` and `headers`, checked for an
+`https://` base URL like `configure()` does; `fetchImpl` replaces the platform `fetch`,
+for a proxy or a mock in your tests. (`Batches` takes the same two inside its
+options object: `new Batches({ config, fetchImpl })`.) There is nothing to close.
+They need a global `fetch`: Node 18+, or a browser, or pass `fetchImpl`.
+
+#### What each call resolves to
+
+Each value has `raw`, the service's JSON as received, so a field the SDK does
+not type yet is still reachable; every field is `null` when the service left
+it out or sent the wrong type, rather than the call failing.
+
+```ts
+interface AccountSummary {
+  tenantId: string | null; tenantName: string | null; active: boolean | null;
+  memberSince: string | null;        // ISO date
+  role: string | null;
+  retentionMode: string | null;      // "ttl", or "none": text discarded on delivery
+  payloadTtlHours: number | null;    // 0 under "none"
+  documentsToday: number | null; documentsThisMonth: number | null;
+  tokensThisMonth: number | null; failures24h: number | null;
+  dailyQuota: number | null;         // null: no daily quota on this account
+  quotaRemaining: number | null;
+  activeKeys: number | null;
+  batchesAvailable: boolean | null;  // batches need retention ("ttl")
+  raw: Record<string, unknown>;
+}
+interface Credits { balance: number | null; granted: number | null; spent: number | null;
+                    unit: string | null /* "tokens" */; raw: Record<string, unknown> }
+interface CreditEntry {              // rolled up per minute, reason and direction
+  at: string | null; delta: number | null /* negative for a debit */;
+  reason: string | null; count: number | null; jobId: string | null; sourceRef: string | null;
+  raw: Record<string, unknown>;
+}
+interface UsageDay { day: string | null; documents: number | null; tokens: number | null;
+                     failures: number | null; rulesOnly: number | null; raw: Record<string, unknown> }
+interface KeyUsage {                 // the busiest keys one by one; the rest in one entry, keyId null
+  keyId: number | null; name: string | null;
+  documents: number | null; tokens: number | null; failures: number | null;
+  series: UsageDay[]; raw: Record<string, unknown>;
+}
+interface ApiKey {                   // never the secret: shown once, when minted
+  id: number | null; name: string | null; createdBy: string | null;
+  createdAt: string | null; lastUsedAt: string | null; revokedAt: string | null;
+  active: boolean | null; raw: Record<string, unknown>;
+}
+interface KeyRevocation {
+  id: number | null; keysRemaining: number | null;
+  lockedOut: boolean | null;         // true: no active key left; mint one in the console
+  selfRevoked: boolean | null;       // true: you revoked the key this client uses
+  raw: Record<string, unknown>;
+}
+interface Job {
+  jobId: string;
+  status: string;                    // "queued", "running" or "succeeded"
+  createdAt: string | null;
+  result: RedactResult | null;       // set once succeeded
+  raw: Record<string, unknown>;
+}
+```
+
+`Batch` gained four fields beside `id`, `status`, `counts` and the timestamps:
+`documents`, `tokens` (`{ prompt, completion }`), `creditsCharged` and
+`billingRate` (e.g. `0.75`).
+
+#### Retrieving a job
+
+`redactAsync(text, { mode: "cloud" })` already waits for its job, polling past
+the service's synchronous window, so most code never needs `Jobs`. It is for
+support and audits (look up `result.cloud.jobId` later) and for a job the
+client gave up polling on (`pollTimeoutMs`), which may still finish.
+
+A failed or rejected job throws (`CloudError` with status 502, `TooLargeError`)
+rather than resolving with a status. The result is over the text the service
+received: under `mode: "cloud"` that is the locally masked text, so its offsets
+and `redactedText` are not your original's. Results are kept for the account's
+retention period (`AccountSummary.payloadTtlHours`), and not at all under
+`retentionMode === "none"`; after that, `ResultExpiredError`.
+
+#### Revoking a key
+
+`revokeKey` is the one write an API key may make, for a key that leaked. It is
+sent once and never retried. Revoking the key the client itself uses succeeds
+and reports `selfRevoked: true`; every later call with it fails with status
+401. When `lockedOut` is `true`, no active key is left and only a person in the
+console can mint one.
+
+#### Handling errors
+
+All errors extend `CloudError`, which carries `status` (the HTTP status, or
+`undefined` for a network failure) and `detail` (the service's JSON detail).
+Test the specific ones first: `RateLimitedError` extends `QuotaExceededError`.
+
+```ts
+import {
+  CloudError, QuotaExceededError, RateLimitedError, TooLargeError, redactAsync,
+} from "euredact";
+
+try {
+  const result = await redactAsync(text, {
+    countries: ["BE"], mode: "cloud", idempotencyKey: `invoice-${invoice.id}-v${invoice.version}`,
+  });
+} catch (err) {
+  if (err instanceof RateLimitedError) {
+    // rate limit still hit after every retry: back off, then retry with the same key
+  } else if (err instanceof QuotaExceededError) {
+    // daily quota used up (err.detail.used, err.detail.limit): wait for tomorrow
+  } else if (err instanceof TooLargeError) {
+    // over the input cap: split the document and send the parts
+  } else if (err instanceof CloudError) {
+    // anything else; err.status says what
+  } else {
+    throw err;
+  }
+}
+```
+
+| Error | Status | When | Retried by the SDK |
+|---|---|---|---|
+| `NotConfiguredError` | — | no API key configured, or no global `fetch` | no |
+| `CloudError` | 401 | the key is wrong or revoked | no |
+| `CloudError` | 403 | the service refused the call. Account calls are accepted with an API key while the service does not require a browser `Origin`; if that changes they answer 403 | no |
+| `NotFoundError` | 404 | no such job, batch or key — or another account's; also every batch call, `list()` included, while batches are not enabled on the service (`batches_not_enabled`) | no |
+| `CloudError` | 409 | `revokeKey` on a key already revoked | no |
+| `ResultExpiredError` | 410 | the job's result is past retention | no |
+| `TooLargeError` | 413 | the document is over the input cap; also a rejected job | no |
+| `QuotaExceededError` | 429 | the daily document quota is used up | **no**: it will not clear before the day does |
+| `RateLimitedError` | 429 | the edge's rate limit, still hit after every retry | yes, `maxRetries` times with backoff |
+| `CloudError` | 5xx, `undefined` | the service or the network failed | yes for reads and `redactAsync`; never for `revokeKey` |
+
+`NotFoundError`, `ResultExpiredError` and `RateLimitedError` are exported from
+`euredact` alongside the others.
+
+**Availability:** like the rest of the cloud tier, these calls are in private
+alpha, and the response shapes may still change between releases. The batch
+calls, `list()` included, answer `NotFoundError` until batches are enabled on
+the service (see [Batches](#batches)).
 
 ### Batches
 
