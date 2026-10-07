@@ -5603,6 +5603,82 @@
       ]
     },
     {
+      "id": "pl-nrb-spaced-behind-its-label",
+      "text": "Nr rachunku: 26 7951 1522 6129 0981 9561 1337",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "26 7951 1522 6129 0981 9561 1337"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "expectRedactedText": "Nr rachunku: [BANK_ACCOUNT]"
+    },
+    {
+      "id": "pl-nrb-compact-in-a-payment-request",
+      "text": "Proszę o wpłatę na konto 79294945371102911140393962 do 15.11.",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "79294945371102911140393962"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "pl-nrb-without-a-country-hint",
+      "text": "Numer konta: 79 2949 4537 1102 9111 4039 3962",
+      "countries": null,
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "79 2949 4537 1102 9111 4039 3962"
+        ]
+      }
+    },
+    {
+      "id": "pl-nrb-bad-check-digits-is-not-an-account",
+      "text": "Nr rachunku: 27 7951 1522 6129 0981 9561 1337",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "BANK_ACCOUNT",
+        "IBAN"
+      ]
+    },
+    {
+      "id": "pl-nip-personal-grouping",
+      "text": "NIP: 469-48-06-061",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "469-48-06-061"
+        ]
+      }
+    },
+    {
+      "id": "pl-nip-company-grouping-still-detected",
+      "text": "NIP: 469-480-60-61",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "469-480-60-61"
+        ]
+      }
+    },
+    {
       "id": "bic-letters-only-word-beside-an-iban",
       "text": "IBAN NL91 ABNA 0417 1643 00 — BETALING via automatische incasso",
       "countries": [

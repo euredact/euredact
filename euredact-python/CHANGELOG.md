@@ -84,6 +84,16 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A Polish domestic account number (NRB) was not detected.** The NRB is
+  the PL IBAN without its country code, and the form Polish invoices and bank
+  letters print; 0 of 160 generated NRBs were masked whole, and in the spaced
+  form the last eight digits came out as `[PHONE]`, leaving 18 digits readable.
+  A PL pattern for the 26 digits (spaced `2+4x6` or compact) validated by the
+  IBAN's own mod-97 now types it `BANK_ACCOUNT`, with or without a country.
+  An NRB whose check digits fail is not masked, as for an IBAN. *(rules-engine#93)*
+- **A Polish NIP in the personal grouping was not detected.** The PL pattern
+  accepted only the company grouping `XXX-XXX-XX-XX`; `XXX-XX-XX-XXX`, used
+  for natural persons, is now `TAX_ID` too, with the same check. *(rules-engine#94)*
 - **A licence plate was matched inside a reference joined by `/`, `.`, `_` or
   `+`, or after a reference marker.** #50 stopped plates inside hyphen-joined
   references; the same fragment still fired with any other connector:

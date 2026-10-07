@@ -42,6 +42,8 @@ which both test suites run.
 
 ### Fixed
 
+- A Polish domestic account number (NRB, the IBAN without `PL`) was not detected, and an 8-digit fragment of it was masked as `PHONE`; it is now `BANK_ACCOUNT`, spaced or compact, validated by the IBAN check digits. *(rules-engine#93)*
+- A Polish NIP in the grouping used for natural persons (`XXX-XX-XX-XXX`) was not detected; it is now `TAX_ID`, like the company grouping. *(rules-engine#94)*
 - A licence plate was matched inside a reference joined by `/`, `.`, `_` or `+`, or after `#`/`№`/`n°` (`Ref #FR-S2-2026-009182`, `FR-S2/2026`); a plate must now be a token of its own, unless a plate cue is nearby. *(rules-engine#81)*
 - A Luxembourg matricule grouped other than compact or fully spaced was half-masked, or not at all, leaving the birth date readable: `19710314 12345` and `1971 0314 123 45` are now one `NATIONAL_ID`. *(rules-engine#49)*
 - German phone numbers with trailing two-digit groups were cut short (`+49 170 1234567 85 21` left `85 21` readable), and a prefix set off by ` / ` was not detected at all. *(rules-engine#51)*

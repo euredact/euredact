@@ -585,9 +585,12 @@ const PL: CountryConfig = {
   name: "Poland",
   patterns: [
     p(EntityType.NATIONAL_ID, String.raw`\b\d{11}\b`, "polish_pesel"),
-    p(EntityType.TAX_ID, String.raw`\b\d{3}-?\d{3}-?\d{2}-?\d{2}\b`, "polish_nip"),
+    // NIP in the company (3-3-2-2) or the personal (3-2-2-3) grouping (rules-engine#94).
+    p(EntityType.TAX_ID, String.raw`\b(?:\d{3}-?\d{3}-?\d{2}-?\d{2}|\d{3}-\d{2}-\d{2}-\d{3})\b`, "polish_nip"),
     p(EntityType.IBAN, String.raw`\bPL\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b`, "iban"),
     p(EntityType.IBAN, String.raw`\bPL\d{26}\b`, "iban"),
+    // NRB, the domestic account number: the IBAN without "PL" (rules-engine#93).
+    p(EntityType.BANK_ACCOUNT, String.raw`\b\d{2}(?: ?\d{4}){6}\b`, "polish_nrb", "Polish NRB"),
     p(EntityType.VAT, String.raw`\bPL[\s.]?\d{10}\b`),
     p(EntityType.PHONE, String.raw`\b[5-8]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b`),
     p(EntityType.PHONE, String.raw`\b[5-8]\d{8}\b`),
