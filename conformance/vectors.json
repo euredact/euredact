@@ -5603,6 +5603,119 @@
       ]
     },
     {
+      "id": "ch-avs-failed-checksum-behind-its-label",
+      "text": "Numéro AVS 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.2209.8834.13"
+        ]
+      },
+      "mustNotDetect": [
+        "LICENSE_PLATE",
+        "POSTAL_CODE"
+      ],
+      "expectRedactedText": "Numéro AVS [NATIONAL_ID]"
+    },
+    {
+      "id": "ch-ahv-nr-failed-checksum-behind-its-label",
+      "text": "AHV-Nr. 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.2209.8834.13"
+        ]
+      }
+    },
+    {
+      "id": "ch-ahv-nummer-compact-failed-checksum",
+      "text": "AHV-Nummer: 7562209883413",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "7562209883413"
+        ]
+      }
+    },
+    {
+      "id": "ch-avs-n-degree-failed-checksum",
+      "text": "n° AVS: 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.2209.8834.13"
+        ]
+      }
+    },
+    {
+      "id": "ch-avs-valid-behind-its-label",
+      "text": "Numéro AVS 756.1234.5678.97",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.1234.5678.97"
+        ]
+      }
+    },
+    {
+      "id": "ch-ahv-failed-checksum-without-a-label-is-not-rescued",
+      "text": "Referenz 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ]
+    },
+    {
+      "id": "pl-krs-behind-its-label",
+      "text": "NIP: 123-456-32-18 (VAT: PL1234563218). REGON: 123456785. KRS: 0000123456.",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "123-456-32-18"
+        ],
+        "VAT": [
+          "PL1234563218"
+        ],
+        "CHAMBER_OF_COMMERCE": [
+          "123456785",
+          "0000123456"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE",
+        "PASSPORT"
+      ]
+    },
+    {
+      "id": "pl-krs-in-running-prose",
+      "text": "wpisana do rejestru przedsiębiorców pod numerem KRS 0000987654",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "0000987654"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
       "id": "bic-letters-only-word-beside-an-iban",
       "text": "IBAN NL91 ABNA 0417 1643 00 — BETALING via automatische incasso",
       "countries": [

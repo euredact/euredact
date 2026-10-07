@@ -158,7 +158,10 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         r"|rr|nn|nir|insz|niss|nis|matricule"
         r"|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN"
         # Polish identity card, in the cases a document uses (rules-engine#75).
-        r"|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu)"
+        r"|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu"
+        # Swiss AHV/AVS number, by its own name (rules-engine#82). The "-Nr"
+        # forms are spelled out: the run-on cannot cross the hyphen.
+        r"|ahv(?:-?(?:nr|nummer))?|avs)"
         + _SEP, re.IGNORECASE)),
     # Cyprus: "ID number" in both official languages, plus the Greek
     # abbreviation ΑΔΤ (Αστυνομική Ταυτότητα). Neither has a phone reading.
@@ -222,7 +225,7 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         r"|company\s*registration(?:\s*(?:number|no))?"
         r"|company\s*(?:no|number|reg)|organisationsnummer|orgnr"
         r"|i[čc]o|identifikační\s*číslo|ЕИК|eik|bulstat|cvr(?:-?nummer)?"
-        r"|virksomhedsnummer|regon)" + _SEP, re.IGNORECASE)),
+        r"|virksomhedsnummer|regon|krs)" + _SEP, re.IGNORECASE)),
 
     # ── VAT ────────────────────────────────────────────────────────────
     (EntityType.VAT, re.compile(

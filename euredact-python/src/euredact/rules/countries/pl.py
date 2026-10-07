@@ -36,6 +36,12 @@ class PLConfig(CountryConfig):
             PatternDef(entity_type=EntityType.CHAMBER_OF_COMMERCE, pattern=r"\b\d{9}(?:\d{5})?\b",
                        validator="polish_regon", description="Polish REGON — 9 or 14 digits",
                        context_keywords=["REGON"], requires_context=True),
+            # KRS (National Court Register): ten digits, issued in sequence and
+            # written with the leading zeros, so it begins "00" -- which no
+            # dialled number does (rules-engine#90). No check digit.
+            PatternDef(entity_type=EntityType.CHAMBER_OF_COMMERCE, pattern=r"\b00\d{8}\b",
+                       validator=None, description="Polish KRS — 10 digits with leading zeros",
+                       context_keywords=["KRS"], requires_context=True),
             # Field 5 of the licence: digits in slash-separated groups, whose
             # widths vary with the year of issue ("01234/12/1234").
             PatternDef(entity_type=EntityType.DRIVERS_LICENSE, pattern=r"\b\d{3,6}/\d{2}/\d{3,7}\b",

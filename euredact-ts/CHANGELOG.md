@@ -71,6 +71,15 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A Swiss AVS/AHV number with a bad check digit was left in the clear behind
+  its own label.** `Numéro AVS 756.2209.8834.13` produced no detection: the
+  EAN-13 check failed, and no cue named `AVS` or `AHV`, so the label could not
+  rescue it. `AHV`, `AHV-Nr.`, `AHV-Nummer` and `AVS` are now `NATIONAL_ID`
+  cues; the same number without a label is still declined. *(rules-engine#82)*
+- **A Polish KRS number was masked as `PHONE`.** `KRS: 0000123456` had no
+  Polish pattern and no cue, so a phone pattern took the ten digits. A KRS
+  pattern (ten digits beginning `00`, behind `KRS`) and a `KRS` cue now type it
+  `CHAMBER_OF_COMMERCE`, like REGON. *(rules-engine#90)*
 - **A licence plate was matched inside a reference joined by `/`, `.`, `_` or
   `+`, or after a reference marker.** #50 stopped plates inside hyphen-joined
   references; the same fragment still fired with any other connector:
