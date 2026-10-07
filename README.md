@@ -400,6 +400,16 @@ output. The same properties over twenty documents in CI showed nothing.
 | `make parity` | do both SDKs mask the same characters, over whole corpora |
 | `make eval` | recall and precision |
 | `make bench` | latency, both runtimes |
+| `make regression-corpus` | writes `euromask_regressions.json` into the corpus: layouts the generated corpus lacked |
+
+The generated corpus can miss a layout entirely, and then no corpus check can
+see a regression in it: five fixes in a row (rules-engine#82, #90, #91, #93,
+#94) changed nothing in its 152,300 documents. `euredact-python/tests/regression_corpus.py`
+builds those layouts as corpus records, deterministically, with values that
+must stay unmasked alongside the ones that must be masked. `make check` runs
+them as a test; `make regression-corpus` writes them into `EUREDACT_CORPUS` so
+`sweep`, `parity` (both SDKs) and `eval` cover them too. A fix for a layout the
+corpus lacks adds a template there.
 
 Run `make help` for the full list.
 

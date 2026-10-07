@@ -29,6 +29,7 @@ which both test suites run.
 
 ### Added
 
+- Regression records for the corpus (`euredact-python/tests/regression_corpus.py`, `make regression-corpus`): 168 records over the layouts of #82, #90, #91, #93 and #94, which the generated corpus did not contain, with values that must stay unmasked beside those that must be masked. `make check` runs them as a gate; written into `EUREDACT_CORPUS` they reach `sweep`, `parity` and `eval`. *(rules-engine#82, #90, #91, #93, #94)*
 - Batches for the cloud tier: `create()` masks locally and uploads only masked text, keeping originals in a private local batch file; `results()` maps the answers back from it after a hash check, once, then wipes the originals. Both SDKs share the file format. `custom_id`s are checked against the gateway's character rule before any document is masked. *(rules-engine#84, #88)*
 - About 10,400 BIC6 prefixes for the 31 supported countries from the GLEIF BIC-to-LEI mapping (developed by SWIFT, redistributable under the BIC/LEI Mapping Table License Agreement; notice in `NOTICE`), with `scripts/refresh_bic_registry.py` to regenerate them. *(rules-engine#57)*
 

@@ -23,7 +23,7 @@ TSDIR    = euredact-ts
 PYTHONPATH_ := $(CURDIR)/$(PYDIR)/src
 
 .DEFAULT_GOAL := help
-.PHONY: help check verify test-py test-ts lint conformance sweep sweep-full parity eval bench clean
+.PHONY: help check verify test-py test-ts lint conformance sweep sweep-full parity eval regression-corpus bench clean
 
 help:
 	@echo "euRedact checks"
@@ -39,6 +39,7 @@ help:
 	@echo "  make sweep-full    the same, over every document (~187,000)"
 	@echo "  make parity        do both SDKs mask the same characters?"
 	@echo "  make eval          accuracy over the full corpus"
+	@echo "  make regression-corpus  write the regression records into EUREDACT_CORPUS"
 	@echo "  make bench         latency, both runtimes"
 	@echo
 	@echo "  EUREDACT_CORPUS=<dir>  where the generated datasets live"
@@ -88,6 +89,13 @@ parity:
 eval:
 	@echo "==> accuracy over the full corpus"
 	@cd $(PYDIR) && PYTHONPATH=src $(PY) tests/eval_full.py
+
+# The layouts the generated corpus lacked, as corpus records, so eval, sweep and
+# parity see them. Deterministic: rerunning rewrites the same file. The same
+# records gate `make check` through tests/test_regression_corpus.py.
+regression-corpus:
+	@test -n "$(EUREDACT_CORPUS)" || { echo "set EUREDACT_CORPUS"; exit 1; }
+	@cd $(PYDIR) && PYTHONPATH=src $(PY) tests/regression_corpus.py --write "$(EUREDACT_CORPUS)"
 
 bench:
 	@echo "==> latency"
