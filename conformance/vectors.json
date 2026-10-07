@@ -5603,6 +5603,155 @@
       ]
     },
     {
+      "id": "ch-avs-failed-checksum-behind-its-label",
+      "text": "Numéro AVS 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.2209.8834.13"
+        ]
+      },
+      "mustNotDetect": [
+        "LICENSE_PLATE",
+        "POSTAL_CODE"
+      ],
+      "expectRedactedText": "Numéro AVS [NATIONAL_ID]"
+    },
+    {
+      "id": "ch-ahv-nr-failed-checksum-behind-its-label",
+      "text": "AHV-Nr. 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.2209.8834.13"
+        ]
+      }
+    },
+    {
+      "id": "ch-ahv-nummer-compact-failed-checksum",
+      "text": "AHV-Nummer: 7562209883413",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "7562209883413"
+        ]
+      }
+    },
+    {
+      "id": "ch-avs-n-degree-failed-checksum",
+      "text": "n° AVS: 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.2209.8834.13"
+        ]
+      }
+    },
+    {
+      "id": "ch-avs-valid-behind-its-label",
+      "text": "Numéro AVS 756.1234.5678.97",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.1234.5678.97"
+        ]
+      }
+    },
+    {
+      "id": "ch-ahv-failed-checksum-without-a-label-is-not-rescued",
+      "text": "Referenz 756.2209.8834.13",
+      "countries": [
+        "CH"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ]
+    },
+    {
+      "id": "ch-avs-failed-checksum-in-parentheses-after-its-label",
+      "text": "Numéro AVS (756.4823.9107.34), adresse inchangée",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.4823.9107.34"
+        ]
+      }
+    },
+    {
+      "id": "ch-ahv-failed-checksum-in-backticks",
+      "text": "Bitte die AHV-Nummer `756.4923.8810.47` im Register abfragen.",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.4923.8810.47"
+        ]
+      }
+    },
+    {
+      "id": "ch-avs-failed-checksum-after-a-phrase",
+      "text": "Le numéro AVS de l'assurée : 756.8821.4037.19",
+      "countries": [
+        "CH"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "756.8821.4037.19"
+        ]
+      }
+    },
+    {
+      "id": "pl-krs-behind-its-label",
+      "text": "NIP: 123-456-32-18 (VAT: PL1234563218). REGON: 123456785. KRS: 0000123456.",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "123-456-32-18"
+        ],
+        "VAT": [
+          "PL1234563218"
+        ],
+        "CHAMBER_OF_COMMERCE": [
+          "123456785",
+          "0000123456"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE",
+        "PASSPORT"
+      ]
+    },
+    {
+      "id": "pl-krs-in-running-prose",
+      "text": "wpisana do rejestru przedsiębiorców pod numerem KRS 0000987654",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "CHAMBER_OF_COMMERCE": [
+          "0000987654"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
       "id": "pl-nrb-spaced-behind-its-label",
       "text": "Nr rachunku: 26 7951 1522 6129 0981 9561 1337",
       "countries": [

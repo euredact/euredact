@@ -393,6 +393,8 @@ const CH: CountryConfig = {
   name: "Switzerland",
   patterns: [
     p(EntityType.NATIONAL_ID, String.raw`\b756\.\d{4}\.\d{4}\.\d{2}\b`, "swiss_ahv"),
+    // Dotted, check digit not required when the document names it nearby (rules-engine#82).
+    p(EntityType.NATIONAL_ID, String.raw`\b756\.\d{4}\.\d{4}\.\d{2}\b`, null, "Swiss AHV number — dotted, beside AVS/AHV", ["AVS", "AHV"], true),
     p(EntityType.NATIONAL_ID, String.raw`\b756\d{10}\b`, "swiss_ahv"),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\bCHE[\-\s]?\d{3}\.?\d{3}\.?\d{3}\b`),
     p(EntityType.VAT, String.raw`\bCHE[\-\s]?\d{3}\.?\d{3}\.?\d{3}\s?(?:MWST|TVA|IVA)\b`),
@@ -598,6 +600,8 @@ const PL: CountryConfig = {
     // Identity card, REGON, driving licence: each behind its own label (rules-engine#75, #76, #77).
     p(EntityType.NATIONAL_ID, String.raw`\b[A-Z]{3}\s?\d{6}\b`, "polish_id_card", "Polish identity card", ["dowód osobisty", "dowodu osobistego", "dowodem osobistym", "dowód", "dowodu", "nr dowodu", "identity card", "ID card"], true),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b\d{9}(?:\d{5})?\b`, "polish_regon", "Polish REGON", ["REGON"], true),
+    // KRS: ten digits with the leading zeros, so it begins "00", which no dialled number does (rules-engine#90).
+    p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b00\d{8}\b`, null, "Polish KRS", ["KRS"], true),
     p(EntityType.DRIVERS_LICENSE, String.raw`\b\d{3,6}/\d{2}/\d{3,7}\b`, null, "Polish driving licence number — field 5", ["prawo jazdy", "prawa jazdy", "prawem jazdy", "driving licence", "driving license"], true),
     p(EntityType.DRIVERS_LICENSE, String.raw`\b[A-Z]{2}\s?\d{6,7}\b`, null, "Polish driving licence document number", ["prawo jazdy", "prawa jazdy", "prawem jazdy", "driving licence", "driving license"], true),
     p(EntityType.POSTAL_CODE, String.raw`\b\d{2}-\d{3}\b`, null, "", ["kod pocztowy", "adres", "ulica", "Postal:", "Address:"]),

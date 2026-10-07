@@ -81,6 +81,18 @@ narrative lives. Sections here use that vocabulary
 - **A Polish NIP in the personal grouping was not detected.** The PL pattern
   accepted only the company grouping `XXX-XXX-XX-XX`; `XXX-XX-XX-XXX`, used
   for natural persons, is now `TAX_ID` too, with the same check. *(rules-engine#94)*
+- **A Swiss AVS/AHV number with a bad check digit was left in the clear behind
+  its own label.** `Numéro AVS 756.2209.8834.13` produced no detection: the
+  EAN-13 check failed, and no cue named `AVS` or `AHV`, so the label could not
+  rescue it. `AHV`, `AHV-Nr.`, `AHV-Nummer` and `AVS` are now `NATIONAL_ID`
+  cues, and the dotted form `756.XXXX.XXXX.XX` is accepted without its check
+  digit when `AVS` or `AHV` appears nearby, which covers `AVS (756.…)`,
+  ``AHV-Nummer `756.…` `` and `AVS de l'assurée : 756.…`. The same number
+  with no such word is still declined. *(rules-engine#82)*
+- **A Polish KRS number was masked as `PHONE`.** `KRS: 0000123456` had no
+  Polish pattern and no cue, so a phone pattern took the ten digits. A KRS
+  pattern (ten digits beginning `00`, behind `KRS`) and a `KRS` cue now type it
+  `CHAMBER_OF_COMMERCE`, like REGON. *(rules-engine#90)*
 - **A licence plate was matched inside a reference joined by `/`, `.`, `_` or
   `+`, or after a reference marker.** #50 stopped plates inside hyphen-joined
   references; the same fragment still fired with any other connector:
