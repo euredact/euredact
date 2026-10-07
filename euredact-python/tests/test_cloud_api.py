@@ -324,3 +324,9 @@ def test_an_unknown_job_raises_not_found():
     _, jobs = _jobs((404, {"error": "job not found"}))
     with pytest.raises(NotFoundError):
         jobs.retrieve("job-nope")
+
+
+def test_a_job_id_is_escaped_into_the_path():
+    service, jobs = _jobs((200, ACCOUNT["job_pending"]["wire"]))
+    jobs.retrieve("a/b")
+    assert service.requests[0].url.raw_path == b"/v1/jobs/a%2Fb"

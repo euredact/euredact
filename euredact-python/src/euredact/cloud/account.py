@@ -23,6 +23,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote
 
 from euredact.cloud.client import (
     _RETRY_STATUS,
@@ -416,7 +417,7 @@ class Jobs(_ApiClient):
         :class:`~euredact.cloud.NotFoundError` for an unknown job (or one of
         another account's).
         """
-        data = self._call("GET", f"/v1/jobs/{job_id}", retry=True)
+        data = self._call("GET", f"/v1/jobs/{quote(job_id, safe='')}", retry=True)
         result = None
         if "redacted_text" in data:
             result = _to_result(data, text=data.get("redacted_text") or "")
