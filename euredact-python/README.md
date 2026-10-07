@@ -920,8 +920,8 @@ euredact.configure(
     api_key: str | None = None,
     *,
     base_url: str | None = None,
-    timeout_s: float = 30.0,
-    poll_timeout_s: float = 300.0,
+    timeout_s: float = 90.0,
+    poll_timeout_s: float = 900.0,
     max_retries: int = 3,
     headers: dict[str, str] | None = None,
 ) -> CloudConfig
@@ -931,8 +931,8 @@ euredact.configure(
 |---|---|---|---|
 | `api_key` | — | `EUREDACT_API_KEY` | Your alpha key. Required; `configure()` raises without one. |
 | `base_url` | `https://api.euredact.dev` | `EUREDACT_BASE_URL` | Service endpoint. Must be `https://`; plain `http://` is refused except to `localhost`, `127.0.0.1` or `::1`, so the key and the text never travel unencrypted. |
-| `timeout_s` | `30.0` | — | Per-request timeout. |
-| `poll_timeout_s` | `300.0` | — | Ceiling for polling a document that outlives the synchronous window. |
+| `timeout_s` | `90.0` | — | Per-request timeout. |
+| `poll_timeout_s` | `900.0` | — | Ceiling for polling a document that outlives the synchronous window. |
 | `max_retries` | `3` | — | Retries for `5xx`, timeouts and the edge's rate-limit `429`. Each carries an `Idempotency-Key`, so a retry after a timeout cannot bill twice, and `Retry-After` is obeyed. A `429` for the daily quota is not retried: it raises `QuotaExceededError` at once. |
 | `headers` | `None` | — | Extra headers sent with every request. |
 
