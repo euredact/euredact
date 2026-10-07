@@ -420,8 +420,10 @@ const results = await Promise.all(
 );
 ```
 
-Bound that yourself if the batch is large — the service enforces quotas and will
-answer `429`, which the client honours via `Retry-After`.
+Bound that yourself if the batch is large. The service's rate limit answers
+`429`, which the client retries, honouring `Retry-After`, before throwing
+`RateLimitedError`. A `429` for the daily quota throws `QuotaExceededError`
+at once: it will not clear before the day does.
 
 ### Reuse one instance
 
@@ -595,26 +597,70 @@ either, no hosted model can help; run one yourself against
 `local.redactedText`.
 
 
-### What a request cost
+### What the service said: `result.cloud`
 
-A cloud result carries `usage`: the total the request was charged and the
-reasons for it, as the service reported them. Never a cost per step.
+A cloud result carries `cloud`, what the service reported beside the spans;
+it is absent on a rules-only result.
 
 ```ts
-const result = await redactAsync(text, { countries: ["BE"], mode: "cloud" });
-if (result.usage) {
-  const { tokens, billingRate, credits, factors } = result.usage;
+const result = await redactAsync(text, {
+  countries: ["BE"], mode: "cloud", idempotencyKey: "invoice-2291-v1",
+});
+result.cloud?.jobId;         // support, Jobs.retrieve, replays
+result.cloud?.modelVersion;  // the model that answered; null when only rules ran
+for (const item of result.cloud?.unlocated ?? []) console.log(item.entityType, item.text);
+const usage = result.cloud?.usage;
+if (usage) {
+  const { tokens, billingRate, credits, factors } = usage;
   for (const f of factors) console.log(f.code, f.types ?? "", f.detail);
 }
 ```
 
-`credits` is `round(tokens × billingRate)`, the formula the service debits by.
-The factor codes are `rules_only`, `document_length`, `instructions`,
-`dense_document`, `special_category_check` (with the `types` that triggered
-it), `long_document` and `batch_rate`; a code added later on the service still
-arrives, as its string. `usage` is absent on a rules-only result, and on a cloud
-result from a service that does not report it or reported it malformed: a cost
-report never fails a redaction. Batch results do not carry it yet.
+- **`idempotencyKey`** is sent as the request's `Idempotency-Key`: the same key
+  returns the same job instead of running and billing the document again. One
+  is generated per call when omitted. It applies to `mode: "cloud"` only.
+- **`usage`** is the total the request was charged and the reasons for it, never
+  a cost per step. `credits` is `round(tokens × billingRate)`, the formula the
+  service debits by. The factor codes are `rules_only`, `document_length`,
+  `instructions`, `dense_document`, `special_category_check` (with the `types`
+  that triggered it), `long_document` and `batch_rate`; a code added later
+  still arrives, as its string. Absent when the service does not report it or
+  reported it malformed: a cost report never fails a redaction.
+- **`unlocated`** lists what the model found but could not match to a position
+  in the text it was sent. Nothing was masked for these.
+- **Batch documents** carry `modelVersion` and `unlocated`; no `jobId` or
+  `usage`, which belong to the batch (`batch.tokens`, `batch.creditsCharged`,
+  `batch.billingRate`).
+
+### Account, past jobs and the batch list
+
+Everything an API key may do on the service is reachable from the SDK. What
+needs a signed-in person (logging in, minting keys, settings, members, terms)
+is not, because a key cannot do it.
+
+```ts
+import { Account, Batches, Jobs } from "euredact";
+
+const account = new Account();
+const summary = await account.summary();   // plan, retention, quota used
+await account.credits();                   // balance, granted, spent
+await account.creditHistory(50);           // newest first
+await account.usage(30);                   // per day
+await account.usageByKey(30);              // per key
+for (const key of await account.keys()) console.log(key.id, key.name, key.active);
+await account.revokeKey(7);                // e.g. a key that leaked
+
+const job = await new Jobs().retrieve("job-7f3a…");  // status, and result once it has one
+for (const batch of await new Batches().list(20)) console.log(batch.id, batch.creditsCharged);
+```
+
+- **Typed values:** each has a `raw` field with the service's JSON.
+- **A retrieved job's result** is over the text the service received. Under
+  `mode: "cloud"` that is the locally masked text.
+- **Errors:** an expired result throws `ResultExpiredError` (410). An unknown
+  job or key, or another account's, throws `NotFoundError`.
+- **Revoking:** `revokeKey` is sent once and never retried.
+- **Retries:** reads are retried like `redactAsync`.
 
 ### Batches
 

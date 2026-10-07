@@ -19,6 +19,7 @@ import {
   CloudError,
   NotConfiguredError,
   QuotaExceededError,
+  RateLimitedError,
   TooLargeError,
 } from "../cloud/errors.js";
 import { readFileSync } from "node:fs";
@@ -48,7 +49,7 @@ function testAsync(name: string, fn: () => Promise<void>): void {
 
 /** A fetch that replays scripted responses and records what it was sent. */
 function scripted(
-  steps: Array<{ status: number; body?: unknown; headers?: Record<string, string> }>,
+  steps: Array<{ status: number; body?: unknown; text?: string; headers?: Record<string, string> }>,
 ) {
   const calls: Array<{ url: string; method: string; headers: Headers; body?: string }> = [];
   let i = 0;
@@ -61,6 +62,11 @@ function scripted(
     });
     const step = steps[Math.min(i, steps.length - 1)];
     i++;
+    if (step.text !== undefined) {
+      return new Response(step.text, {
+        status: step.status, headers: { "Content-Type": "text/html", ...(step.headers ?? {}) },
+      });
+    }
     return new Response(JSON.stringify(step.body ?? {}), {
       status: step.status,
       headers: { "Content-Type": "application/json", ...(step.headers ?? {}) },
@@ -312,17 +318,33 @@ testAsync("401 is not retried", async () => {
   assert.equal(calls.length, 1);
 });
 
-testAsync("429 is retried then surfaces as QuotaExceededError", async () => {
+// The gateway's daily quota will not reset before the day does; retrying it
+// only delayed the error through every backoff (rules-engine#89).
+testAsync("a quota 429 throws at once", async () => {
   configure({ apiKey: "erk_test", baseUrl: "https://api.test", maxRetries: 2 });
   const { impl, calls } = scripted([
     { status: 429, body: { error: "daily quota exhausted",
                            detail: { used: 100, limit: 100 } },
       headers: { "Retry-After": "0" } },
   ]);
-  await assert.rejects(
-    () => new CloudClient().redact(DOC, { country: "BE", fetchImpl: impl }),
-    QuotaExceededError,
-  );
+  const err = await new CloudClient().redact(DOC, { country: "BE", fetchImpl: impl })
+    .then(() => null, (e: unknown) => e);
+  assert.ok(err instanceof QuotaExceededError && !(err instanceof RateLimitedError));
+  assert.deepEqual((err as QuotaExceededError).detail, { used: 100, limit: 100 });
+  assert.equal(calls.length, 1, "a quota answer is final");
+});
+
+// nginx's rate limit answers in HTML and clears within seconds.
+testAsync("an edge 429 is retried then surfaces as RateLimitedError", async () => {
+  configure({ apiKey: "erk_test", baseUrl: "https://api.test", maxRetries: 2 });
+  const { impl, calls } = scripted([
+    { status: 429, text: "<html><body>429 Too Many Requests</body></html>",
+      headers: { "Retry-After": "0" } },
+  ]);
+  const err = await new CloudClient().redact(DOC, { country: "BE", fetchImpl: impl })
+    .then(() => null, (e: unknown) => e);
+  assert.ok(err instanceof RateLimitedError);
+  assert.ok(err instanceof QuotaExceededError, "what every 429 threw before");
   assert.equal(calls.length, 3, "initial attempt plus two retries");
 });
 
@@ -636,18 +658,18 @@ for (const c of USAGE.cases) {
     const body = "usage" in c ? { ...SUCCESS, usage: c.usage } : SUCCESS;
     const { impl } = scripted([{ status: 200, body }]);
     const r = await new CloudClient().redact(DOC, { country: "BE", fetchImpl: impl });
-    assert.deepEqual(asWire(r.usage), c.expect);
+    assert.deepEqual(asWire(r.cloud?.usage), c.expect);
   });
 }
 
 testAsync("usage reaches the caller through cloud mode", () =>
   withWire({ usage: USAGE.cases[0].usage }, async () => {
     const r = await new EuRedact().redactAsync(PAYMENT, cloudNL);
-    assert.deepEqual(asWire(r.usage), USAGE.cases[0].expect);
+    assert.deepEqual(asWire(r.cloud?.usage), USAGE.cases[0].expect);
   }));
 
-test("a rules result has no usage", () => {
-  assert.equal(redact(DOC, { countries: ["BE"] }).usage, undefined);
+test("a rules result has no cloud info", () => {
+  assert.equal(redact(DOC, { countries: ["BE"] }).cloud, undefined);
 });
 
 const run = async (): Promise<void> => {

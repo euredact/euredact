@@ -48,6 +48,8 @@ from typing import Any, Iterable, Protocol
 from euredact.cloud.client import (
     CloudError,
     _BaseClient,
+    _cloud_info,
+    _integer,
     _json_or_empty,
     _require_httpx,
     _to_result,
@@ -183,6 +185,13 @@ class Batch:
     ended_at: str | None = None
     results_expire_at: str | None = None
     counts: dict[str, int] = field(default_factory=dict)
+    documents: int | None = None
+    tokens: dict[str, int] = field(default_factory=dict)
+    """``{"prompt": n, "completion": n}`` so far (rules-engine#89)."""
+    credits_charged: int | None = None
+    """Credits debited for the batch so far, at :attr:`billing_rate`."""
+    billing_rate: float | None = None
+    """The batch rate, e.g. ``0.75``: batches are billed at their own rate."""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -382,6 +391,14 @@ class Batches(_BaseClient):
             ended_at=raw.get("ended_at"),
             results_expire_at=raw.get("results_expire_at"),
             counts=dict(raw.get("counts") or {}),
+            documents=_integer(raw.get("documents")),
+            tokens={k: v for k, v in (raw.get("tokens") or {}).items()
+                    if isinstance(v, int) and not isinstance(v, bool)}
+            if isinstance(raw.get("tokens"), dict) else {},
+            credits_charged=_integer(raw.get("credits_charged")),
+            billing_rate=(float(raw["billing_rate"])
+                          if isinstance(raw.get("billing_rate"), (int, float))
+                          and not isinstance(raw.get("billing_rate"), bool) else None),
             raw=raw,
         )
 
@@ -525,6 +542,21 @@ class Batches(_BaseClient):
             state["results_expire_at"] = batch.results_expire_at
             self._save(state)
         return batch
+
+    def list(self, limit: int = 20) -> list[Batch]:
+        """This account's batches, newest first (1-100, the gateway's bound).
+
+        The gateway's view only: a batch created elsewhere has no local file
+        here, and :meth:`pending` lists the ones that do.
+        """
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        resp = self._request("GET", f"/v1/batches?limit={int(limit)}")
+        payload = _json_or_empty(resp)
+        if resp.status_code != 200:
+            self._raise_for(resp.status_code, payload)
+        return [self._batch(raw) for raw in payload.get("batches") or []
+                if isinstance(raw, dict)]
 
     def cancel(self, batch_id: str) -> Batch:
         """Cancel queued documents. The local file stays ``pending`` until the
@@ -706,6 +738,10 @@ class Batches(_BaseClient):
                     (c, float(s)) for c, s in entry.get("inferred_countries", [])
                 ),
                 detection_mode=entry.get("detection_mode", "declared"),
+                # A batch line carries the model and anything unplaced; it has
+                # no job id and no usage of its own (the batch carries those).
+                cloud=_cloud_info({"model_version": result.get("model_version"),
+                                   "unlocated": result.get("unlocated")}),
             ),
         )
 

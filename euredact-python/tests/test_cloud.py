@@ -16,7 +16,8 @@ import pytest
 import euredact
 from euredact.cloud import config as cloud_config
 from euredact.cloud.client import (
-    CloudClient, CloudError, NotConfiguredError, QuotaExceededError, TooLargeError,
+    CloudClient, CloudError, NotConfiguredError, QuotaExceededError, RateLimitedError,
+    TooLargeError,
 )
 from euredact.types import DetectionSource, EntityType
 
@@ -214,7 +215,9 @@ def test_401_is_not_retried():
     assert len(calls) == 1
 
 
-def test_429_is_retried_then_surfaces_as_quota_exceeded():
+def test_a_quota_429_raises_at_once():
+    """The gateway's daily quota will not reset before the day does; retrying
+    it only delayed the error through every backoff (rules-engine#89)."""
     calls = []
 
     def handler(request):
@@ -226,8 +229,39 @@ def test_429_is_retried_then_surfaces_as_quota_exceeded():
     with _client(handler, max_retries=2) as client:
         with pytest.raises(QuotaExceededError) as exc:
             client.redact(DOC, country="BE")
+    assert not isinstance(exc.value, RateLimitedError)
     assert exc.value.detail == {"used": 100, "limit": 100}
+    assert len(calls) == 1, "a quota answer is final"
+
+
+def test_an_edge_429_is_retried_then_surfaces_as_rate_limited():
+    """nginx's rate limit answers in HTML and clears within seconds."""
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(429, text="<html><body>429 Too Many Requests</body></html>",
+                              headers={"Retry-After": "0", "Content-Type": "text/html"})
+
+    with _client(handler, max_retries=2) as client:
+        with pytest.raises(RateLimitedError) as exc:
+            client.redact(DOC, country="BE")
+    assert isinstance(exc.value, QuotaExceededError), "what every 429 raised before"
     assert len(calls) == 3, "initial attempt plus two retries"
+
+
+def test_an_edge_429_that_clears_recovers():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(429, text="<html>429</html>", headers={"Retry-After": "0"})
+        return _response(200, SUCCESS)
+
+    with _client(handler) as client:
+        assert client.redact(DOC, country="BE").source == "cloud"
+    assert len(calls) == 2
 
 
 def test_retry_after_is_obeyed(monkeypatch):
@@ -655,7 +689,7 @@ def test_the_usage_block_is_read_as_both_sdks_read_it(case):
         payload["usage"] = case["usage"]
     with _client(lambda r: _response(200, payload)) as client:
         result = client.redact(DOC, country="BE")
-    assert _as_wire(result.usage) == case["expect"]
+    assert _as_wire(result.cloud.usage) == case["expect"]
 
 
 def test_usage_reaches_the_caller_through_cloud_mode(wire, monkeypatch):
@@ -667,12 +701,12 @@ def test_usage_reaches_the_caller_through_cloud_mode(wire, monkeypatch):
         return _response(200, dict(response.json(), usage=usage))
     monkeypatch.setattr(wire, "handler", with_usage)
     result = euredact.EuRedact().redact(PAYMENT, countries=["NL"], mode="cloud")
-    assert result.usage == euredact.Usage(
+    assert result.cloud.usage == euredact.Usage(
         tokens=3644, billing_rate=1.0, credits=3644,
         factors=tuple(euredact.UsageFactor(code=f["code"], detail=f["detail"],
                                            types=tuple(f["types"]) if "types" in f else None)
                       for f in usage["factors"]))
 
 
-def test_a_rules_result_has_no_usage():
-    assert euredact.redact(DOC, countries=["BE"]).usage is None
+def test_a_rules_result_has_no_cloud_info():
+    assert euredact.redact(DOC, countries=["BE"]).cloud is None

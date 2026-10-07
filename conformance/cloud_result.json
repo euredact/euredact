@@ -1,0 +1,567 @@
+{
+  "version": 1,
+  "description": "How both SDKs read what the cloud service returns beyond spans (rules-engine#89): a result's `cloud` block, which 429 is final, a batch's cost fields, and the account and job endpoints an API key may call. Wire payloads are the gateway's JSON (euredact-inference f2ea1d9); expectations use the Python field names, and the TypeScript test compares after converting its camelCase names. A field of the wrong type reads as null; nothing here may fail a request. `usage` parsing has its own file, cloud_usage.json.",
+  "results": [
+    {
+      "id": "full-answer",
+      "wire": {
+        "job_id": "job-7f3a",
+        "status": "succeeded",
+        "redacted_text": "x",
+        "entities": [],
+        "unlocated": [
+          {
+            "text": "Dr. Peeters",
+            "type": "PERSON_NAME"
+          }
+        ],
+        "model_version": "euredact-9b@2026-08-31",
+        "usage": {
+          "tokens": 12,
+          "billing_rate": 1.0,
+          "credits": 12,
+          "factors": []
+        }
+      },
+      "expect": {
+        "job_id": "job-7f3a",
+        "model_version": "euredact-9b@2026-08-31",
+        "has_usage": true,
+        "unlocated": [
+          {
+            "text": "Dr. Peeters",
+            "entity_type": "PERSON_NAME"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rules-only-answer",
+      "wire": {
+        "job_id": "job-1",
+        "status": "succeeded",
+        "redacted_text": "x",
+        "entities": [],
+        "unlocated": [],
+        "model_version": null,
+        "usage": {
+          "tokens": 0,
+          "billing_rate": 1.0,
+          "credits": 0,
+          "factors": [
+            {
+              "code": "rules_only",
+              "detail": "…"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "job_id": "job-1",
+        "model_version": null,
+        "has_usage": true,
+        "unlocated": []
+      }
+    },
+    {
+      "id": "older-service",
+      "wire": {
+        "job_id": "job-2",
+        "status": "succeeded",
+        "redacted_text": "x",
+        "entities": []
+      },
+      "expect": {
+        "job_id": "job-2",
+        "model_version": null,
+        "has_usage": false,
+        "unlocated": []
+      }
+    },
+    {
+      "id": "legacy-type-in-unlocated",
+      "wire": {
+        "redacted_text": "x",
+        "entities": [],
+        "unlocated": [
+          {
+            "text": "Ann",
+            "type": "NAME"
+          }
+        ]
+      },
+      "expect": {
+        "job_id": null,
+        "model_version": null,
+        "has_usage": false,
+        "unlocated": [
+          {
+            "text": "Ann",
+            "entity_type": "PERSON_NAME"
+          }
+        ]
+      }
+    },
+    {
+      "id": "malformed-fields-read-as-absent",
+      "wire": {
+        "job_id": 42,
+        "redacted_text": "x",
+        "entities": [],
+        "model_version": [
+          "v"
+        ],
+        "unlocated": [
+          {
+            "type": "EMAIL"
+          },
+          "text",
+          {
+            "text": "kept"
+          }
+        ]
+      },
+      "expect": {
+        "job_id": null,
+        "model_version": null,
+        "has_usage": false,
+        "unlocated": [
+          {
+            "text": "kept",
+            "entity_type": "OTHER"
+          }
+        ]
+      }
+    },
+    {
+      "id": "unlocated-not-a-list",
+      "wire": {
+        "redacted_text": "x",
+        "entities": [],
+        "unlocated": {
+          "text": "x"
+        }
+      },
+      "expect": {
+        "job_id": null,
+        "model_version": null,
+        "has_usage": false,
+        "unlocated": []
+      }
+    }
+  ],
+  "throttling": [
+    {
+      "id": "gateway-daily-quota",
+      "status": 429,
+      "json": {
+        "error": "daily quota exceeded",
+        "detail": {
+          "used": 1000,
+          "limit": 1000
+        }
+      },
+      "expect": "quota"
+    },
+    {
+      "id": "edge-rate-limit-html",
+      "status": 429,
+      "text": "<html><head><title>429 Too Many Requests</title></head><body>nginx</body></html>",
+      "expect": "rate_limited"
+    },
+    {
+      "id": "json-without-quota-detail",
+      "status": 429,
+      "json": {
+        "error": "slow down"
+      },
+      "expect": "rate_limited"
+    },
+    {
+      "id": "quota-detail-missing-used",
+      "status": 429,
+      "json": {
+        "error": "x",
+        "detail": {
+          "limit": 10
+        }
+      },
+      "expect": "rate_limited"
+    }
+  ],
+  "batches": [
+    {
+      "id": "cost-fields",
+      "wire": {
+        "id": "b1",
+        "status": "ended",
+        "documents": 3,
+        "counts": {
+          "processing": 0,
+          "succeeded": 3,
+          "errored": 0,
+          "expired": 0,
+          "cancelled": 0
+        },
+        "tokens": {
+          "prompt": 900,
+          "completion": 120
+        },
+        "credits_charged": 765,
+        "billing_rate": 0.75,
+        "created_at": "2026-10-07T10:00:00+00:00",
+        "expires_at": "2026-10-08T10:00:00+00:00",
+        "ended_at": "2026-10-07T10:05:00+00:00",
+        "cancelled_at": null,
+        "results_expire_at": "2026-10-14T10:05:00+00:00"
+      },
+      "expect": {
+        "id": "b1",
+        "status": "ended",
+        "documents": 3,
+        "tokens": {
+          "prompt": 900,
+          "completion": 120
+        },
+        "credits_charged": 765,
+        "billing_rate": 0.75
+      }
+    },
+    {
+      "id": "older-service-without-cost",
+      "wire": {
+        "id": "b2",
+        "status": "in_progress",
+        "counts": {}
+      },
+      "expect": {
+        "id": "b2",
+        "status": "in_progress",
+        "documents": null,
+        "tokens": {},
+        "credits_charged": null,
+        "billing_rate": null
+      }
+    },
+    {
+      "id": "malformed-cost",
+      "wire": {
+        "id": "b3",
+        "status": "ended",
+        "tokens": {
+          "prompt": "9",
+          "completion": 3
+        },
+        "credits_charged": 1.5,
+        "billing_rate": "0.75"
+      },
+      "expect": {
+        "id": "b3",
+        "status": "ended",
+        "documents": null,
+        "tokens": {
+          "completion": 3
+        },
+        "credits_charged": null,
+        "billing_rate": null
+      }
+    }
+  ],
+  "account": {
+    "summary": {
+      "wire": {
+        "tenant": {
+          "id": "t_1",
+          "name": "Acme",
+          "active": true,
+          "member_since": "2026-09-01"
+        },
+        "retention": {
+          "mode": "ttl",
+          "payload_ttl_hours": 24,
+          "description": "…"
+        },
+        "usage": {
+          "documents_today": 12,
+          "documents_this_month": 380,
+          "tokens_this_month": 51200,
+          "failures_24h": 0,
+          "daily_quota": 1000,
+          "quota_remaining": 988
+        },
+        "keys": {
+          "active": 2
+        },
+        "batches": {
+          "available": true,
+          "billing_rate": 0.75,
+          "tokens_this_month": 0
+        },
+        "role": "owner",
+        "terms_accepted": true
+      },
+      "expect": {
+        "tenant_id": "t_1",
+        "tenant_name": "Acme",
+        "active": true,
+        "member_since": "2026-09-01",
+        "role": "owner",
+        "retention_mode": "ttl",
+        "payload_ttl_hours": 24,
+        "documents_today": 12,
+        "documents_this_month": 380,
+        "tokens_this_month": 51200,
+        "failures_24h": 0,
+        "daily_quota": 1000,
+        "quota_remaining": 988,
+        "active_keys": 2,
+        "batches_available": true
+      }
+    },
+    "summary_without_quota": {
+      "wire": {
+        "tenant": {
+          "id": "t_2"
+        },
+        "retention": {
+          "mode": "none",
+          "payload_ttl_hours": 0
+        },
+        "usage": {
+          "daily_quota": null,
+          "quota_remaining": null
+        }
+      },
+      "expect": {
+        "tenant_id": "t_2",
+        "tenant_name": null,
+        "active": null,
+        "member_since": null,
+        "role": null,
+        "retention_mode": "none",
+        "payload_ttl_hours": 0,
+        "documents_today": null,
+        "documents_this_month": null,
+        "tokens_this_month": null,
+        "failures_24h": null,
+        "daily_quota": null,
+        "quota_remaining": null,
+        "active_keys": null,
+        "batches_available": null
+      }
+    },
+    "credits": {
+      "wire": {
+        "balance": 94880,
+        "granted": 100000,
+        "spent": 5120,
+        "unit": "tokens"
+      },
+      "expect": {
+        "balance": 94880,
+        "granted": 100000,
+        "spent": 5120,
+        "unit": "tokens"
+      }
+    },
+    "credit_history": {
+      "wire": {
+        "entries": [
+          {
+            "delta": -3644,
+            "reason": "usage",
+            "count": 1,
+            "job_id": "job-7f3a",
+            "source_ref": null,
+            "at": "2026-10-07T10:01:00+00:00"
+          },
+          "junk"
+        ]
+      },
+      "expect": [
+        {
+          "at": "2026-10-07T10:01:00+00:00",
+          "delta": -3644,
+          "reason": "usage",
+          "count": 1,
+          "job_id": "job-7f3a",
+          "source_ref": null
+        }
+      ]
+    },
+    "usage": {
+      "wire": {
+        "days": 2,
+        "series": [
+          {
+            "day": "2026-10-06",
+            "documents": 10,
+            "tokens": 4000,
+            "failures": 1,
+            "rules_only": 2
+          },
+          {
+            "day": "2026-10-07",
+            "documents": 0,
+            "tokens": 0,
+            "failures": 0,
+            "rules_only": 0
+          }
+        ]
+      },
+      "expect": [
+        {
+          "day": "2026-10-06",
+          "documents": 10,
+          "tokens": 4000,
+          "failures": 1,
+          "rules_only": 2
+        },
+        {
+          "day": "2026-10-07",
+          "documents": 0,
+          "tokens": 0,
+          "failures": 0,
+          "rules_only": 0
+        }
+      ]
+    },
+    "usage_by_key": {
+      "wire": {
+        "days": 1,
+        "window": [
+          "2026-10-07"
+        ],
+        "keys": [
+          {
+            "key_id": 3,
+            "name": "ci",
+            "documents": 5,
+            "tokens": 900,
+            "failures": 0,
+            "series": [
+              {
+                "day": "2026-10-07",
+                "documents": 5,
+                "tokens": 900
+              }
+            ]
+          },
+          {
+            "key_id": null,
+            "name": "2 other keys",
+            "documents": 1,
+            "tokens": 10,
+            "failures": 0,
+            "series": []
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key_id": 3,
+          "name": "ci",
+          "documents": 5,
+          "tokens": 900,
+          "failures": 0,
+          "series": [
+            {
+              "day": "2026-10-07",
+              "documents": 5,
+              "tokens": 900,
+              "failures": null,
+              "rules_only": null
+            }
+          ]
+        },
+        {
+          "key_id": null,
+          "name": "2 other keys",
+          "documents": 1,
+          "tokens": 10,
+          "failures": 0,
+          "series": []
+        }
+      ]
+    },
+    "keys": {
+      "wire": {
+        "keys": [
+          {
+            "id": 3,
+            "name": "ci",
+            "created_by": "ops@example.com",
+            "created_at": "2026-09-01T09:00:00+00:00",
+            "last_used_at": null,
+            "revoked_at": null,
+            "active": true
+          }
+        ]
+      },
+      "expect": [
+        {
+          "id": 3,
+          "name": "ci",
+          "created_by": "ops@example.com",
+          "created_at": "2026-09-01T09:00:00+00:00",
+          "last_used_at": null,
+          "revoked_at": null,
+          "active": true
+        }
+      ]
+    },
+    "revoke_key": {
+      "wire": {
+        "ok": true,
+        "id": 3,
+        "keys_remaining": 1,
+        "locked_out": false,
+        "self_revoked": false
+      },
+      "expect": {
+        "id": 3,
+        "keys_remaining": 1,
+        "locked_out": false,
+        "self_revoked": false
+      }
+    },
+    "job_pending": {
+      "wire": {
+        "job_id": "job-9",
+        "status": "running",
+        "created_at": "2026-10-07T10:00:00+00:00",
+        "error": null
+      },
+      "expect": {
+        "job_id": "job-9",
+        "status": "running",
+        "created_at": "2026-10-07T10:00:00+00:00",
+        "has_result": false
+      }
+    },
+    "job_succeeded": {
+      "wire": {
+        "job_id": "job-7f3a",
+        "status": "succeeded",
+        "redacted_text": "Patiënt [PERSON_NAME]",
+        "entities": [
+          {
+            "start": 8,
+            "end": 21,
+            "text": "Bas Verhoeven",
+            "type": "PERSON_NAME",
+            "source": "model"
+          }
+        ],
+        "unlocated": [],
+        "model_version": "euredact-9b@2026-08-31"
+      },
+      "expect": {
+        "job_id": "job-7f3a",
+        "status": "succeeded",
+        "created_at": null,
+        "has_result": true
+      }
+    }
+  }
+}

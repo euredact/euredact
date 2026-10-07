@@ -1,5 +1,5 @@
 export { EntityType, DetectionSource, LEGACY_TYPE_ALIASES, canonicalType } from "./types.js";
-export type { Detection, Exemption, RedactResult, Usage, UsageFactor, PatternDef, CountryConfig, CountryEvidence } from "./types.js";
+export type { CloudInfo, Detection, Exemption, RedactResult, Unlocated, Usage, UsageFactor, PatternDef, CountryConfig, CountryEvidence } from "./types.js";
 export { DocumentContext } from "./rules/context.js";
 export { EuRedact, restore, type RedactOptions } from "./sdk.js";
 export { COUNTRY_CONFIGS } from "./rules/countries/index.js";
@@ -7,14 +7,27 @@ export { setBicRegistry, getBicRegistry, SEED_BIC6_PREFIXES, type BicRegistryPro
 export {
   configure,
   getConfig,
+  Account,
   CloudClient,
   CloudError,
   Batches,
   BatchError,
   CUSTOM_ID,
+  Jobs,
   NotConfiguredError,
+  NotFoundError,
   QuotaExceededError,
+  RateLimitedError,
+  ResultExpiredError,
   TooLargeError,
+  type AccountSummary,
+  type ApiKey,
+  type CreditEntry,
+  type Credits,
+  type Job,
+  type KeyRevocation,
+  type KeyUsage,
+  type UsageDay,
   type CloudConfig,
   type ConfigureOptions,
   type CloudRedactOptions,

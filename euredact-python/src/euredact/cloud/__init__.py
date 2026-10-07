@@ -15,6 +15,18 @@ Requires the ``cloud`` extra::
     pip install 'euredact[cloud]'
 """
 
+from euredact.cloud.account import (
+    Account,
+    AccountSummary,
+    ApiKey,
+    CreditEntry,
+    Credits,
+    Job,
+    Jobs,
+    KeyRevocation,
+    KeyUsage,
+    UsageDay,
+)
 from euredact.cloud.batches import (
     Batch,
     BatchError,
@@ -28,12 +40,18 @@ from euredact.cloud.client import (
     CloudClient,
     CloudError,
     NotConfiguredError,
+    NotFoundError,
     QuotaExceededError,
+    RateLimitedError,
+    ResultExpiredError,
     TooLargeError,
 )
 from euredact.cloud.config import CloudConfig, configure, get_config, reset
 
 __all__ = [
+    "Account",
+    "AccountSummary",
+    "ApiKey",
     "AsyncCloudClient",
     "Batch",
     "BatchError",
@@ -42,11 +60,21 @@ __all__ = [
     "CloudClient",
     "CloudConfig",
     "CloudError",
+    "CreditEntry",
+    "Credits",
     "DocumentOutcome",
     "FileBatchStore",
+    "Job",
+    "Jobs",
+    "KeyRevocation",
+    "KeyUsage",
     "NotConfiguredError",
+    "NotFoundError",
     "QuotaExceededError",
+    "RateLimitedError",
+    "ResultExpiredError",
     "TooLargeError",
+    "UsageDay",
     "configure",
     "get_config",
     "reset",

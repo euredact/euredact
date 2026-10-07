@@ -311,6 +311,28 @@ test("vector: tampered original", async () => {
   assert.equal((await batches.results("bat_1")).documents[c.id].error, spec.expect_error);
 });
 
+// ── per-document cloud info (rules-engine#89) ──
+
+test("a document carries the model and what it could not place", async () => {
+  const { gateway, batches } = setup();
+  const plain = FakeGateway.succeeded;
+  FakeGateway.succeeded = (masked: string) => ({
+    ...plain(masked), model_version: "euredact-9b@2026-08-31",
+    unlocated: [{ text: "Dr. Peeters", type: "PERSON_NAME" }],
+  });
+  try {
+    const batch = await batches.create(docs());
+    gateway.status = "ended";
+    const cloud = (await batches.results(batch.id)).documents["doc-0"].result!.cloud!;
+    assert.equal(cloud.modelVersion, "euredact-9b@2026-08-31");
+    assert.deepEqual(cloud.unlocated, [{ text: "Dr. Peeters", entityType: "PERSON_NAME" }]);
+    assert.equal(cloud.jobId, null);
+    assert.equal(cloud.usage, undefined);
+  } finally {
+    FakeGateway.succeeded = plain;
+  }
+});
+
 // ── customId characters, checked before any masking (rules-engine#88) ──
 
 for (const customId of VECTORS.custom_ids.invalid as string[]) {

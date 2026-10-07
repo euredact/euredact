@@ -29,7 +29,7 @@ which both test suites run.
 
 ### Added
 
-- Cloud results carry `usage`: the tokens a request was charged, its billing rate, the credits debited and the reasons as factor codes, as the service reports them; absent on rules-only results and from services that do not report it. *(rules-engine#89)*
+- Both SDKs cover everything an API key can do: cloud results carry `cloud` (job id, model version, `usage` with its reasons, and what the model could not place); an idempotency key on the top-level cloud call; `Account` (summary, credits, credit history, usage, usage by key, keys, revoke a key), `Jobs.retrieve`, `Batches.list` and the batch cost fields; `NotFoundError`, `ResultExpiredError` and `RateLimitedError`. *(rules-engine#89)*
 - Regression records for the corpus (`euredact-python/tests/regression_corpus.py`, `make regression-corpus`): 168 records over the layouts of #82, #90, #91, #93 and #94, which the generated corpus did not contain, with values that must stay unmasked beside those that must be masked. `make check` runs them as a gate; written into `EUREDACT_CORPUS` they reach `sweep`, `parity` and `eval`. *(rules-engine#82, #90, #91, #93, #94)*
 - Batches for the cloud tier: `create()` masks locally and uploads only masked text, keeping originals in a private local batch file; `results()` maps the answers back from it after a hash check, once, then wipes the originals. Both SDKs share the file format. `custom_id`s are checked against the gateway's character rule before any document is masked. *(rules-engine#84, #88)*
 - About 10,400 BIC6 prefixes for the 31 supported countries from the GLEIF BIC-to-LEI mapping (developed by SWIFT, redistributable under the BIC/LEI Mapping Table License Agreement; notice in `NOTICE`), with `scripts/refresh_bic_registry.py` to regenerate them. *(rules-engine#57)*
@@ -38,6 +38,7 @@ which both test suites run.
 
 ### Changed
 
+- A daily-quota `429` raises `QuotaExceededError` at once instead of after every retry; the edge's rate-limit `429` is still retried and then raises `RateLimitedError`, a subclass. *(rules-engine#89)*
 - The Python engine is about a quarter faster on long documents: the label lookup that ranks candidates is read once per offset and skipped in one search where no label exists; output unchanged. *(Python only)* *(rules-engine#79)*
 - A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter through a lookaround-free superset; patterns outside it fall from 35 to 23. *(Python only)* *(rules-engine#72)*
 

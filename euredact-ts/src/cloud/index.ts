@@ -17,6 +17,19 @@
 
 export { CloudClient, type CloudRedactOptions } from "./client.js";
 export {
+  Account,
+  Jobs,
+  type AccountSummary,
+  type ApiClientOptions,
+  type ApiKey,
+  type CreditEntry,
+  type Credits,
+  type Job,
+  type KeyRevocation,
+  type KeyUsage,
+  type UsageDay,
+} from "./account.js";
+export {
   Batches,
   BatchError,
   MAX_DOCUMENTS,
@@ -44,6 +57,9 @@ export {
 export {
   CloudError,
   NotConfiguredError,
+  NotFoundError,
   QuotaExceededError,
+  RateLimitedError,
+  ResultExpiredError,
   TooLargeError,
 } from "./errors.js";

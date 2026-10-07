@@ -29,11 +29,13 @@ from euredact.rules.bic_registry import set_bic_registry
 from euredact.rules.context import DocumentContext
 from euredact.sdk import EuRedact, restore
 from euredact.types import (
+    CloudInfo,
     Detection,
     DetectionSource,
     EntityType,
     Exemption,
     RedactResult,
+    Unlocated,
     Usage,
     UsageFactor,
 )
@@ -58,6 +60,8 @@ __all__ = [
     "redact_iter",
     "RedactResult",
     "restore",
+    "CloudInfo",
+    "Unlocated",
     "Usage",
     "UsageFactor",
 ]
@@ -116,6 +120,7 @@ def redact(
     coref: bool = False,
     coref_model: str = "default",
     cache: bool = True,
+    idempotency_key: str | None = None,
 ) -> RedactResult:
     """Redact PII from text. Main entry point.
 
@@ -140,6 +145,7 @@ def redact(
         coref=coref,
         coref_model=coref_model,
         cache=cache,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -157,6 +163,7 @@ async def aredact(
     allowlist_domains: list[str] | None = None,
     detect_dates: bool = False,
     cache: bool = True,
+    idempotency_key: str | None = None,
 ) -> RedactResult:
     """Async version of redact().
 
@@ -176,6 +183,7 @@ async def aredact(
         allowlist_domains=allowlist_domains,
         detect_dates=detect_dates,
         cache=cache,
+        idempotency_key=idempotency_key,
     )
 
 

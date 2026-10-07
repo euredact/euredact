@@ -494,6 +494,13 @@ export interface RedactOptions {
   allowlistDomains?: string[] | null;
   detectDates?: boolean;
   cache?: boolean;
+  /**
+   * `mode: "cloud"` only. Sent as the request's `Idempotency-Key`: the same key
+   * returns the same job instead of running (and billing) the document again,
+   * which is what a caller retrying after its own timeout needs. One is
+   * generated per call when omitted.
+   */
+  idempotencyKey?: string;
 }
 
 const DEFAULT_MAX_INPUT_LENGTH = 10_485_760;  // ~10 MB of text
@@ -648,7 +655,9 @@ export class EuRedact {
     const [masked, labels] = maskForCloud(text, local.detections);
     // The client converts the service's code-point offsets to UTF-16 units of
     // the text it sent, so everything from here on is in one unit.
-    const remote = await client.redact(masked, { country: countries[0] });
+    const remote = await client.redact(masked, {
+      country: countries[0], idempotencyKey: options.idempotencyKey,
+    });
 
     // A new array throughout: `local` may be the cached rules result.
     const [detections, exempted] = applyAllowlist(
@@ -665,7 +674,7 @@ export class EuRedact {
       source: "cloud",
       tokens: tokenMapper ? tokenMapper.tokens : {},
       exempted,
-      ...(remote.usage ? { usage: remote.usage } : {}),
+      ...(remote.cloud ? { cloud: remote.cloud } : {}),
     };
   }
 
@@ -691,6 +700,11 @@ export class EuRedact {
     if (requestedMode !== "rules") {
       throw new Error(
         `unknown mode ${JSON.stringify(requestedMode)}: expected "rules" or "cloud"`,
+      );
+    }
+    if (options.idempotencyKey !== undefined) {
+      throw new Error(
+        'idempotencyKey applies to mode: "cloud" only: a rules-only redaction makes no request to deduplicate',
       );
     }
 

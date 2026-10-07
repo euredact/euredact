@@ -199,6 +199,30 @@ export interface Usage {
   factors: UsageFactor[];
 }
 
+/**
+ * Something the model found that could not be placed in the document: the
+ * service could not match it to a position in what it was sent, so nothing was
+ * masked for it. Reported so a caller can decide, rather than never being told.
+ */
+export interface Unlocated {
+  text: string;
+  entityType: EntityType | string;
+}
+
+/** What the cloud service said about a request, beside its spans (rules-engine#89). */
+export interface CloudInfo {
+  /** The service's job id: for support, for `Jobs.retrieve`, and to recognise an
+   *  idempotent replay. `null` for a batch document. */
+  jobId: string | null;
+  /** The public name of the model that answered, `null` when only rules ran. */
+  modelVersion: string | null;
+  /** What the request cost and why. Absent when the service does not report it
+   *  (older versions, batch documents) or reported it malformed. */
+  usage?: Usage;
+  /** What the model found but could not place in the text it was sent. */
+  unlocated: Unlocated[];
+}
+
 export interface RedactResult {
   redactedText: string;
   detections: Detection[];
@@ -236,13 +260,9 @@ export interface RedactResult {
   /** Detections the allowlist kept out of the output, with the rule that
    *  matched. Empty unless an allowlist was in force. */
   exempted: Exemption[];
-  /**
-   * What the cloud request cost and why, as the service reported it. Absent
-   * on a rules-only result, and on a cloud result from a service that does not
-   * report it (older versions) or reported it malformed: a cost report never
-   * fails a redaction.
-   */
-  usage?: Usage;
+  /** What the cloud service reported beside the spans: job id, model, cost and
+   *  anything it could not place. Absent on a rules-only result. */
+  cloud?: CloudInfo;
 }
 
 export interface PatternDef {

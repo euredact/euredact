@@ -206,6 +206,41 @@ class Usage:
     factors: tuple[UsageFactor, ...] = ()
 
 
+@dataclass(frozen=True)
+class Unlocated:
+    """Something the model found that could not be placed in the document.
+
+    The service could not match the text it reported to a position in what it
+    was sent, so nothing was masked for it. Reported so a caller can decide
+    what to do, rather than never being told.
+    """
+
+    text: str
+    entity_type: EntityType | str
+
+
+@dataclass(frozen=True)
+class CloudInfo:
+    """What the cloud service said about a request, beside its spans
+    (rules-engine#89)."""
+
+    job_id: str | None = None
+    """The service's job id: for support, for :meth:`euredact.cloud.Jobs.retrieve`,
+    and to recognise an idempotent replay (the same key returns the same id).
+    ``None`` for a batch document."""
+
+    model_version: str | None = None
+    """The public name of the model that answered, ``None`` when only rules ran."""
+
+    usage: Usage | None = None
+    """What the request cost and why. ``None`` when the service does not report
+    it (older versions, batch documents) or reported it malformed: a cost
+    report never fails a redaction."""
+
+    unlocated: tuple[Unlocated, ...] = ()
+    """What the model found but could not place in the text it was sent."""
+
+
 @dataclass
 class RedactResult:
     """Returned by redact()."""
@@ -242,13 +277,9 @@ class RedactResult:
     matched. Empty unless an allowlist was in force. See
     :class:`Exemption`."""
 
-    usage: Usage | None = None
-    """What the cloud request cost and why, as the service reported it.
-
-    ``None`` for a rules-only result, and for a cloud result from a service
-    that does not report it (older versions) or reported it malformed: a cost
-    report never fails a redaction.
-    """
+    cloud: CloudInfo | None = None
+    """What the cloud service reported beside the spans: job id, model, cost
+    and anything it could not place. ``None`` for a rules-only result."""
 
     tokens: dict[str, str] = field(default_factory=dict)
     """Token -> original text, populated by ``redact(tokenize=True)``.

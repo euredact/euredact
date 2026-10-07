@@ -23,9 +23,9 @@ import type { Detection, RedactResult } from "../types.js";
 import { DetectionSource } from "../types.js";
 import { EuRedact, applyReplacements, maskForCloud, ontoOriginal } from "../sdk.js";
 import { defaultBatchStore, gzip, sha256Hex } from "../platform.js";
-import { codePointOffsets, toResult } from "./client.js";
+import { cloudErrorFor, codePointOffsets, isInteger, toCloudInfo, toResult } from "./client.js";
 import { getConfig, requireSecureBaseUrl, type CloudConfig } from "./config.js";
-import { CloudError, NotConfiguredError, QuotaExceededError, TooLargeError } from "./errors.js";
+import { CloudError, NotConfiguredError } from "./errors.js";
 
 /** The gateway's limits (docs/BATCHES.md §2-§3), checked before upload. */
 export const MAX_DOCUMENTS = 5000;
@@ -79,6 +79,13 @@ export interface Batch {
   endedAt: string | null;
   resultsExpireAt: string | null;
   counts: Record<string, number>;
+  documents: number | null;
+  /** `{ prompt, completion }` tokens so far (rules-engine#89). */
+  tokens: Record<string, number>;
+  /** Credits debited for the batch so far, at `billingRate`. */
+  creditsCharged: number | null;
+  /** The batch rate, e.g. `0.75`: batches are billed at their own rate. */
+  billingRate: number | null;
   raw: Record<string, unknown>;
 }
 
@@ -260,12 +267,7 @@ export class Batches {
   }
 
   private raiseFor(status: number, payload: Record<string, unknown>): never {
-    const message = String(payload.error ?? `HTTP ${status}`);
-    const detail = (payload.detail as Record<string, unknown>) ?? {};
-    if (status === 401) throw new CloudError(`authentication failed: ${message}`, status);
-    if (status === 413) throw new TooLargeError(message, status, detail);
-    if (status === 429) throw new QuotaExceededError(message, status, detail);
-    throw new CloudError(message, status, detail);
+    throw cloudErrorFor(status, payload);
   }
 
   private async load(batchId: string): Promise<BatchFile | null> {
@@ -291,7 +293,14 @@ export class Batches {
       id: str("id") ?? "", status: str("status") ?? "",
       createdAt: str("created_at"), expiresAt: str("expires_at"), endedAt: str("ended_at"),
       resultsExpireAt: str("results_expire_at"),
-      counts: { ...((raw.counts as Record<string, number>) ?? {}) }, raw,
+      counts: { ...((raw.counts as Record<string, number>) ?? {}) },
+      documents: isInteger(raw.documents) ? raw.documents : null,
+      tokens: Object.fromEntries(Object.entries(
+        raw.tokens && typeof raw.tokens === "object" ? raw.tokens as Record<string, unknown> : {},
+      ).filter((e): e is [string, number] => isInteger(e[1]))),
+      creditsCharged: isInteger(raw.credits_charged) ? raw.credits_charged : null,
+      billingRate: typeof raw.billing_rate === "number" ? raw.billing_rate : null,
+      raw,
     };
   }
 
@@ -411,6 +420,22 @@ export class Batches {
       await this.save(state);
     }
     return batch;
+  }
+
+  /**
+   * This account's batches, newest first (1-100, the gateway's bound). The
+   * gateway's view only: `pending()` lists the ones with a local file here.
+   */
+  async list(limit = 20): Promise<Batch[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new RangeError("limit must be between 1 and 100");
+    }
+    const resp = await this.request("GET", `/v1/batches?limit=${limit}`);
+    const payload = await this.json(resp);
+    if (resp.status !== 200) this.raiseFor(resp.status, payload);
+    const raw = Array.isArray(payload.batches) ? payload.batches : [];
+    return raw.filter((b): b is Record<string, unknown> => !!b && typeof b === "object" && !Array.isArray(b))
+      .map(b => Batches.batch(b));
   }
 
   /** Cancel queued documents; the local file stays pending until the finished
@@ -569,6 +594,9 @@ export class Batches {
         detectionMode: entry.detection_mode,
         tokens: {},
         exempted: [],
+        // A batch line carries the model and anything unplaced; it has no job
+        // id and no usage of its own (the batch carries those).
+        cloud: toCloudInfo({ model_version: result.model_version, unlocated: result.unlocated }),
       },
     };
   }

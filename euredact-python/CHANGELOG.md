@@ -15,16 +15,29 @@ narrative lives. Sections here use that vocabulary
 
 ### Added
 
-- **`RedactResult.usage` on cloud results**: what the request cost and why,
-  as the service reports it (euredact-inference#53): `tokens`, `billing_rate`,
-  `credits` (`round(tokens × billing_rate)`, the debit's formula) and
-  `factors`, each a `UsageFactor` with a `code`, a one-sentence `detail` and,
-  for `special_category_check`, the `types` that triggered it. A total and its
-  reasons, never a cost per step. `None` on a rules-only result and when the
-  service does not report it or reports it malformed; a cost report never
-  fails a redaction. `Usage` and `UsageFactor` are exported. The parsing rules
-  are shared with TypeScript through `conformance/cloud_usage.json`.
-  *(rules-engine#89)*
+- **Everything an API key can do, through the SDK.** *(rules-engine#89)*
+  - `RedactResult.cloud` (`CloudInfo`) on cloud results: the service's
+    `job_id`, `model_version`, `usage` and `unlocated` (what the model found
+    but could not place, so nothing was masked for it). `None` on rules-only
+    results. `usage` is what the request cost and why (euredact-inference#53):
+    `tokens`, `billing_rate`, `credits` and `factors` (`UsageFactor`), a total
+    and its reasons, never a cost per step. Batch documents carry
+    `model_version` and `unlocated`.
+  - `redact(..., mode="cloud", idempotency_key=...)` (and `aredact`): the
+    request's `Idempotency-Key`, so a caller retrying after its own timeout
+    gets the same job instead of a second, billed one.
+  - `euredact.cloud.Account`: `summary()`, `credits()`, `credit_history()`,
+    `usage()`, `usage_by_key()`, `keys()` and `revoke_key()`.
+  - `euredact.cloud.Jobs.retrieve(job_id)`: a past job's state and result.
+  - `Batches.list()`, and `Batch.documents`, `tokens`, `credits_charged` and
+    `billing_rate`.
+  - Errors `NotFoundError` (404), `ResultExpiredError` (410: the result is no
+    longer retained, rather than an empty-looking document) and
+    `RateLimitedError`.
+  - Every typed value keeps the service's JSON in `raw`. A field of the wrong
+    type reads as absent rather than failing the call; the parsing is shared
+    with TypeScript through `conformance/cloud_result.json` and
+    `conformance/cloud_usage.json`.
 - **Batches.** `euredact.cloud.Batches`
   creates, tracks and resolves cloud batches while keeping the structured PII
   local: `create()` masks each document here and uploads only the masked
@@ -73,6 +86,13 @@ narrative lives. Sections here use that vocabulary
 
 ### Changed
 
+- **A daily-quota `429` is no longer retried.** The gateway's quota answer
+  (JSON with `detail.used` and `detail.limit`) will not clear before the day
+  does, so retrying it only delayed `QuotaExceededError` through every
+  backoff; it now raises at once. The edge's rate-limit `429` (HTML from
+  nginx) is still retried with backoff, and when it persists raises
+  `RateLimitedError`, a subclass of `QuotaExceededError`, so existing
+  handlers keep working. *(rules-engine#89)*
 - **About a quarter faster on long documents.** The label lookup that ranks
   candidates ran up to 17 anchored regexes per candidate, and most candidates
   share their start with others (every country's pattern for the same digits)

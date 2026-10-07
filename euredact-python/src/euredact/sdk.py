@@ -517,6 +517,7 @@ class EuRedact:
         coref: bool = False,
         coref_model: str = "default",
         cache: bool = True,
+        idempotency_key: str | None = None,
     ) -> RedactResult:
         """Redact PII from text. Main entry point.
 
@@ -548,6 +549,11 @@ class EuRedact:
             allowlist: Values never to redact, matched whole and
                 case-insensitively against each detection. Merged with the
                 instance's allowlist.
+            idempotency_key: ``mode="cloud"`` only. Sent as the request's
+                ``Idempotency-Key``: the same key returns the same job instead
+                of running (and billing) the document again, which is what a
+                caller retrying after its own timeout needs. One is generated
+                per call when omitted.
         """
         # Step 0: argument and input-size guards. The country check runs here
         # as well as in the engine so that a bare string is rejected before any
@@ -567,7 +573,12 @@ class EuRedact:
                 context=context, chunk_offset=chunk_offset,
                 referential_integrity=referential_integrity, tokenize=tokenize,
                 allowed=allowed, domains=domains, coref=coref, cache=cache,
+                idempotency_key=idempotency_key,
             )
+        if idempotency_key is not None:
+            raise ValueError(
+                "idempotency_key applies to mode='cloud' only: a rules-only "
+                "redaction makes no request to deduplicate")
         if mode != "rules":
             raise ValueError(
                 f"unknown mode {mode!r}: expected 'rules' or 'cloud'")
@@ -709,6 +720,7 @@ class EuRedact:
         domains: dict[str, str],
         coref: bool,
         cache: bool,
+        idempotency_key: str | None = None,
     ) -> RedactResult:
         """Run the rules here, then send what they left to the cloud tier.
 
@@ -762,7 +774,8 @@ class EuRedact:
                 allowed={}, domains={}, detect_dates=True, cache=cache,
             )
             masked, labels = _mask_for_cloud(text, local.detections)
-            remote = client.redact(masked, country=countries[0].upper())
+            remote = client.redact(masked, country=countries[0].upper(),
+                                   idempotency_key=idempotency_key)
 
         # A new list throughout: `local` may be the cached rules result.
         detections = local.detections + _onto_original(
@@ -776,7 +789,7 @@ class EuRedact:
                 text, detections, self._label_for(False, token_mapper)),
             detections=detections,
             source="cloud",
-            usage=remote.usage,
+            cloud=remote.cloud,
             tokens=token_mapper.tokens if token_mapper is not None else {},
             exempted=exempted,
         )
@@ -798,6 +811,7 @@ class EuRedact:
         coref: bool = False,
         coref_model: str = "default",
         cache: bool = True,
+        idempotency_key: str | None = None,
     ) -> RedactResult:
         """Async version of redact().
 
@@ -823,6 +837,7 @@ class EuRedact:
                 coref=coref,
                 coref_model=coref_model,
                 cache=cache,
+                idempotency_key=idempotency_key,
             ),
         )
 

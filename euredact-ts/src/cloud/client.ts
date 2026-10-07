@@ -33,20 +33,26 @@ import {
 import {
   CloudError,
   NotConfiguredError,
+  NotFoundError,
   QuotaExceededError,
+  RateLimitedError,
+  ResultExpiredError,
   TooLargeError,
 } from "./errors.js";
 import {
   canonicalType,
   DetectionSource,
   EntityType,
+  type CloudInfo,
   type Detection,
   type RedactResult,
+  type Unlocated,
   type Usage,
   type UsageFactor,
 } from "../types.js";
 
-const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+/** @internal Shared with cloud/account.ts. */
+export const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
 const MAX_BACKOFF_MS = 30_000;
 
 /** One span as the service reports it. */
@@ -65,7 +71,7 @@ interface WireResult {
   status?: string;
   redacted_text?: string;
   entities?: WireSpan[];
-  unlocated?: Array<{ text: string; type: string }>;
+  unlocated?: unknown;
   model_version?: string | null;
   stats?: Record<string, unknown>;
   usage?: unknown;
@@ -83,7 +89,8 @@ export interface CloudRedactOptions {
   fetchImpl?: typeof fetch;
 }
 
-function requireFetch(supplied?: typeof fetch): typeof fetch {
+/** @internal */
+export function requireFetch(supplied?: typeof fetch): typeof fetch {
   const impl = supplied ?? (globalThis as { fetch?: typeof fetch }).fetch;
   if (typeof impl !== "function") {
     throw new NotConfiguredError(
@@ -94,11 +101,13 @@ function requireFetch(supplied?: typeof fetch): typeof fetch {
   return impl;
 }
 
-function sleep(ms: number): Promise<void> {
+/** @internal */
+export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function retryAfterMs(headers: Headers | undefined): number | null {
+/** @internal */
+export function retryAfterMs(headers: Headers | undefined): number | null {
   const raw = headers?.get("Retry-After");
   if (!raw) return null;
   const seconds = Number(raw);
@@ -110,12 +119,14 @@ function retryAfterMs(headers: Headers | undefined): number | null {
  * Full jitter. A synchronised retry storm from many clients is how a
  * recovering service is knocked back over.
  */
-function backoffMs(attempt: number, retryAfter: number | null): number {
+/** @internal */
+export function backoffMs(attempt: number, retryAfter: number | null): number {
   if (retryAfter !== null) return Math.min(retryAfter, MAX_BACKOFF_MS);
   return Math.min(MAX_BACKOFF_MS, Math.random() * 2 ** attempt * 1000);
 }
 
-function uuid(): string {
+/** @internal */
+export function uuid(): string {
   const c = (globalThis as { crypto?: Crypto }).crypto;
   if (c && typeof c.randomUUID === "function") return c.randomUUID();
   return `idem-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
@@ -156,7 +167,8 @@ export function codePointOffsets(text: string): (cp: number) => number {
   return cp => units[Math.min(cp, units.length - 1)];
 }
 
-function isInteger(value: unknown): value is number {
+/** @internal */
+export function isInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value);
 }
 
@@ -185,6 +197,63 @@ export function toUsage(raw: unknown): Usage | undefined {
   return { tokens: u.tokens, billingRate: u.billing_rate, credits: u.credits, factors };
 }
 
+function str(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+/**
+ * The service's account of a request beside its spans. Shared rules with the
+ * Python SDK (`conformance/cloud_result.json`): a field of the wrong type reads
+ * as absent, and an unlocated entry without string `text` is skipped.
+ * @internal
+ */
+export function toCloudInfo(payload: Record<string, unknown>): CloudInfo {
+  const unlocated: Unlocated[] = [];
+  for (const item of Array.isArray(payload.unlocated) ? payload.unlocated : []) {
+    if (item && typeof item === "object" && typeof (item as { text?: unknown }).text === "string") {
+      const t = (item as { type?: unknown }).type;
+      unlocated.push({
+        text: (item as { text: string }).text,
+        entityType: toEntityType(typeof t === "string" ? t : "OTHER"),
+      });
+    }
+  }
+  const usage = toUsage(payload.usage);
+  return {
+    jobId: str(payload.job_id),
+    modelVersion: str(payload.model_version),
+    ...(usage ? { usage } : {}),
+    unlocated,
+  };
+}
+
+/**
+ * A 429 from the gateway's daily quota rather than the edge's rate limit: the
+ * gateway answers in JSON with `detail.used` and `detail.limit`; nginx in HTML.
+ * @internal
+ */
+export function isQuota(payload: Record<string, unknown>): boolean {
+  const detail = payload.detail;
+  return !!detail && typeof detail === "object" && "limit" in detail && "used" in detail;
+}
+
+/** The error for a non-success answer. @internal Shared with batches and account. */
+export function cloudErrorFor(status: number, payload: Record<string, unknown>): CloudError {
+  const message = typeof payload.error === "string" ? payload.error : `HTTP ${status}`;
+  const detail = (payload.detail && typeof payload.detail === "object"
+    ? payload.detail : {}) as Record<string, unknown>;
+  if (status === 401) return new CloudError(`authentication failed: ${message}`, status);
+  if (status === 404) return new NotFoundError(message, status, detail);
+  if (status === 410) return new ResultExpiredError(message, status, detail);
+  if (status === 413) return new TooLargeError(message, status, detail);
+  if (status === 429) {
+    return isQuota(payload)
+      ? new QuotaExceededError(message, status, detail)
+      : new RateLimitedError("rate limited by the service (HTTP 429); try again shortly", status, detail);
+  }
+  return new CloudError(message, status, detail);
+}
+
 /** @internal Shared with cloud/batches.ts. */
 export function toResult(payload: WireResult, text: string): RedactResult {
   const offset = codePointOffsets(text);
@@ -198,7 +267,6 @@ export function toResult(payload: WireResult, text: string): RedactResult {
     confidence: span.confidence ?? "high",
   }));
   detections.sort((a, b) => a.start - b.start || b.end - a.end);
-  const usage = toUsage(payload.usage);
   return {
     redactedText: payload.redacted_text ?? text,
     detections,
@@ -209,7 +277,7 @@ export function toResult(payload: WireResult, text: string): RedactResult {
     detectionMode: "declared",
     tokens: {},
     exempted: [],
-    ...(usage ? { usage } : {}),
+    cloud: toCloudInfo(payload as Record<string, unknown>),
   };
 }
 
@@ -236,12 +304,7 @@ export class CloudClient {
   }
 
   private raiseFor(status: number, payload: WireResult): never {
-    const message = payload.error ?? `HTTP ${status}`;
-    const detail = payload.detail ?? {};
-    if (status === 401) throw new CloudError(`authentication failed: ${message}`, status);
-    if (status === 413) throw new TooLargeError(message, status, detail);
-    if (status === 429) throw new QuotaExceededError(message, status, detail);
-    throw new CloudError(message, status, detail);
+    throw cloudErrorFor(status, payload as Record<string, unknown>);
   }
 
   async redact(text: string, options: CloudRedactOptions): Promise<RedactResult> {
@@ -284,7 +347,8 @@ export class CloudClient {
           return toResult(await this.poll(doFetch, location, key), text);
         }
         if (response.status === 200) return toResult(payload, text);
-        if (!RETRY_STATUS.has(response.status) || attempt >= this.config.maxRetries) {
+        if (!RETRY_STATUS.has(response.status) || attempt >= this.config.maxRetries
+            || (response.status === 429 && isQuota(payload as Record<string, unknown>))) {
           this.raiseFor(response.status, payload);
         }
       }
@@ -344,7 +408,8 @@ export class CloudClient {
   }
 }
 
-async function readJson(response: Response): Promise<WireResult> {
+/** @internal */
+export async function readJson(response: Response): Promise<WireResult> {
   try {
     const data = await response.json();
     return data && typeof data === "object" ? (data as WireResult) : {};

@@ -27,6 +27,7 @@ from euredact.cloud.batches import (  # noqa: E402
     FileBatchStore,
 )
 from euredact.cloud.config import CloudConfig  # noqa: E402
+from euredact.types import EntityType  # noqa: E402
 
 IBAN = "BE68 5390 0754 7034"
 TEXT = f"Beste, gelieve {IBAN} te crediteren voor Jan Peeters. Groeten."
@@ -404,3 +405,22 @@ def test_nothing_is_masked_before_a_late_document_is_refused(gateway, tmp_path):
     with pytest.raises(BatchError, match="document 51: custom_id must be"):
         b.create(docs)
     assert CountingEngine.calls == 0 and gateway.raw_bodies == []
+
+
+def test_a_document_carries_the_model_and_what_it_could_not_place(batches, gateway, monkeypatch):
+    """A batch line has no job id or usage of its own, but it does say which
+    model answered and what could not be placed (rules-engine#89)."""
+    plain = FakeGateway._succeeded
+
+    def with_cloud_fields(masked: str) -> dict:
+        return {**plain(masked), "model_version": "euredact-9b@2026-08-31",
+                "unlocated": [{"text": "Dr. Peeters", "type": "PERSON_NAME"}]}
+
+    monkeypatch.setattr(FakeGateway, "_succeeded", staticmethod(with_cloud_fields))
+    batch = batches.create(_docs())
+    gateway.status = "ended"
+    cloud = batches.results(batch.id).documents["doc-0"].result.cloud
+    assert cloud.model_version == "euredact-9b@2026-08-31"
+    assert [(u.text, u.entity_type) for u in cloud.unlocated] == [
+        ("Dr. Peeters", EntityType.PERSON_NAME)]
+    assert cloud.job_id is None and cloud.usage is None

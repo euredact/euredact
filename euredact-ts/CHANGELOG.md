@@ -15,16 +15,29 @@ narrative lives. Sections here use that vocabulary
 
 ### Added
 
-- **`RedactResult.usage` on cloud results**: what the request cost and why,
-  as the service reports it (euredact-inference#53): `tokens`, `billingRate`,
-  `credits` (`round(tokens × billingRate)`, the debit's formula) and
-  `factors`, each with a `code`, a one-sentence `detail` and, for
-  `special_category_check`, the `types` that triggered it. A total and its
-  reasons, never a cost per step. Absent on a rules-only result and when the
-  service does not report it or reports it malformed; a cost report never
-  fails a redaction. The `Usage` and `UsageFactor` types are exported. The
-  parsing rules are shared with Python through `conformance/cloud_usage.json`.
-  *(rules-engine#89)*
+- **Everything an API key can do, through the SDK.** *(rules-engine#89)*
+  - `RedactResult.cloud` (`CloudInfo`) on cloud results: the service's
+    `jobId`, `modelVersion`, `usage` and `unlocated` (what the model found but
+    could not place, so nothing was masked for it). Absent on rules-only
+    results. `usage` is what the request cost and why (euredact-inference#53):
+    `tokens`, `billingRate`, `credits` and `factors`, a total and its reasons,
+    never a cost per step. Batch documents carry `modelVersion` and
+    `unlocated`.
+  - `redactAsync(text, { mode: "cloud", idempotencyKey })`: the request's
+    `Idempotency-Key`, so a caller retrying after its own timeout gets the
+    same job instead of a second, billed one.
+  - `Account`: `summary()`, `credits()`, `creditHistory()`, `usage()`,
+    `usageByKey()`, `keys()` and `revokeKey()`.
+  - `Jobs.retrieve(jobId)`: a past job's state and result.
+  - `Batches.list()`, and `Batch.documents`, `tokens`, `creditsCharged` and
+    `billingRate`.
+  - Errors `NotFoundError` (404), `ResultExpiredError` (410: the result is no
+    longer retained, rather than an empty-looking document) and
+    `RateLimitedError`.
+  - Every typed value keeps the service's JSON in `raw`. A field of the wrong
+    type reads as absent rather than failing the call; the parsing is shared
+    with Python through `conformance/cloud_result.json` and
+    `conformance/cloud_usage.json`.
 - **Batches.** `Batches` creates, tracks and resolves cloud batches while
   keeping the structured PII local, as the Python SDK does: `create()` masks
   each document here and uploads only the masked text, writing a private local
@@ -71,6 +84,13 @@ narrative lives. Sections here use that vocabulary
 
 ### Changed
 
+- **A daily-quota `429` is no longer retried.** The gateway's quota answer
+  (JSON with `detail.used` and `detail.limit`) will not clear before the day
+  does, so retrying it only delayed `QuotaExceededError` through every
+  backoff; it now raises at once. The edge's rate-limit `429` (HTML from
+  nginx) is still retried with backoff, and when it persists raises
+  `RateLimitedError`, a subclass of `QuotaExceededError`, so existing
+  handlers keep working. *(rules-engine#89)*
 - **A label touching a value now rescues a failed checksum on a label-gated
   pattern too**, as it already did on the others. `Numer dowodu osobistego
   ABA912345` has a bad check digit and is still an identity card; before, a

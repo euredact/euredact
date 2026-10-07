@@ -643,30 +643,80 @@ either, no hosted model can help; run one yourself against
 `local.redacted_text`.
 
 
-### What a request cost
+### What the service said: `result.cloud`
 
-A cloud result carries `usage`: the total the request was charged and the
-reasons for it, as the service reported them. Never a cost per step.
+A cloud result carries `cloud`, what the service reported beside the spans;
+it is `None` on a rules-only result.
 
 ```python
-result = euredact.redact(text, countries=["BE"], mode="cloud")
-if result.usage:
-    print(result.usage.tokens, result.usage.billing_rate, result.usage.credits)
-    for factor in result.usage.factors:
+result = euredact.redact(text, countries=["BE"], mode="cloud",
+                         idempotency_key="invoice-2291-v1")
+result.cloud.job_id         # 'job-7f3a…': support, Jobs.retrieve, replays
+result.cloud.model_version  # the model that answered; None when only rules ran
+for item in result.cloud.unlocated:
+    print(item.entity_type, item.text)   # found, but not placed: nothing masked for it
+usage = result.cloud.usage
+if usage:
+    print(usage.tokens, usage.billing_rate, usage.credits)
+    for factor in usage.factors:
         print(factor.code, factor.types or "", factor.detail)
-# 3644 1.0 3644
-# document_length  The length of the text sent: every token of it is read by the model.
-# instructions  A fixed set of instructions accompanies every document the model reads.
-# special_category_check ('MEDICAL_CONDITION',) The document mentions special-category data ...
 ```
 
-`credits` is `round(tokens × billing_rate)`, the formula the service debits by.
-The factor codes are `rules_only`, `document_length`, `instructions`,
-`dense_document`, `special_category_check` (with the `types` that triggered
-it), `long_document` and `batch_rate`; a code added later on the service still
-arrives, as its string. `usage` is `None` on a rules-only result, and on a cloud
-result from a service that does not report it or reported it malformed: a cost
-report never fails a redaction. Batch results do not carry it yet.
+- **`idempotency_key`** is sent as the request's `Idempotency-Key`: the same
+  key returns the same job instead of running and billing the document again.
+  One is generated per call when omitted. It applies to `mode="cloud"` only.
+- **`usage`** is the total the request was charged and the reasons for it,
+  never a cost per step. `credits` is `round(tokens × billing_rate)`, the
+  formula the service debits by. The factor codes are `rules_only`,
+  `document_length`, `instructions`, `dense_document`,
+  `special_category_check` (with the `types` that triggered it),
+  `long_document` and `batch_rate`; a code added later still arrives, as its
+  string. `None` when the service does not report it or reported it
+  malformed: a cost report never fails a redaction.
+- **`unlocated`** lists what the model found but could not match to a
+  position in the text it was sent. Nothing was masked for these.
+- **Batch documents** carry `model_version` and `unlocated`; no `job_id` or
+  `usage`, which belong to the batch (`Batch.tokens`, `Batch.credits_charged`,
+  `Batch.billing_rate`).
+
+### Account, past jobs and the batch list
+
+Everything an API key may do on the service is reachable from the SDK. What
+needs a signed-in person (logging in, minting keys, settings, members, terms)
+is not, because a key cannot do it.
+
+```python
+from euredact.cloud import Account, Batches, Jobs
+
+with Account() as account:
+    summary = account.summary()          # plan, retention, quota used
+    print(summary.quota_remaining, summary.retention_mode)
+    account.credits()                    # balance, granted, spent
+    account.credit_history(limit=50)     # newest first
+    account.usage(days=30)               # per day
+    account.usage_by_key(days=30)        # per key
+    for key in account.keys():
+        print(key.id, key.name, key.active)
+    account.revoke_key(7)                # e.g. a key that leaked
+
+with Jobs() as jobs:
+    job = jobs.retrieve("job-7f3a…")     # status, and result once it has one
+
+with Batches() as batches:
+    for batch in batches.list(limit=20):
+        print(batch.id, batch.status, batch.credits_charged)
+```
+
+- **Typed values:** each has a `raw` field with the service's JSON, so a field
+  the SDK does not know yet is still reachable.
+- **A retrieved job's result** is over the text the service received. Under
+  `mode="cloud"` that is the locally masked text, not your original.
+- **Errors:** an expired result raises `ResultExpiredError` (410) rather than
+  reading as an empty document. An unknown job or key, or another account's,
+  raises `NotFoundError`.
+- **Revoking:** `revoke_key` is sent once and never retried. Revoking the
+  key the client itself uses works, and is reported by `self_revoked`.
+- **Retries:** reads are retried like `redact`.
 
 ### `euredact.configure()`
 
@@ -688,13 +738,16 @@ euredact.configure(
 | `base_url` | `https://api.euredact.dev` | `EUREDACT_BASE_URL` | Service endpoint. Must be `https://`; plain `http://` is refused except to `localhost`, `127.0.0.1` or `::1`, so the key and the text never travel unencrypted. |
 | `timeout_s` | `30.0` | — | Per-request timeout. |
 | `poll_timeout_s` | `300.0` | — | Ceiling for polling a document that outlives the synchronous window. |
-| `max_retries` | `3` | — | Retries for `429` and `5xx`. Each carries an `Idempotency-Key`, so a retry after a timeout cannot bill twice, and `Retry-After` is obeyed. |
+| `max_retries` | `3` | — | Retries for `5xx`, timeouts and the edge's rate-limit `429`. Each carries an `Idempotency-Key`, so a retry after a timeout cannot bill twice, and `Retry-After` is obeyed. A `429` for the daily quota is not retried: it raises `QuotaExceededError` at once. |
 | `headers` | `None` | — | Extra headers sent with every request. |
 
 `configure()` reads the two environment variables itself, so it must still be
 called — but with no arguments if the environment is set. Errors are
-`NotConfiguredError`, `QuotaExceededError`, `TooLargeError` (413, the service
-refuses oversized input rather than chunking it) and `CloudError`.
+`NotConfiguredError`; `QuotaExceededError` (429, the daily quota) and its
+subclass `RateLimitedError` (429 from the rate limit, after retries);
+`TooLargeError` (413, the service refuses oversized input rather than chunking
+it); `NotFoundError` (404); `ResultExpiredError` (410); and `CloudError` for
+the rest, with `status` and `detail`.
 
 Options the service cannot honour raise rather than being ignored: multiple
 `countries`, `country_hint`, `context`/`chunk_offset`, `referential_integrity`

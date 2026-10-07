@@ -33,10 +33,12 @@ from typing import Any
 
 from euredact.cloud.config import CloudConfig, get_config
 from euredact.types import (
+    CloudInfo,
     Detection,
     DetectionSource,
     EntityType,
     RedactResult,
+    Unlocated,
     Usage,
     UsageFactor,
 )
@@ -72,7 +74,36 @@ class NotConfiguredError(CloudError):
 
 
 class QuotaExceededError(CloudError):
-    """429 after retries were exhausted."""
+    """429: the account's daily document quota is used up.
+
+    Raised at once, not after retries: the gateway's quota answer (JSON with
+    ``detail.used`` and ``detail.limit``) will not change before the day does,
+    and retrying it only delayed the error through every backoff
+    (rules-engine#89). ``detail`` carries ``used`` and ``limit``.
+    """
+
+
+class RateLimitedError(QuotaExceededError):
+    """429 from the edge's rate limit, still there after every retry.
+
+    Unlike the quota, this one clears within seconds, so it is retried with
+    backoff first. A subclass of :class:`QuotaExceededError`, which is what
+    every 429 raised before the two were told apart.
+    """
+
+
+class NotFoundError(CloudError):
+    """404: no such job, batch or key -- or one belonging to another account,
+    which the service deliberately does not distinguish."""
+
+
+class ResultExpiredError(CloudError):
+    """410: the job succeeded, but its result is no longer retained.
+
+    Retention made visible: the payload was swept by the account's retention
+    period, or discarded on delivery under no-retention. An empty result here
+    would read like a document with no personal data in it.
+    """
 
 
 class TooLargeError(CloudError):
@@ -178,6 +209,43 @@ def _usage(raw: object) -> Usage | None:
                  factors=tuple(factors))
 
 
+def _string(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _cloud_info(payload: dict) -> CloudInfo:
+    """The service's account of a request beside its spans.
+
+    Shared rules with the TypeScript SDK (``conformance/cloud_result.json``): a
+    field of the wrong type is read as absent, and an unlocated entry without
+    string ``text`` is skipped -- what the service says about a request never
+    fails the request.
+    """
+    unlocated = []
+    raw = payload.get("unlocated")
+    for item in raw if isinstance(raw, list) else []:
+        if isinstance(item, dict) and isinstance(item.get("text"), str):
+            unlocated.append(Unlocated(
+                text=item["text"],
+                entity_type=_entity_type(item.get("type") if isinstance(
+                    item.get("type"), str) else "OTHER"),
+            ))
+    return CloudInfo(
+        job_id=_string(payload.get("job_id")),
+        model_version=_string(payload.get("model_version")),
+        usage=_usage(payload.get("usage")),
+        unlocated=tuple(unlocated),
+    )
+
+
+def _is_quota(payload: dict) -> bool:
+    """A 429 from the gateway's daily quota, as opposed to the edge's rate
+    limit: the gateway answers in JSON with ``detail.used`` and
+    ``detail.limit``; nginx answers in HTML."""
+    detail = payload.get("detail")
+    return isinstance(detail, dict) and "limit" in detail and "used" in detail
+
+
 def _to_result(payload: dict, *, text: str) -> RedactResult:
     """Translate the wire response into the library's own types."""
     detections: list[Detection] = []
@@ -198,7 +266,7 @@ def _to_result(payload: dict, *, text: str) -> RedactResult:
         redacted_text=payload.get("redacted_text", text),
         detections=detections,
         source="cloud",
-        usage=_usage(payload.get("usage")),
+        cloud=_cloud_info(payload),
     )
 
 
@@ -228,10 +296,18 @@ class _BaseClient:
         detail = payload.get("detail") or {}
         if status == 401:
             raise CloudError(f"authentication failed: {error}", status=status)
+        if status == 404:
+            raise NotFoundError(error, status=status, detail=detail)
+        if status == 410:
+            raise ResultExpiredError(error, status=status, detail=detail)
         if status == 413:
             raise TooLargeError(error, status=status, detail=detail)
         if status == 429:
-            raise QuotaExceededError(error, status=status, detail=detail)
+            if _is_quota(payload):
+                raise QuotaExceededError(error, status=status, detail=detail)
+            raise RateLimitedError(
+                "rate limited by the service (HTTP 429); try again shortly",
+                status=status, detail=detail)
         raise CloudError(error, status=status, detail=detail)
 
 
@@ -296,7 +372,8 @@ class CloudClient(_BaseClient):
                     return {"_accepted": True, "location": location}
                 if status == 200:
                     return data
-                if status not in _RETRY_STATUS or not attempt.should_retry(status):
+                if (status not in _RETRY_STATUS or not attempt.should_retry(status)
+                        or (status == 429 and _is_quota(data))):
                     self._raise_for(status, data)
 
             attempt.attempt += 1
@@ -386,7 +463,8 @@ class AsyncCloudClient(_BaseClient):
                 if status == 200:
                     payload = data
                     break
-                if status not in _RETRY_STATUS or not attempt.should_retry(status):
+                if (status not in _RETRY_STATUS or not attempt.should_retry(status)
+                        or (status == 429 and _is_quota(data))):
                     self._raise_for(status, data)
 
             attempt.attempt += 1
