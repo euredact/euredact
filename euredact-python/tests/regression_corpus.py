@@ -1,6 +1,6 @@
 """Regression records for the corpus: the layouts the generated corpus lacked.
 
-Every fix in rules-engine#82, #90, #91, #93 and #94 left the 152,300-document
+Every fix in rules-engine#82, #90, #91, #93 and #94 (and later #100-#103) left the 152,300-document
 corpus exactly as it was, before and after. Not because the fixes did nothing --
 the pipeline documents gained 1,800 masked values from them -- but because the
 corpus contained none of the layouts involved: no AVS number with a bad check
@@ -247,6 +247,52 @@ def _references(rng):
     return text, [pii(e, "EMAIL", "NL")], [r1, r2]
 
 
+def _date(rng: random.Random, years: tuple[int, int]) -> str:
+    return (f"{rng.randrange(1, 29):02d}.{rng.randrange(1, 13):02d}."
+            f"{rng.randrange(*years)}")
+
+
+def _event_date(lead: str):
+    """A decision or proceeding date is not personal data (rules-engine#100)."""
+    def build(rng):
+        d, e = _date(rng, (2020, 2027)), email(rng)
+        text = f"{lead.format(d=d)} Kontakt: {e}"
+        return text, [pii(e, "EMAIL", "PL")], [d]
+    return build
+
+
+def _call_up_and_birth(rng):
+    """'DOB' inside 'dobrowolnej' made a call-up date a date of birth (#100)."""
+    born, called = _date(rng, (1960, 2005)), _date(rng, (2020, 2027))
+    text = (f"Data urodzenia: {born}\n"
+            f"Data powołania do dobrowolnej zasadniczej służby wojskowej: {called}")
+    return text, [pii(born, "DOB", "PL")], [called]
+
+
+def _timestamp(rng):
+    """A date-time stamp is not a phone number (rules-engine#101)."""
+    stamp = f"{_date(rng, (2024, 2027))} {rng.randrange(0, 24):02d}:{rng.randrange(0, 60):02d}"
+    e = email(rng)
+    return f"Data eksportu: {stamp}\nOperator: {e}", [pii(e, "EMAIL", "PL")], [stamp]
+
+
+def _booklet(label: str):
+    """A military booklet number is one INTERNAL_ID, series included (#102)."""
+    def build(rng):
+        series = "".join(rng.choice("ABCDEFGHJKLMNPRSTUWZ") for _ in range(3))
+        v = f"{series} {_digits(rng, 7)}"
+        return f"{label}{v}.", [pii(v, "INTERNAL_ID", "PL")], []
+    return build
+
+
+def _residence(label: str):
+    """A visa sticker or residence card is a RESIDENCE_PERMIT (#103)."""
+    def build(rng):
+        v = "".join(rng.choice("ABCDEFGHJKLMNPRSTUWZ") for _ in range(2)) + _digits(rng, 7)
+        return f"{label}{v}.", [pii(v, "RESIDENCE_PERMIT", "PL")], []
+    return build
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -281,6 +327,19 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#94: personal grouping", _nip("NIP: ", personal=True)),
     ("rules-engine#94: personal grouping, in prose", _nip("numer NIP podatnika ", personal=True)),
     ("rules-engine#94: company grouping", _nip("NIP: ", personal=False)),
+    # #100: event dates after "z dnia" / "dnia" / "w dniu", and a call-up date.
+    ("rules-engine#100: z dnia", _event_date("Orzeczenie nr WKL/P/2026/2214 z dnia {d}.")),
+    ("rules-engine#100: dnia", _event_date("Postępowanie umorzone dnia {d}.")),
+    ("rules-engine#100: w dniu", _event_date("Spotkanie odbyło się w dniu {d} w Warszawie.")),
+    ("rules-engine#100: call-up date beside a birth date", _call_up_and_birth),
+    # #101: a timestamp stays unmasked.
+    ("rules-engine#101: timestamp", _timestamp),
+    # #102: the military booklet.
+    ("rules-engine#102: booklet, nominative", _booklet("książeczka wojskowa nr ")),
+    ("rules-engine#102: booklet, genitive", _booklet("Seria i nr książeczki wojskowej: ")),
+    # #103: residence card and visa sticker.
+    ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
+    ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),
 ]
 
 
