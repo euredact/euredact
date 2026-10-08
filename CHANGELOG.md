@@ -30,7 +30,7 @@ which both test suites run.
 ### Added
 
 - Both SDKs cover everything an API key can do: cloud results carry `cloud` (job id, model version, `usage` with its reasons, and what the model could not place); an idempotency key on the top-level cloud call; `Account` (summary, credits, credit history, usage, usage by key, keys, revoke a key), `Jobs.retrieve`, `Batches.list` and the batch cost fields; `NotFoundError`, `ResultExpiredError` and `RateLimitedError`. *(rules-engine#89)*
-- Regression records for the corpus (`euredact-python/tests/regression_corpus.py`, `make regression-corpus`): 168 records over the layouts of #82, #90, #91, #93 and #94, which the generated corpus did not contain, with values that must stay unmasked beside those that must be masked. `make check` runs them as a gate; written into `EUREDACT_CORPUS` they reach `sweep`, `parity` and `eval`. *(rules-engine#82, #90, #91, #93, #94)*
+- Regression records for the corpus (`euredact-python/tests/regression_corpus.py`, `make regression-corpus`): 222 records over the layouts of #82, #90, #91, #93, #94 and #100-#103, which the generated corpus did not contain, with values that must stay unmasked beside those that must be masked. `make check` runs them as a gate; written into `EUREDACT_CORPUS` they reach `sweep`, `parity` and `eval`. *(rules-engine#82, #90, #91, #93, #94)*
 - Batches for the cloud tier: `create()` masks locally and uploads only masked text, keeping originals in a private local batch file; `results()` maps the answers back from it after a hash check, once, then wipes the originals. Both SDKs share the file format. `custom_id`s are checked against the gateway's character rule before any document is masked. *(rules-engine#84, #88)*
 - About 10,400 BIC6 prefixes for the 31 supported countries from the GLEIF BIC-to-LEI mapping (developed by SWIFT, redistributable under the BIC/LEI Mapping Table License Agreement; notice in `NOTICE`), with `scripts/refresh_bic_registry.py` to regenerate them. *(rules-engine#57)*
 
@@ -46,6 +46,10 @@ which both test suites run.
 
 ### Fixed
 
+- Polish event dates after "z dnia", "dnia" or "w dniu" were masked as `NATIONAL_ID` (the Spanish `DNI` label matched "dnia"), and a call-up date as `DOB` ("DOB" matched inside "dobrowolnej"); neither is masked now, and real birth dates still are. *(rules-engine#100)*
+- A date-time stamp was cut and masked as `PHONE` (`07.10.2026 08:42` → `[PHONE]:42`); it is left alone. *(rules-engine#101)*
+- A Polish military booklet number (`MON 0451287`) had its digits masked as `PHONE` and its series left readable; it is one `INTERNAL_ID` behind its label. *(rules-engine#102)*
+- A Polish visa sticker or residence card number (`naklejka wizowa nr PL0458821`, `karta pobytu CUKR nr RS1871139`) was not masked; it is `RESIDENCE_PERMIT`. *(rules-engine#103)*
 - A Polish domestic account number (NRB, the IBAN without `PL`) was not detected, and an 8-digit fragment of it was masked as `PHONE`; it is now `BANK_ACCOUNT`, spaced or compact, validated by the IBAN check digits. *(rules-engine#93)*
 - A Polish NIP in the grouping used for natural persons (`XXX-XX-XX-XXX`) was not detected; it is now `TAX_ID`, like the company grouping. *(rules-engine#94)*
 - A Swiss AVS/AHV number with a bad check digit was left in the clear even behind its own label (`Numéro AVS`, `AHV-Nr.`, `n° AVS`); the label, or `AVS`/`AHV` nearby for the dotted form, now masks it as `NATIONAL_ID`. *(rules-engine#82)*

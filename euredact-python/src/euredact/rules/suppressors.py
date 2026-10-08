@@ -977,11 +977,24 @@ def suppress_phone_service_number(text: str, match: RawMatch) -> bool:
     return bool(_SERVICE_NUMBER.match(match.text))
 
 
+#: A date and the hour of a time: "07.10.2026 08" out of "07.10.2026 08:42".
+#: The French national phone pattern takes exactly that, grouping
+#: 07.10.20|26 08 as five pairs, and cut the stamp to "[PHONE]:42"
+#: (rules-engine#101). Only when the minutes follow, so the stamp is certain.
+_DATE_THEN_HOUR = re.compile(r"^\d{2}([-/.])\d{2}\1\d{4}\s+\d{1,2}$")
+_MINUTES_AFTER = re.compile(r"^:\d{2}(?!\d)")
+
+
 def suppress_phone_date_overlap(text: str, match: RawMatch) -> bool:
-    """Suppress phone detections that are actually dates (DD-MM-YYYY)."""
+    """Suppress phone detections that are actually dates (DD-MM-YYYY), or a
+    date and an hour cut out of a timestamp."""
     if match.pattern_def.entity_type != EntityType.PHONE:
         return False
-    return bool(_DATE_PATTERN_FULL.match(match.text.strip()))
+    candidate = match.text.strip()
+    if _DATE_PATTERN_FULL.match(candidate):
+        return True
+    return bool(_DATE_THEN_HOUR.match(candidate)
+                and _MINUTES_AFTER.match(text[match.end:match.end + 3]))
 
 
 #: Characters that join a token to more of an identifier: "FR-S2-2026",
@@ -1564,6 +1577,30 @@ _DATE_LABEL_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
 _ANY_DATE = re.compile(r"\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}")
 
 
+def _keyword_at(haystack: str, keyword: str, *, last: bool) -> int:
+    """Where *keyword* (lower-cased already in *haystack*) occurs, or -1.
+
+    An all-capitals keyword is an abbreviation and counts only as a word of its
+    own: "DOB" is a label, the "dob" in Polish "dobrowolnej" is not, and it typed
+    a call-up date as a date of birth (rules-engine#100). A plural "s" may
+    follow ("DOBs e.g. 04/09/1978, ..."). Every other keyword
+    still matches inside a longer word, which the inflected forms need
+    ("urodzenia", "geborene").
+    """
+    kw = keyword.lower()
+    if not keyword.isupper():
+        return haystack.rfind(kw) if last else haystack.find(kw)
+    for m in (reversed(list(re.finditer(re.escape(kw), haystack))) if last
+              else re.finditer(re.escape(kw), haystack)):
+        before = haystack[m.start() - 1:m.start()]
+        after = haystack[m.end():m.end() + 2]
+        if after[:1] == "s":
+            after = after[1:]
+        if not (before.isalpha() or after[:1].isalpha()):
+            return m.start()
+    return -1
+
+
 def _labels_this_date(
     text: str, start: int, end: int, keywords: list[str], entity_type: object = None,
 ) -> bool:
@@ -1596,19 +1633,20 @@ def _labels_this_date(
         return True
     for keyword in keywords:
         kw = keyword.lower()
-        i = lower_before.rfind(kw)
+        i = _keyword_at(lower_before, keyword, last=True)
         if (i >= 0 and _nothing_but_a_list_between(lower_before[i + len(kw):])
                 and (i >= line_start or opens_line
                      or "?" in lower_before[i + len(kw):line_start])):
             return True
-        j = lower_after.find(kw)
+        j = _keyword_at(lower_after, keyword, last=False)
         if j >= 0:
             gap = lower_after[:j]
             if (not _ANY_DATE.search(gap) and not _SENTENCE_BREAK.search(gap)
                     and not _LEADS_TO_A_DATE.match(lower_after[j + len(kw):])):
                 return True
     header = _column_header(text, start)
-    return header is not None and any(kw.lower() in header for kw in keywords)
+    return header is not None and any(
+        _keyword_at(header, kw, last=False) >= 0 for kw in keywords)
 
 
 #: A label followed by a list of dates labels each of them: "DOBs e.g.

@@ -94,7 +94,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
 
   // National identity number.
   [EntityType.NATIONAL_ID,
-   /(?<![A-Za-z0-9_])(?:bsn|burgerservicenummer(?:\s*\(bsn\))?|personnummer|rijksregisternummer|nationaal\s*nummer|numéro\s*national|national\s*(?:id|number)|identiteitsnummer|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dni|rr|nn|nir|insz|niss|nis|matricule|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu|ahv(?:-?(?:nr|nummer))?|avs)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:bsn|burgerservicenummer(?:\s*\(bsn\))?|personnummer|rijksregisternummer|nationaal\s*nummer|numéro\s*national|national\s*(?:id|number)|identiteitsnummer|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dnie?(?![A-Za-z]|[^\x00-\x7F])|rr|nn|nir|insz|niss|nis|matricule|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu|ahv(?:-?(?:nr|nummer))?|avs)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Cyprus: "ID number" in both official languages, plus the Greek abbreviation
   // ΑΔΤ (Αστυνομική Ταυτότητα). Neither has a phone reading.
@@ -147,7 +147,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
   // under whichever ID, passport or phone pattern fitted it (rules-engine#53).
   // The tail admits the Belgian card category ("nr. B 565992336"), unmasked.
   [EntityType.RESIDENCE_PERMIT,
-   /(?<![A-Za-z0-9_])(?:aufenthalts(?:titel|erlaubnis|karte|gestattung)|niederlassungs(?:erlaubnis|bewilligung)|verblijfs(?:vergunning|kaart|document|titel)|titre\s*de\s*s[ée]jour|carte\s*de\s*s[ée]jour|permis\s*de\s*s[ée]jour|carte\s*de\s*r[ée]sident|residence\s*(?:permit|card|document)|biometric\s*residence\s*permit|permesso\s*di\s*soggiorno|carta\s*di\s*soggiorno|karta\s*pobytu|uppehållstillstånd|opholdstilladelse|oppholdstillatelse|oleskelulupa)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*(?:[A-Z]\s+)?$/i],
+   /(?<![A-Za-z0-9_])(?:aufenthalts(?:titel|erlaubnis|karte|gestattung)|niederlassungs(?:erlaubnis|bewilligung)|verblijfs(?:vergunning|kaart|document|titel)|titre\s*de\s*s[ée]jour|carte\s*de\s*s[ée]jour|permis\s*de\s*s[ée]jour|carte\s*de\s*r[ée]sident|residence\s*(?:permit|card|document)|biometric\s*residence\s*permit|permesso\s*di\s*soggiorno|carta\s*di\s*soggiorno|kart(?:a|y|ę|ą)\s*pobytu(?:\s*cukr)?|naklejk(?:a|i|ę|ą)\s*wizow(?:a|ej|ą)|uppehållstillstånd|opholdstilladelse|oppholdstillatelse|oleskelulupa)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*(?:[A-Z]\s+)?$/i],
   // Driving licence: Polish labels; the document number has the passport
   // shape, so without this cue it lost the span to the passport rule (rules-engine#77).
   [EntityType.DRIVERS_LICENSE,

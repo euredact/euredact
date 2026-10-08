@@ -59,6 +59,17 @@ class PLConfig(CountryConfig):
             PatternDef(entity_type=EntityType.DRIVERS_LICENSE, pattern=r"\b[A-Z]{2}\s?\d{6,7}\b",
                        validator=None, description="Polish driving licence document number",
                        context_keywords=["prawo jazdy", "prawa jazdy", "prawem jazdy", "driving licence", "driving license"], requires_context=True),
+            # Military booklet (książeczka wojskowa): a three-letter series and
+            # seven digits, one identifier. Without it the digits matched a
+            # phone and the series was left readable (rules-engine#102).
+            PatternDef(entity_type=EntityType.INTERNAL_ID, pattern=r"\b[A-Z]{3}\s?\d{7}\b",
+                       validator=None, description="Polish military booklet — series + 7 digits",
+                       context_keywords=["książeczka wojskowa", "książeczki wojskowej", "książeczkę wojskową", "książeczką wojskową", "książeczce wojskowej", "military booklet", "military record book"], requires_context=True),
+            # Residence card (karta pobytu) and national-visa sticker: two
+            # letters and seven digits, the passport shape (rules-engine#103).
+            PatternDef(entity_type=EntityType.RESIDENCE_PERMIT, pattern=r"\b[A-Z]{2}\s?\d{7}\b",
+                       validator=None, description="Polish residence card or visa sticker — 2 letters + 7 digits",
+                       context_keywords=["karta pobytu", "karty pobytu", "kartę pobytu", "kartą pobytu", "CUKR", "naklejka wizowa", "naklejki wizowej", "naklejkę wizową", "naklejką wizową", "residence card", "visa sticker"], requires_context=True),
             PatternDef(entity_type=EntityType.POSTAL_CODE, pattern=r"\b\d{2}-\d{3}\b",
                        validator=None, description="Polish postal code — XX-XXX",
                        context_keywords=["kod pocztowy", "adres", "ulica", "Postal:", "Address:"]),

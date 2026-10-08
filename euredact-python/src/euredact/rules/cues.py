@@ -154,7 +154,11 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         _B + r"(?:bsn|burgerservicenummer(?:\s*\(bsn\))?"
         r"|personnummer|rijksregisternummer|nationaal\s*nummer"
         r"|numéro\s*national|national\s*(?:id|number)|identiteitsnummer"
-        r"|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dni"
+        r"|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie"
+        # Spanish DNI, or DNIe, as a word of its own: with the run-on it read
+        # the Polish "dnia"/"dniu" ("on the day") as the label and typed every
+        # date after it a national ID (rules-engine#100).
+        r"|dnie?(?![A-Za-z]|[^\x00-\x7F])"
         r"|rr|nn|nir|insz|niss|nis|matricule"
         r"|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN"
         # Polish identity card, in the cases a document uses (rules-engine#75).
@@ -260,7 +264,10 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         r"|titre\s*de\s*s[ée]jour|carte\s*de\s*s[ée]jour|permis\s*de\s*s[ée]jour"
         r"|carte\s*de\s*r[ée]sident"
         r"|residence\s*(?:permit|card|document)|biometric\s*residence\s*permit"
-        r"|permesso\s*di\s*soggiorno|carta\s*di\s*soggiorno|karta\s*pobytu"
+        r"|permesso\s*di\s*soggiorno|carta\s*di\s*soggiorno"
+        # Polish: the residence card, also by its register's name (CUKR), and
+        # the national-visa sticker (rules-engine#103).
+        r"|kart(?:a|y|ę|ą)\s*pobytu(?:\s*cukr)?|naklejk(?:a|i|ę|ą)\s*wizow(?:a|ej|ą)"
         r"|uppehållstillstånd|opholdstilladelse|oppholdstillatelse|oleskelulupa)"
         + _SEP[:-1] + r"(?:[A-Z]\s+)?$", re.IGNORECASE)),
 

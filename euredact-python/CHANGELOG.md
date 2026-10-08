@@ -127,6 +127,25 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **Polish event dates were masked as `NATIONAL_ID`, and a call-up date as
+  `DOB`.** The Spanish `DNI` label, allowed to run on into a longer word,
+  matched the Polish "dnia"/"dniu" ("on the day") and rescued a failed dotted
+  BSN match on the date after it: `z dnia 12.08.2026` → `[NATIONAL_ID]`. It now
+  counts only as `DNI` or `DNIe`. Separately, birth-date keywords matched
+  inside any word, so "DOB" matched "**dob**rowolnej" and
+  `Data powołania do dobrowolnej … służby wojskowej: 03.03.2026` became a date
+  of birth; an all-capitals keyword now counts only as a word of its own (a
+  plural "DOBs" still does). *(rules-engine#100)*
+- **A date-time stamp was cut and masked as `PHONE`.** The French phone
+  pattern read `07.10.2026 08` as five pairs, leaving `[PHONE]:42`. A phone
+  candidate that is a full date and an hour, with the minutes after it, is
+  dropped. *(rules-engine#101)*
+- **A Polish military booklet number was half-masked as `PHONE`.** Behind
+  "książeczka wojskowa" (any case), the series and seven digits
+  (`MON 0451287`) are one `INTERNAL_ID`. *(rules-engine#102)*
+- **A Polish visa sticker or residence card number was not masked.** Behind
+  "naklejka wizowa" or "karta pobytu" (also "karta pobytu CUKR"), two letters
+  and seven digits are `RESIDENCE_PERMIT`. *(rules-engine#103)*
 - **A Polish domestic account number (NRB) was not detected.** The NRB is
   the PL IBAN without its country code, and the form Polish invoices and bank
   letters print; 0 of 160 generated NRBs were masked whole, and in the spaced

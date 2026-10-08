@@ -556,9 +556,17 @@ function suppressPhoneServiceNumber(_text: string, match: RawMatch): boolean {
   return SERVICE_NUMBER.test(match.text);
 }
 
-function suppressPhoneDateOverlap(_text: string, match: RawMatch): boolean {
+// A date and the hour of a time, "07.10.2026 08" out of "07.10.2026 08:42":
+// the French phone pattern took it as five pairs (rules-engine#101). Only when
+// the minutes follow, so the stamp is certain.
+const DATE_THEN_HOUR = /^\d{2}([-/.])\d{2}\1\d{4}\s+\d{1,2}$/;
+const MINUTES_AFTER = /^:\d{2}(?!\d)/;
+
+function suppressPhoneDateOverlap(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.PHONE) return false;
-  return DATE_PATTERN_FULL.test(match.text.trim());
+  const candidate = match.text.trim();
+  if (DATE_PATTERN_FULL.test(candidate)) return true;
+  return DATE_THEN_HOUR.test(candidate) && MINUTES_AFTER.test(text.slice(match.end, match.end + 3));
 }
 
 // Standards and classification prefixes that are plate-shaped once a letter and
@@ -1120,6 +1128,31 @@ function nothingButAListBetween(gap: string): boolean {
   return !ANY_DATE.test(rest) && LABEL_TAIL.test(rest);
 }
 
+/**
+ * Where `keyword` occurs in the lower-cased `haystack`, or -1. An all-capitals
+ * keyword is an abbreviation and counts only as a word of its own: "DOB" is a
+ * label, the "dob" in Polish "dobrowolnej" is not (rules-engine#100); a plural
+ * "s" may follow ("DOBs e.g. …"). Other
+ * keywords still match inside a longer word, which inflected forms need.
+ */
+function keywordAt(haystack: string, keyword: string, last: boolean): number {
+  const kw = keyword.toLowerCase();
+  if (keyword !== keyword.toUpperCase() || keyword === kw) {
+    return last ? haystack.lastIndexOf(kw) : haystack.indexOf(kw);
+  }
+  const isLetter = (c: string): boolean => c !== "" && c.toLowerCase() !== c.toUpperCase();
+  const hits: number[] = [];
+  for (let i = haystack.indexOf(kw); i !== -1; i = haystack.indexOf(kw, i + 1)) {
+    let next = i + kw.length;
+    if (haystack[next] === "s") next++;
+    if (!isLetter(haystack.slice(i - 1, i)) && !isLetter(haystack.slice(next, next + 1))) {
+      hits.push(i);
+    }
+  }
+  if (hits.length === 0) return -1;
+  return last ? hits[hits.length - 1] : hits[0];
+}
+
 function labelsThisDate(
   text: string, start: number, end: number, keywords: string[], entityType?: EntityType | string,
 ): boolean {
@@ -1134,11 +1167,11 @@ function labelsThisDate(
   if (entityType === EntityType.DOB && BIRTH_SIGN.test(lowerBefore)) return true;
   for (const keyword of keywords) {
     const kw = keyword.toLowerCase();
-    const i = lowerBefore.lastIndexOf(kw);
+    const i = keywordAt(lowerBefore, keyword, true);
     if (i >= 0 && nothingButAListBetween(lowerBefore.slice(i + kw.length))
         && (i >= lineStart || opensLine
             || lowerBefore.slice(i + kw.length, lineStart).includes("?"))) return true;
-    const j = lowerAfter.indexOf(kw);
+    const j = keywordAt(lowerAfter, keyword, false);
     if (j >= 0) {
       const gap = lowerAfter.slice(0, j);
       if (!ANY_DATE.test(gap) && !SENTENCE_BREAK.test(gap)
@@ -1146,7 +1179,7 @@ function labelsThisDate(
     }
   }
   const header = columnHeader(text, start);
-  return header !== null && keywords.some(kw => header.includes(kw.toLowerCase()));
+  return header !== null && keywords.some(kw => keywordAt(header, kw, false) >= 0);
 }
 
 /**

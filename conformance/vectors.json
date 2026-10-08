@@ -5828,6 +5828,187 @@
       }
     },
     {
+      "id": "pl-date-after-z-dnia-is-not-a-national-id",
+      "text": "orzeczenie nr WKL/P/2026/2214 z dnia 12.08.2026",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "DOB"
+      ],
+      "expectRedactedText": "orzeczenie nr WKL/P/2026/2214 z dnia 12.08.2026",
+      "notes": "rules-engine#100: the Spanish DNI cue's run-on read 'dnia' as its label and rescued a failed dotted-BSN match on the date."
+    },
+    {
+      "id": "pl-date-after-dnia-is-not-a-national-id",
+      "text": "Postępowanie umorzone dnia 18.09.2026.",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "DOB"
+      ]
+    },
+    {
+      "id": "pl-date-after-w-dniu-is-not-a-national-id",
+      "text": "Spotkanie odbyło się w dniu 18.09.2026 w Warszawie.",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID",
+        "DOB"
+      ]
+    },
+    {
+      "id": "es-dni-label-still-a-cue",
+      "text": "DNI: 12345678Z",
+      "countries": [
+        "ES"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "12345678Z"
+        ]
+      }
+    },
+    {
+      "id": "es-dnie-label-still-a-cue",
+      "text": "DNIe 12345678Z",
+      "countries": [
+        "ES"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "12345678Z"
+        ]
+      }
+    },
+    {
+      "id": "pl-call-up-date-is-not-a-dob",
+      "text": "Data powołania do dobrowolnej zasadniczej służby wojskowej: 03.03.2026",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "DOB",
+        "PHONE",
+        "NATIONAL_ID"
+      ],
+      "notes": "rules-engine#100: the keyword 'DOB' matched inside 'dobrowolnej'; an all-capitals keyword now counts only as a word of its own."
+    },
+    {
+      "id": "pl-birth-date-beside-a-call-up-date",
+      "text": "Data urodzenia: 16.10.1989. Data powołania do dobrowolnej zasadniczej służby wojskowej: 03.03.2026",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "16.10.1989"
+        ]
+      }
+    },
+    {
+      "id": "dob-abbreviation-still-a-label",
+      "text": "Patient DOB 16.10.1989",
+      "countries": null,
+      "mustDetect": {
+        "DOB": [
+          "16.10.1989"
+        ]
+      }
+    },
+    {
+      "id": "pl-timestamp-is-not-a-phone",
+      "text": "Data eksportu: 07.10.2026 08:42",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "expectRedactedText": "Data eksportu: 07.10.2026 08:42",
+      "notes": "rules-engine#101: the French phone pattern took '07.10.2026 08' as five pairs and left ':42'."
+    },
+    {
+      "id": "fr-dotted-phone-still-a-phone",
+      "text": "Tél. 07.10.20.26.08",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "07.10.20.26.08"
+        ]
+      }
+    },
+    {
+      "id": "pl-military-booklet-is-one-internal-id",
+      "text": "książeczka wojskowa nr MON 0451287",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "MON 0451287"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "expectRedactedText": "książeczka wojskowa nr [INTERNAL_ID]",
+      "notes": "rules-engine#102"
+    },
+    {
+      "id": "pl-military-booklet-genitive-label",
+      "text": "Seria i nr książeczki wojskowej: MON 0412883",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "MON 0412883"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "pl-visa-sticker-is-a-residence-permit",
+      "text": "wiza krajowa typu D, naklejka wizowa nr PL0458821",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "RESIDENCE_PERMIT": [
+          "PL0458821"
+        ]
+      },
+      "mustNotDetect": [
+        "PASSPORT"
+      ],
+      "notes": "rules-engine#103"
+    },
+    {
+      "id": "pl-karta-pobytu-cukr-is-a-residence-permit",
+      "text": "karta pobytu CUKR nr RS1871139",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "RESIDENCE_PERMIT": [
+          "RS1871139"
+        ]
+      },
+      "mustNotDetect": [
+        "PASSPORT"
+      ]
+    },
+    {
       "id": "bic-letters-only-word-beside-an-iban",
       "text": "IBAN NL91 ABNA 0417 1643 00 — BETALING via automatische incasso",
       "countries": [
