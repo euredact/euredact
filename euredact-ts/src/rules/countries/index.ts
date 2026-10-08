@@ -604,10 +604,12 @@ const PL: CountryConfig = {
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b00\d{8}\b`, null, "Polish KRS", ["KRS"], true),
     p(EntityType.DRIVERS_LICENSE, String.raw`\b\d{3,6}/\d{2}/\d{3,7}\b`, null, "Polish driving licence number — field 5", ["prawo jazdy", "prawa jazdy", "prawem jazdy", "driving licence", "driving license"], true),
     p(EntityType.DRIVERS_LICENSE, String.raw`\b[A-Z]{2}\s?\d{6,7}\b`, null, "Polish driving licence document number", ["prawo jazdy", "prawa jazdy", "prawem jazdy", "driving licence", "driving license"], true),
-    // Military booklet: series + 7 digits, one identifier (rules-engine#102).
-    p(EntityType.INTERNAL_ID, String.raw`\b[A-Z]{3}\s?\d{7}\b`, null, "Polish military booklet", ["książeczka wojskowa", "książeczki wojskowej", "książeczkę wojskową", "książeczką wojskową", "książeczce wojskowej", "military booklet", "military record book"], true),
+    // Military booklet: a 2- or 3-letter series + 7 digits, one identifier, also "seria MS nr 6620419" (rules-engine#102).
+    p(EntityType.INTERNAL_ID, String.raw`\b[A-Z]{2,3}(?:\s?|\s+nr\.?\s+)\d{7}\b`, null, "Polish military booklet", ["książeczka wojskowa", "książeczki wojskowej", "książeczkę wojskową", "książeczką wojskową", "książeczce wojskowej", "military booklet", "military record book"], true),
     // Residence card and national-visa sticker: 2 letters + 7 digits (rules-engine#103).
     p(EntityType.RESIDENCE_PERMIT, String.raw`\b[A-Z]{2}\s?\d{7}\b`, null, "Polish residence card or visa sticker", ["karta pobytu", "karty pobytu", "kartę pobytu", "kartą pobytu", "CUKR", "naklejka wizowa", "naklejki wizowej", "naklejkę wizową", "naklejką wizową", "residence card", "visa sticker"], true),
+    // Case reference (znak sprawy): prefix.class.number.year, one INTERNAL_ID (rules-engine#105).
+    p(EntityType.INTERNAL_ID, String.raw`\b[A-ZĄĆĘŁŃÓŚŹŻ]{2,}(?:-[A-Z0-9]{1,6})*(?:\.[A-Z0-9]{1,6})*\.\d{3,4}(?:\.\d{1,6})+\.(?:19|20)\d{2}\b`, null, "Polish case reference", ["znak sprawy", "znak pisma", "znak:", "sygnatura", "sygn.", "sprawa nr", "sprawy nr", "nr sprawy", "decyzj", "postanowieni", "pismo nr"], true),
     p(EntityType.POSTAL_CODE, String.raw`\b\d{2}-\d{3}\b`, null, "", ["kod pocztowy", "adres", "ulica", "Postal:", "Address:"]),
   ],
 };

@@ -1016,6 +1016,39 @@ def _joined_to_more(text: str, start: int, end: int) -> bool:
     )
 
 
+def suppress_mac_in_reference(text: str, match: RawMatch) -> bool:
+    """A dotted MAC shape glued to more of a reference is part of it.
+
+    "WSO-II.6151.4471.2025" is a Polish case reference; its last three groups
+    are also the Cisco dotted MAC shape, which masked them as MAC_ADDRESS and
+    left "WSO-II." readable (rules-engine#105). A real MAC stands on its own.
+    Dotted form only; all-digit groups stay a MAC ("0050.5687.1234" is VMware).
+    """
+    if match.pattern_def.entity_type != EntityType.MAC_ADDRESS or "." not in match.text:
+        return False
+    return _joined_to_more(text, match.start, match.end)
+
+
+def suppress_card_inside_digit_run(text: str, match: RawMatch) -> bool:
+    """A card number is never carved out of a longer run of digit groups.
+
+    Sixteen digits from the middle of a Polish account number passed Luhn and
+    were masked as CREDIT_CARD, leaving its outer groups readable:
+    "37 1020 [CREDIT_CARD] 4471" (rules-engine#106). A four-digit group joined
+    by the card's own separator on either side means the run is longer.
+    """
+    if match.pattern_def.entity_type != EntityType.CREDIT_CARD:
+        return False
+    sep = next((c for c in match.text if not c.isdigit()), "")
+    if not sep:
+        return False
+    before = text[max(0, match.start - 6):match.start]
+    after = text[match.end:match.end + 6]
+    s = re.escape(sep)
+    return bool(re.search(rf"(?<!\d)\d{{4}}{s}$", before)
+                or re.match(rf"{s}\d{{4}}(?!\d)", after))
+
+
 def suppress_plate_in_compound(text: str, match: RawMatch) -> bool:
     """Suppress license plates that are part of a hyphenated compound word,
     use a non-city code, or appear in semester/IP context."""
@@ -1761,6 +1794,8 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
         suppress_secret_over_structured, suppress_secret_not_a_secret,
     ],
     EntityType.CHAMBER_OF_COMMERCE: [suppress_reference],
+    EntityType.MAC_ADDRESS: [suppress_mac_in_reference],
+    EntityType.CREDIT_CARD: [suppress_card_inside_digit_run],
 }
 
 

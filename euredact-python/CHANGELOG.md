@@ -127,6 +127,24 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A Polish military booklet number with a two-letter series was split or
+  missed.** The pattern added for #102 took a three-letter series only; the
+  usual series has two letters. `EL 0473218` was `EL [PHONE]`, and
+  `EL0473218` or `seria MS nr 6620419` were not masked. Two or three letters,
+  with or without a space or "nr", are now one `INTERNAL_ID`. *(rules-engine#102)*
+- **A Polish case reference was masked as a MAC address.** The last three
+  groups of `WSO-II.6151.4471.2025` (znak sprawy) fit the dotted MAC shape,
+  so they were `[MAC_ADDRESS]` and `WSO-II.` stayed readable. Behind its label
+  ("znak sprawy", "decyzja", "sygnatura", …) the whole reference is one
+  `INTERNAL_ID`, and a dotted MAC glued to more of a reference by a connector
+  is no longer a MAC. Real dotted MACs, including all-digit ones, still are.
+  *(rules-engine#105)*
+- **A card number was carved out of a longer run of digit groups.** Sixteen
+  Luhn-valid digits inside a Polish account number that fails its own
+  checksum were masked as `CREDIT_CARD`, leaving the outer groups readable. A
+  card candidate with a four-digit group joined by its own separator on either
+  side is dropped. The account number itself stays unmasked when its check
+  digits fail, as for an IBAN (#93). *(rules-engine#106)*
 - **Polish event dates were masked as `NATIONAL_ID`, and a call-up date as
   `DOB`.** The Spanish `DNI` label, allowed to run on into a longer word,
   matched the Polish "dnia"/"dniu" ("on the day") and rescued a failed dotted

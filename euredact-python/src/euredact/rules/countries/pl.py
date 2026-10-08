@@ -59,10 +59,11 @@ class PLConfig(CountryConfig):
             PatternDef(entity_type=EntityType.DRIVERS_LICENSE, pattern=r"\b[A-Z]{2}\s?\d{6,7}\b",
                        validator=None, description="Polish driving licence document number",
                        context_keywords=["prawo jazdy", "prawa jazdy", "prawem jazdy", "driving licence", "driving license"], requires_context=True),
-            # Military booklet (książeczka wojskowa): a three-letter series and
-            # seven digits, one identifier. Without it the digits matched a
-            # phone and the series was left readable (rules-engine#102).
-            PatternDef(entity_type=EntityType.INTERNAL_ID, pattern=r"\b[A-Z]{3}\s?\d{7}\b",
+            # Military booklet (książeczka wojskowa): a two- or three-letter
+            # series and seven digits, one identifier, also written
+            # "seria MS nr 6620419". Without it the digits matched a phone and
+            # the series was left readable, or nothing matched (rules-engine#102).
+            PatternDef(entity_type=EntityType.INTERNAL_ID, pattern=r"\b[A-Z]{2,3}(?:\s?|\s+nr\.?\s+)\d{7}\b",
                        validator=None, description="Polish military booklet — series + 7 digits",
                        context_keywords=["książeczka wojskowa", "książeczki wojskowej", "książeczkę wojskową", "książeczką wojskową", "książeczce wojskowej", "military booklet", "military record book"], requires_context=True),
             # Residence card (karta pobytu) and national-visa sticker: two
@@ -70,6 +71,14 @@ class PLConfig(CountryConfig):
             PatternDef(entity_type=EntityType.RESIDENCE_PERMIT, pattern=r"\b[A-Z]{2}\s?\d{7}\b",
                        validator=None, description="Polish residence card or visa sticker — 2 letters + 7 digits",
                        context_keywords=["karta pobytu", "karty pobytu", "kartę pobytu", "kartą pobytu", "CUKR", "naklejka wizowa", "naklejki wizowej", "naklejkę wizową", "naklejką wizową", "residence card", "visa sticker"], requires_context=True),
+            # Administrative case reference (znak sprawy, JRWA): an office
+            # prefix, then dotted class, number and year -- "WSO-II.6151.4471.2025".
+            # Its digit tail was a dotted MAC, and the prefix stayed readable
+            # (rules-engine#105). The whole reference is INTERNAL_ID.
+            PatternDef(entity_type=EntityType.INTERNAL_ID,
+                       pattern=r"\b[A-ZĄĆĘŁŃÓŚŹŻ]{2,}(?:-[A-Z0-9]{1,6})*(?:\.[A-Z0-9]{1,6})*\.\d{3,4}(?:\.\d{1,6})+\.(?:19|20)\d{2}\b",
+                       validator=None, description="Polish case reference (znak sprawy) — prefix.class.number.year",
+                       context_keywords=["znak sprawy", "znak pisma", "znak:", "sygnatura", "sygn.", "sprawa nr", "sprawy nr", "nr sprawy", "decyzj", "postanowieni", "pismo nr"], requires_context=True),
             PatternDef(entity_type=EntityType.POSTAL_CODE, pattern=r"\b\d{2}-\d{3}\b",
                        validator=None, description="Polish postal code — XX-XXX",
                        context_keywords=["kod pocztowy", "adres", "ulica", "Postal:", "Address:"]),

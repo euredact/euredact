@@ -6009,6 +6009,162 @@
       ]
     },
     {
+      "id": "pl-military-booklet-two-letter-series",
+      "text": "książeczka wojskowa nr EL 0473218, zam. ul. Polna 3",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "EL 0473218"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "expectRedactedText": "książeczka wojskowa nr [INTERNAL_ID], zam. ul. Polna 3",
+      "notes": "rules-engine#102 reopened: the usual series is two letters."
+    },
+    {
+      "id": "pl-military-booklet-unspaced",
+      "text": "książeczka wojskowa nr EL0473218",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "EL0473218"
+        ]
+      }
+    },
+    {
+      "id": "pl-military-booklet-seria-nr",
+      "text": "książeczka wojskowa seria MS nr 6620419",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "MS nr 6620419"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "pl-case-reference-is-one-internal-id",
+      "text": "Znak sprawy: WSO-II.6151.4471.2025",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "WSO-II.6151.4471.2025"
+        ]
+      },
+      "mustNotDetect": [
+        "MAC_ADDRESS"
+      ],
+      "expectRedactedText": "Znak sprawy: [INTERNAL_ID]",
+      "notes": "rules-engine#105"
+    },
+    {
+      "id": "pl-case-reference-after-decyzja",
+      "text": "decyzją nr WSO-II.6151.4471.2025, ważne do 13.10.2028",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "WSO-II.6151.4471.2025"
+        ]
+      },
+      "mustNotDetect": [
+        "MAC_ADDRESS"
+      ]
+    },
+    {
+      "id": "pl-case-reference-single-prefix",
+      "text": "Znak sprawy: MOPS.8231.1874.2026",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "MOPS.8231.1874.2026"
+        ]
+      },
+      "mustNotDetect": [
+        "MAC_ADDRESS"
+      ]
+    },
+    {
+      "id": "mac-dotted-hex-still-a-mac",
+      "text": "Router MAC 3c52.82a1.7f0d",
+      "countries": null,
+      "mustDetect": {
+        "MAC_ADDRESS": [
+          "3c52.82a1.7f0d"
+        ]
+      }
+    },
+    {
+      "id": "mac-dotted-all-digits-still-a-mac",
+      "text": "MAC 0050.5687.1234",
+      "countries": null,
+      "mustDetect": {
+        "MAC_ADDRESS": [
+          "0050.5687.1234"
+        ]
+      }
+    },
+    {
+      "id": "pl-no-card-inside-an-account-number",
+      "text": "Nr rachunku: 37 1020 4027 0000 1102 0915 4471",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "CREDIT_CARD"
+      ],
+      "notes": "rules-engine#106: 16 Luhn-valid digits from the middle of an account number that fails mod-97."
+    },
+    {
+      "id": "pl-no-card-at-the-end-of-an-account-number",
+      "text": "konto 61 1090 1014 5521 0098 3366 4170",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "CREDIT_CARD"
+      ]
+    },
+    {
+      "id": "card-beside-an-expiry-still-a-card",
+      "text": "Card 4111 1111 1111 1111 exp 12/27",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "CREDIT_CARD": [
+          "4111 1111 1111 1111"
+        ]
+      }
+    },
+    {
+      "id": "card-after-a-row-number-still-a-card",
+      "text": "1. 4111 1111 1111 1111",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "CREDIT_CARD": [
+          "4111 1111 1111 1111"
+        ]
+      }
+    },
+    {
       "id": "bic-letters-only-word-beside-an-iban",
       "text": "IBAN NL91 ABNA 0417 1643 00 — BETALING via automatische incasso",
       "countries": [

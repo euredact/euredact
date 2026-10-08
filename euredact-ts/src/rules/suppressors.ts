@@ -1223,6 +1223,26 @@ function columnHeader(text: string, start: number): string | null {
 // rest ignore it, and a narrower function stays assignable to this type.
 type Suppressor = (text: string, match: RawMatch, scratch?: SuppressionScratch) => boolean;
 
+/** A dotted MAC shape glued to more of a reference is part of it: the tail of
+ *  "WSO-II.6151.4471.2025" (rules-engine#105). Dotted form only. */
+function suppressMacInReference(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.MAC_ADDRESS || !match.text.includes(".")) return false;
+  return joinedToMore(text, match.start, match.end);
+}
+
+/** A card number is never carved out of a longer run of digit groups: a
+ *  four-digit group joined by the card's own separator on either side means the
+ *  run is longer, e.g. a Polish account number (rules-engine#106). */
+function suppressCardInsideDigitRun(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.CREDIT_CARD) return false;
+  const sep = [...match.text].find(c => !/\d/.test(c)) ?? "";
+  if (!sep) return false;
+  const s = sep.replace(/[-\\^$.*+?()[\]{}|]/g, "\\$&");
+  const before = text.slice(Math.max(0, match.start - 6), match.start);
+  const after = text.slice(match.end, match.end + 6);
+  return new RegExp(`(?<!\\d)\\d{4}${s}$`).test(before) || new RegExp(`^${s}\\d{4}(?!\\d)`).test(after);
+}
+
 const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneServiceNumber, suppressPhoneInsideAccountRun, suppressPhoneDateOverlap, suppressPhoneAsNumberRange],
   [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressNatidAsPassport, suppressSeNatidAsOrg],
@@ -1234,6 +1254,8 @@ const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.LICENSE_PLATE]: [suppressPlateInCompound, suppressDePlateUnknownDistrict, suppressPlateAsCurrencyAmount],
   [EntityType.SECRET]: [suppressSecretOverStructured, suppressSecretNotASecret],
   [EntityType.CHAMBER_OF_COMMERCE]: [suppressReference],
+  [EntityType.MAC_ADDRESS]: [suppressMacInReference],
+  [EntityType.CREDIT_CARD]: [suppressCardInsideDigitRun],
 };
 
 export function shouldSuppress(text: string, match: RawMatch, scratch?: SuppressionScratch): boolean {
