@@ -276,11 +276,11 @@ def _timestamp(rng):
     return f"Data eksportu: {stamp}\nOperator: {e}", [pii(e, "EMAIL", "PL")], [stamp]
 
 
-def _booklet(label: str):
+def _booklet(label: str, letters: int = 3, joint: str = " "):
     """A military booklet number is one INTERNAL_ID, series included (#102)."""
     def build(rng):
-        series = "".join(rng.choice("ABCDEFGHJKLMNPRSTUWZ") for _ in range(3))
-        v = f"{series} {_digits(rng, 7)}"
+        series = "".join(rng.choice("ABCDEFGHJKLMNPRSTUWZ") for _ in range(letters))
+        v = f"{series}{joint}{_digits(rng, 7)}"
         return f"{label}{v}.", [pii(v, "INTERNAL_ID", "PL")], []
     return build
 
@@ -291,6 +291,22 @@ def _residence(label: str):
         v = "".join(rng.choice("ABCDEFGHJKLMNPRSTUWZ") for _ in range(2)) + _digits(rng, 7)
         return f"{label}{v}.", [pii(v, "RESIDENCE_PERMIT", "PL")], []
     return build
+
+
+def _case_reference(label: str):
+    """A znak-sprawy reference is one INTERNAL_ID, not a dotted MAC (#105)."""
+    def build(rng):
+        prefix = rng.choice(["WSO-II", "MOPS", "SO-III", "WOA", "UM-WA"])
+        v = f"{prefix}.{rng.randrange(1000, 9999)}.{rng.randrange(1, 9999)}.{rng.randrange(2018, 2027)}"
+        return f"{label}{v}.", [pii(v, "INTERNAL_ID", "PL")], []
+    return build
+
+
+def _account_with_bad_check(rng):
+    """No card is carved out of an account number, valid or not (#106)."""
+    v = nrb_spaced(nrb(rng, valid=False))
+    e = email(rng)
+    return f"Nr rachunku: {v}\nKontakt: {e}", [pii(e, "EMAIL", "PL")], [v]
 
 
 TEMPLATES: list[tuple[str, object]] = [
@@ -337,6 +353,14 @@ TEMPLATES: list[tuple[str, object]] = [
     # #102: the military booklet.
     ("rules-engine#102: booklet, nominative", _booklet("książeczka wojskowa nr ")),
     ("rules-engine#102: booklet, genitive", _booklet("Seria i nr książeczki wojskowej: ")),
+    ("rules-engine#102: booklet, two-letter series", _booklet("książeczka wojskowa nr ", letters=2)),
+    ("rules-engine#102: booklet, unspaced", _booklet("Książeczka wojskowa: ", letters=2, joint="")),
+    ("rules-engine#102: booklet, seria ... nr", _booklet("książeczka wojskowa seria ", letters=2, joint=" nr ")),
+    # #105: case references.
+    ("rules-engine#105: znak sprawy", _case_reference("Znak sprawy: ")),
+    ("rules-engine#105: after decyzja", _case_reference("zgodnie z decyzją nr ")),
+    # #106: no card inside an account number.
+    ("rules-engine#106: account number with a bad check", _account_with_bad_check),
     # #103: residence card and visa sticker.
     ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
     ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),
