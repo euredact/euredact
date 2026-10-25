@@ -309,6 +309,52 @@ def _account_with_bad_check(rng):
     return f"Nr rachunku: {v}\nKontakt: {e}", [pii(e, "EMAIL", "PL")], [v]
 
 
+def _imei_form(label: str, form: str):
+    """IMEI forms behind their label (rules-engine#110)."""
+    def build(rng):
+        good = _sample(rng, lambda r: "35" + _digits(r, 13), "imei")
+        v = {"14": good[:14], "sv": good[:14] + _digits(rng, 2),
+             "bad": good[:14] + str((int(good[14]) + 1 + rng.randrange(9)) % 10)}[form]
+        return f"{label}{v}.", [pii(v, "IMEI", "DE")], []
+    return build
+
+
+def _vin_form(label: str, form: str):
+    """VIN forms behind their label (rules-engine#110)."""
+    def build(rng):
+        chars = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789"
+        v = "".join(rng.choice(chars) for _ in range(13)) + _digits(rng, 4)
+        v = v.lower() if form == "lower" else f"{v[:3]}-{v[3:9]}-{v[9:]}"
+        return f"{label}{v}.", [pii(v, "VIN", "DE")], []
+    return build
+
+
+def _ssn_label(label: str, make, country: str):
+    """A separate social-security number is SSN (rules-engine#111)."""
+    def build(rng):
+        v = make(rng)
+        return f"{label}{v}.", [pii(v, "SSN", country)], []
+    return build
+
+
+def _provider(label: str, digits: int, country: str):
+    """A provider registration number is HEALTHCARE_PROVIDER (#111)."""
+    def build(rng):
+        v = str(rng.randrange(1, 10)) + _digits(rng, digits - 1)
+        return f"{label}{v}.", [pii(v, "HEALTHCARE_PROVIDER", country)], []
+    return build
+
+
+def _pps(rng):
+    return _sample(rng, lambda r: _digits(r, 7) + r.choice("ABCDEFGHIJKLMNOPQRSTUVW")
+                   + r.choice(["", "A", "W"]), "irish_pps")
+
+
+def _svnr(rng):
+    v = _sample(rng, lambda r: _digits(r, 10), "austrian_svnr")
+    return f"{v[:4]} {v[4:]}"
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -361,6 +407,19 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#105: after decyzja", _case_reference("zgodnie z decyzją nr ")),
     # #106: no card inside an account number.
     ("rules-engine#106: account number with a bad check", _account_with_bad_check),
+    # #110: IMEI and VIN forms.
+    ("rules-engine#110: IMEI, 14 digits", _imei_form("IMEI/SV: ", "14")),
+    ("rules-engine#110: IMEISV, 16 digits", _imei_form("IMEISV ", "sv")),
+    ("rules-engine#110: IMEI, bad check digit", _imei_form("IMEI: ", "bad")),
+    ("rules-engine#110: VIN, lower case", _vin_form("VIN: ", "lower")),
+    ("rules-engine#110: VIN, in sections", _vin_form("Fahrgestellnummer ", "sections")),
+    # #111: SSN and healthcare-provider numbers.
+    ("rules-engine#111: Irish PPSN", _ssn_label("PPSN: ", _pps, "IE")),
+    ("rules-engine#111: Austrian SVNr", _ssn_label("SVNR: ", _svnr, "AT")),
+    ("rules-engine#111: Dutch BIG", _provider("BIG-registratienummer: ", 11, "NL")),
+    ("rules-engine#111: German LANR", _provider("Lebenslange Arztnummer: ", 9, "DE")),
+    ("rules-engine#111: German BSNR", _provider("BSNR ", 9, "DE")),
+    ("rules-engine#111: UK GMC", _provider("GMC number ", 7, "UK")),
     # #103: residence card and visa sticker.
     ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
     ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),
