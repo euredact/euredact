@@ -399,7 +399,7 @@ output. The same properties over twenty documents in CI showed nothing.
 |---|---|
 | `make sweep` | offsets, non-overlap, determinism, cache transparency, and that `countries` never changes which spans are found |
 | `make parity` | do both SDKs mask the same characters, over whole corpora |
-| `make eval` | recall and precision |
+| `make eval` | recall and precision; `make eval RESULTS=docs/corpus-results` also writes the per-type results (`docs/corpus-results.json` / `.md`), under the API's type names, that euredact.dev publishes |
 | `make bench` | latency, both runtimes |
 | `make regression-corpus` | writes `euromask_regressions.json` into the corpus: layouts the generated corpus lacked |
 

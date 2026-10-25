@@ -109,7 +109,65 @@ def _covered_chars(detections, start, end, acceptable=None):
     return covered
 
 
-def _recall_outcome(text, detections, pii_text, acceptable):
+def _standalone(text: str, start: int, end: int) -> bool:
+    return not (text[start - 1:start].isalnum() or text[end:end + 1].isalnum())
+
+
+def _occurrences(text: str, value: str, containers=()) -> list[int]:
+    """Where the labelled *value* stands in *text*.
+
+    The labels give a value, not a position, and the scorer used to take the
+    first place the value occurs. That was wrong twice over (rules-engine#109):
+
+    * a correct detection of a second occurrence overlapped no labelled span and
+      counted as a false positive (104 documents, 56 detections, 8 of them BIC),
+      and a second occurrence left in the clear still scored as recalled;
+    * a short value's first occurrence is often inside another identifier: the
+      postal code "171" first occurs inside the kennitala "3101718919", so the
+      postal code itself was never checked and scored "mistyped".
+
+    An occurrence counts when it touches no letter or digit on either side and
+    lies inside none of *containers* -- the spans of the document's other,
+    longer labelled values. Only if no occurrence qualifies does the first one
+    stand in, as before, so a label is never made unlocatable by this.
+    """
+    if not value:
+        return []
+    first = text.find(value)
+    if first < 0:
+        return []
+    found = []
+    i = first
+    while i >= 0:
+        end = i + len(value)
+        if _standalone(text, i, end) and not any(
+                cs <= i and end <= ce and (cs, ce) != (i, end) for cs, ce in containers):
+            found.append(i)
+        i = text.find(value, i + 1)
+    return found or [first]
+
+
+def _label_places(text: str, labels: list[dict]) -> list[list[int]]:
+    """:func:`_occurrences` for every label of one document, each judged
+    against the others' places."""
+    raw = []
+    for pii in labels:
+        v = pii["PII_identifier"]
+        spans, k = [], text.find(v) if v else -1
+        while k >= 0:
+            spans.append((k, k + len(v)))
+            k = text.find(v, k + 1)
+        raw.append(spans)
+    places = []
+    for n, pii in enumerate(labels):
+        v = pii["PII_identifier"]
+        containers = [sp for m, spans in enumerate(raw) if m != n
+                      and len(labels[m]["PII_identifier"]) > len(v) for sp in spans]
+        places.append(_occurrences(text, v, containers))
+    return places
+
+
+def _recall_outcome(text, detections, pii_text, acceptable, places=None):
     """Classify one gold identifier. See `## Recall` in the report header.
 
     A redaction library is judged on whether the whole identifier is gone, so
@@ -120,24 +178,36 @@ def _recall_outcome(text, detections, pii_text, acceptable):
     complete detections (issue rules-engine#8).
 
     Returns one of: "hit", "mistyped", "partial", "miss", "unlocatable".
+
+    Every occurrence of the value counts (see :func:`_occurrences`): it is a
+    hit only when all of them are masked with an accepted type, and the worst
+    occurrence decides otherwise -- a value left readable once is not redacted.
     """
-    idx = text.find(pii_text)
-    if idx < 0:
+    if places is None:
+        places = _occurrences(text, pii_text)
+    if not places:
         # Nothing to redact: the gold identifier does not appear in the
         # document as written. Counting it as a hit, which the old test did
         # implicitly, credits the engine for text it never saw.
         return "unlocatable"
-    end = idx + len(pii_text)
-    width = end - idx
-    typed = _covered_chars(detections, idx, end, acceptable)
-    if typed == width:
-        return "hit"
-    any_type = _covered_chars(detections, idx, end, None)
-    if any_type == width:
+    width = len(pii_text)
+    outcomes = []
+    for idx in places:
+        end = idx + width
+        if _covered_chars(detections, idx, end, acceptable) == width:
+            outcomes.append("hit")
+            continue
+        any_type = _covered_chars(detections, idx, end, None)
         # Fully masked, but claimed by a type this category does not accept:
         # the data is protected, the label is wrong. A mislabel, not a leak.
-        return "mistyped"
-    return "partial" if any_type > 0 else "miss"
+        outcomes.append("mistyped" if any_type == width
+                        else "partial" if any_type > 0 else "miss")
+    for worst in ("miss", "partial", "mistyped"):
+        if worst in outcomes:
+            if worst == "miss" and len(set(outcomes)) > 1:
+                return "partial"     # masked somewhere, readable elsewhere
+            return worst
+    return "hit"
 
 
 def _detection_matches_any(det, expected_spans):
@@ -184,7 +254,8 @@ def evaluate(data, use_country_hints: bool):
         countries_arg = valid_countries if (use_country_hints and valid_countries) else None
         result = euredact.redact(text, countries=countries_arg, detect_dates=True, cache=False)
 
-        for pii in expected:
+        places = _label_places(text, expected)
+        for pii, where in zip(expected, places):
             pii_cat = pii["PII_category"]
             if pii_cat in EXCLUDED_CATEGORIES:
                 continue
@@ -201,7 +272,8 @@ def evaluate(data, use_country_hints: bool):
             else:
                 single_total += 1
 
-            outcome = _recall_outcome(text, result.detections, pii_text, acceptable)
+            outcome = _recall_outcome(text, result.detections, pii_text, acceptable,
+                                      places=where)
             if outcome == "partial":
                 cat_partial[pii_cat] += 1
             elif outcome == "mistyped":
@@ -221,11 +293,10 @@ def evaluate(data, use_country_hints: bool):
                     single_tp += 1
 
         expected_spans = []
-        for pii in expected:
+        for pii, where in zip(expected, places):
             if pii["PII_category"] in EXCLUDED_CATEGORIES:
                 continue
-            idx = text.find(pii["PII_identifier"])
-            if idx >= 0:
+            for idx in where:
                 expected_spans.append((idx, idx + len(pii["PII_identifier"]), pii["PII_category"]))
 
         for det in result.detections:
@@ -629,17 +700,37 @@ hr { border: none; border-top: 3px solid #1e293b; margin: 3rem 0; }
 """
 
 
-def main():
+#: Corpus files that are not part of the published sample. The regression
+#: records are adversarial by design (tests/regression_corpus.py) and are
+#: checked as pass/fail instead (rules-engine#109).
+EXCLUDED_FILES = {"euromask_regressions.json"}
+
+
+def main(argv: list[str] | None = None):
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Recall and precision over the corpus.")
+    ap.add_argument("--results", metavar="STEM", type=Path,
+                    help="also write STEM.json and STEM.md: per API type, both modes, "
+                         "with corpus composition and conditions (rules-engine#109)")
+    args = ap.parse_args(argv)
+
     all_data = []
+    datasets = []
     for ds_path in DATASETS:
+        if ds_path.name in EXCLUDED_FILES:
+            print(f"Excluded {ds_path.name} (regression records; checked separately)")
+            continue
         if not ds_path.exists():
             print(f"WARNING: {ds_path} not found, skipping.")
             continue
         with open(ds_path) as f:
             records = json.load(f)
         all_data.extend(records)
+        datasets.append((ds_path.name, records))
         print(f"Loaded {ds_path.name}: {len(records)} records")
     print(f"Combined: {len(all_data)} records")
+    mode_stats = {}
 
     html = [f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>EuRedact Evaluation Report</title>
@@ -653,6 +744,7 @@ def main():
     ]:
         print(f"\n  Running [{mode_label}] ...", end=" ", flush=True)
         s = evaluate(all_data, use_hints)
+        mode_stats["hinted" if use_hints else "blind"] = s
         rec_n, rec_d = _core_recall(s)
         rec = pct(rec_n, rec_d)
         prec_tp, prec_tot = _core_precision(s)
@@ -691,6 +783,20 @@ def main():
     html.append("</body></html>")
     REPORT_PATH.write_text("\n".join(html), encoding="utf-8")
     print(f"\nReport written to {REPORT_PATH}")
+
+    if args.results:
+        import corpus_results
+        from regression_corpus import build, check
+
+        records = build()
+        failures = check(records)
+        results = corpus_results.build_results(
+            version=euredact.__version__, modes=mode_stats, category_map=CATEGORY_MAP,
+            corpus=corpus_results.composition(datasets, EXCLUDED_FILES),
+            regressions={"records": len(records), "failures": len(failures)},
+            generated=time.strftime("%Y-%m-%d"))
+        js, md = corpus_results.write(results, args.results)
+        print(f"Per-type results written to {js} and {md}")
 
 
 if __name__ == "__main__":
