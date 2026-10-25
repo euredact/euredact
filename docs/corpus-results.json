@@ -1,0 +1,1222 @@
+{
+ "engine": {
+  "package": "euredact",
+  "version": "0.6.0",
+  "commit": "3dfcb1a",
+  "describe": "v0.6.0-63-g3dfcb1a",
+  "released": false
+ },
+ "generated": "2026-10-25",
+ "corpus": {
+  "files": [
+   {
+    "file": "euromask_allcountries_20k.json",
+    "documents": 20000,
+    "labels": 107886
+   },
+   {
+    "file": "euromask_dach_south_20k.json",
+    "documents": 20000,
+    "labels": 103897
+   },
+   {
+    "file": "euromask_eastern_20k.json",
+    "documents": 20000,
+    "labels": 103317
+   },
+   {
+    "file": "euromask_el_cy_mt_20k.json",
+    "documents": 20000,
+    "labels": 101753
+   },
+   {
+    "file": "euromask_ie_baltics_uk_20k.json",
+    "documents": 20000,
+    "labels": 102468
+   },
+   {
+    "file": "euromask_international_10k.json",
+    "documents": 10000,
+    "labels": 45155
+   },
+   {
+    "file": "euromask_nordic_20k.json",
+    "documents": 20000,
+    "labels": 107406
+   },
+   {
+    "file": "euromask_secrets_5k.json",
+    "documents": 5000,
+    "labels": 6510
+   },
+   {
+    "file": "euromask_training_core.json",
+    "documents": 7300,
+    "labels": 26587
+   },
+   {
+    "file": "euromask_training_core2.json",
+    "documents": 10000,
+    "labels": 54616
+   }
+  ],
+  "documents": 152300,
+  "labels": 759595,
+  "labels_by_category": {
+   "EMAIL": 152938,
+   "IBAN": 126428,
+   "PHONE": 123151,
+   "NATIONAL_ID": 118040,
+   "DOB": 89805,
+   "POSTAL_CODE": 53914,
+   "VAT_NUMBER": 20136,
+   "IP_ADDRESS": 10038,
+   "VIN": 9701,
+   "CHAMBER_OF_COMMERCE": 8497,
+   "LICENSE_PLATE": 6445,
+   "CREDIT_CARD": 6415,
+   "SECRET": 5798,
+   "UUID": 4890,
+   "MAC_ADDRESS": 3546,
+   "TAX_ID_PERSONAL": 2837,
+   "SWIFT_BIC": 2830,
+   "IMEI": 2443,
+   "SOCIAL_HANDLE": 2267,
+   "SOCIAL_SECURITY": 1288,
+   "CRYPTO_ADDRESS_ETH": 1273,
+   "CRYPTO_ADDRESS_BTC": 1249,
+   "PASSPORT": 1072,
+   "GPS_COORDINATES": 950,
+   "HEALTH_INSURANCE": 933,
+   "TAX_ID": 892,
+   "IP_ADDRESS_V6": 636,
+   "NATIONAL_ID_CARD": 542,
+   "TAX_ID_BUSINESS": 389,
+   "HEALTH_ID": 252
+  },
+  "countries": [
+   "AT",
+   "BE",
+   "BG",
+   "CH",
+   "CY",
+   "CZ",
+   "DE",
+   "DK",
+   "EE",
+   "EL",
+   "ES",
+   "FI",
+   "FR",
+   "HR",
+   "HU",
+   "IE",
+   "INTL",
+   "IS",
+   "IT",
+   "LT",
+   "LU",
+   "LV",
+   "MT",
+   "NL",
+   "NO",
+   "PL",
+   "PT",
+   "RO",
+   "SE",
+   "SI",
+   "SK",
+   "UK"
+  ],
+  "excluded_files": [
+   "euromask_regressions.json"
+  ],
+  "not_recorded": "The corpus records carry no language or document type; neither is reported until they do."
+ },
+ "mapping": [
+  {
+   "category": "CHAMBER_OF_COMMERCE",
+   "api_type": "CHAMBER_OF_COMMERCE",
+   "accepts": [
+    "CHAMBER_OF_COMMERCE",
+    "VAT"
+   ]
+  },
+  {
+   "category": "CREDIT_CARD",
+   "api_type": "CREDIT_CARD",
+   "accepts": [
+    "CREDIT_CARD"
+   ]
+  },
+  {
+   "category": "DOB",
+   "api_type": "DOB",
+   "accepts": [
+    "DOB"
+   ]
+  },
+  {
+   "category": "EMAIL",
+   "api_type": "EMAIL",
+   "accepts": [
+    "EMAIL"
+   ]
+  },
+  {
+   "category": "GPS_COORDINATES",
+   "api_type": "GPS_COORDINATES",
+   "accepts": [
+    "GPS_COORDINATES"
+   ]
+  },
+  {
+   "category": "HEALTH_ID",
+   "api_type": "HEALTH_INSURANCE",
+   "accepts": [
+    "HEALTH_INSURANCE",
+    "NATIONAL_ID"
+   ]
+  },
+  {
+   "category": "HEALTH_INSURANCE",
+   "api_type": "HEALTH_INSURANCE",
+   "accepts": [
+    "HEALTH_INSURANCE",
+    "NATIONAL_ID"
+   ]
+  },
+  {
+   "category": "IBAN",
+   "api_type": "BANK_ACCOUNT",
+   "accepts": [
+    "BANK_ACCOUNT"
+   ]
+  },
+  {
+   "category": "IMEI",
+   "api_type": "IMEI",
+   "accepts": [
+    "IMEI"
+   ]
+  },
+  {
+   "category": "IP_ADDRESS",
+   "api_type": "IP_ADDRESS",
+   "accepts": [
+    "IP_ADDRESS"
+   ]
+  },
+  {
+   "category": "IP_ADDRESS_V6",
+   "api_type": "IPV6_ADDRESS",
+   "accepts": [
+    "IPV6_ADDRESS"
+   ]
+  },
+  {
+   "category": "LICENSE_PLATE",
+   "api_type": "LICENSE_PLATE",
+   "accepts": [
+    "LICENSE_PLATE"
+   ]
+  },
+  {
+   "category": "MAC_ADDRESS",
+   "api_type": "MAC_ADDRESS",
+   "accepts": [
+    "MAC_ADDRESS"
+   ]
+  },
+  {
+   "category": "NATIONAL_ID",
+   "api_type": "NATIONAL_ID",
+   "accepts": [
+    "NATIONAL_ID",
+    "SSN",
+    "TAX_ID"
+   ]
+  },
+  {
+   "category": "NATIONAL_ID_CARD",
+   "api_type": "NATIONAL_ID",
+   "accepts": [
+    "NATIONAL_ID"
+   ]
+  },
+  {
+   "category": "PASSPORT",
+   "api_type": "PASSPORT",
+   "accepts": [
+    "PASSPORT"
+   ]
+  },
+  {
+   "category": "PHONE",
+   "api_type": "PHONE",
+   "accepts": [
+    "PHONE"
+   ]
+  },
+  {
+   "category": "POSTAL_CODE",
+   "api_type": "POSTAL_CODE",
+   "accepts": [
+    "POSTAL_CODE"
+   ]
+  },
+  {
+   "category": "SECRET",
+   "api_type": "SECRET",
+   "accepts": [
+    "SECRET"
+   ]
+  },
+  {
+   "category": "SOCIAL_HANDLE",
+   "api_type": "SOCIAL_HANDLE",
+   "accepts": [
+    "SOCIAL_HANDLE"
+   ]
+  },
+  {
+   "category": "SOCIAL_SECURITY",
+   "api_type": "SSN",
+   "accepts": [
+    "NATIONAL_ID",
+    "SSN"
+   ]
+  },
+  {
+   "category": "SWIFT_BIC",
+   "api_type": "BIC",
+   "accepts": [
+    "BIC"
+   ]
+  },
+  {
+   "category": "TAX_ID",
+   "api_type": "TAX_ID",
+   "accepts": [
+    "TAX_ID"
+   ]
+  },
+  {
+   "category": "TAX_ID_BUSINESS",
+   "api_type": "VAT",
+   "accepts": [
+    "TAX_ID",
+    "VAT"
+   ]
+  },
+  {
+   "category": "TAX_ID_PERSONAL",
+   "api_type": "TAX_ID",
+   "accepts": [
+    "TAX_ID"
+   ]
+  },
+  {
+   "category": "UUID",
+   "api_type": "UUID",
+   "accepts": [
+    "UUID"
+   ]
+  },
+  {
+   "category": "VAT_NUMBER",
+   "api_type": "VAT",
+   "accepts": [
+    "CHAMBER_OF_COMMERCE",
+    "VAT"
+   ]
+  },
+  {
+   "category": "VIN",
+   "api_type": "VIN",
+   "accepts": [
+    "VIN"
+   ]
+  }
+ ],
+ "conditions": [
+  "Rules engine only (mode=\"rules\"); the cloud tier is not measured here.",
+  "Synthetic corpus, generated for evaluation; no real person's data.",
+  "Two country modes: 'hinted' passes each document's labelled countries as `countries`; 'blind' passes none.",
+  "A hit is a labelled value whose every character is masked, at every place it occurs, by a type its category accepts. Fully masked by another type is 'mistyped': protected, but a miss for recall.",
+  "A detection is a true positive when it overlaps a labelled value whose category accepts its type, and a false positive otherwise; a mistyped detection is a false positive for the type it was emitted as.",
+  "Support and detections are counted differently: support is the labels of the categories attributed to a type, detections are everything the engine emitted as that type, and a detection is a true positive on any label whose category accepts its type. Most SSN and TAX_ID detections land on NATIONAL_ID labels, so their detections exceed their support.",
+  "Precision is a lower bound: a real identifier the corpus left unlabelled counts as a false positive when the engine masks it.",
+  "DOB is optional (the cloud tier owns bare dates) and reported separately, with detect_dates=True.",
+  "CRYPTO_ADDRESS_BTC and CRYPTO_ADDRESS_ETH labels are excluded: no API type exists for them.",
+  "The regression records (euromask_regressions.json) are excluded from the figures; they are adversarial by design and are reported as pass/fail."
+ ],
+ "modes": {
+  "hinted": {
+   "BANK_ACCOUNT": {
+    "support": 126428,
+    "hits": 126428,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "IBAN"
+    ],
+    "detections": 126428,
+    "tp": 126428,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "BIC": {
+    "support": 2830,
+    "hits": 2830,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "SWIFT_BIC"
+    ],
+    "detections": 2951,
+    "tp": 2822,
+    "fp": 129,
+    "recall": 100.0,
+    "precision": 95.63,
+    "also_accepts": []
+   },
+   "CHAMBER_OF_COMMERCE": {
+    "support": 8497,
+    "hits": 8497,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "CHAMBER_OF_COMMERCE"
+    ],
+    "detections": 8349,
+    "tp": 8349,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": [
+     "VAT"
+    ]
+   },
+   "CREDIT_CARD": {
+    "support": 6415,
+    "hits": 6415,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "CREDIT_CARD"
+    ],
+    "detections": 6415,
+    "tp": 6415,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "DOB": {
+    "support": 89805,
+    "hits": 89805,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "DOB"
+    ],
+    "detections": 89805,
+    "tp": 89805,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "EMAIL": {
+    "support": 152938,
+    "hits": 152938,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "EMAIL"
+    ],
+    "detections": 153051,
+    "tp": 152938,
+    "fp": 113,
+    "recall": 100.0,
+    "precision": 99.93,
+    "also_accepts": []
+   },
+   "GPS_COORDINATES": {
+    "support": 950,
+    "hits": 950,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "GPS_COORDINATES"
+    ],
+    "detections": 950,
+    "tp": 950,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "HEALTH_INSURANCE": {
+    "support": 1185,
+    "hits": 1185,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "HEALTH_ID",
+     "HEALTH_INSURANCE"
+    ],
+    "detections": 1076,
+    "tp": 1076,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": [
+     "NATIONAL_ID"
+    ]
+   },
+   "IMEI": {
+    "support": 2443,
+    "hits": 2443,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "IMEI"
+    ],
+    "detections": 2443,
+    "tp": 2443,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "IPV6_ADDRESS": {
+    "support": 636,
+    "hits": 636,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "IP_ADDRESS_V6"
+    ],
+    "detections": 636,
+    "tp": 636,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "IP_ADDRESS": {
+    "support": 10038,
+    "hits": 10027,
+    "mistyped": 11,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "IP_ADDRESS"
+    ],
+    "detections": 10066,
+    "tp": 10027,
+    "fp": 39,
+    "recall": 99.89,
+    "precision": 99.61,
+    "also_accepts": []
+   },
+   "LICENSE_PLATE": {
+    "support": 6445,
+    "hits": 6436,
+    "mistyped": 2,
+    "partial": 2,
+    "misses": 5,
+    "unlocatable": 0,
+    "categories": [
+     "LICENSE_PLATE"
+    ],
+    "detections": 6436,
+    "tp": 6436,
+    "fp": 0,
+    "recall": 99.86,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "MAC_ADDRESS": {
+    "support": 3546,
+    "hits": 3546,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "MAC_ADDRESS"
+    ],
+    "detections": 3546,
+    "tp": 3546,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "NATIONAL_ID": {
+    "support": 118582,
+    "hits": 118212,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 370,
+    "unlocatable": 0,
+    "categories": [
+     "NATIONAL_ID",
+     "NATIONAL_ID_CARD"
+    ],
+    "detections": 101455,
+    "tp": 101291,
+    "fp": 164,
+    "recall": 99.69,
+    "precision": 99.84,
+    "also_accepts": [
+     "SSN",
+     "TAX_ID"
+    ]
+   },
+   "PASSPORT": {
+    "support": 1072,
+    "hits": 879,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 193,
+    "unlocatable": 0,
+    "categories": [
+     "PASSPORT"
+    ],
+    "detections": 879,
+    "tp": 879,
+    "fp": 0,
+    "recall": 82.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "PHONE": {
+    "support": 123151,
+    "hits": 122934,
+    "mistyped": 164,
+    "partial": 51,
+    "misses": 2,
+    "unlocatable": 0,
+    "categories": [
+     "PHONE"
+    ],
+    "detections": 122988,
+    "tp": 122985,
+    "fp": 3,
+    "recall": 99.82,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "POSTAL_CODE": {
+    "support": 53914,
+    "hits": 53897,
+    "mistyped": 10,
+    "partial": 0,
+    "misses": 7,
+    "unlocatable": 0,
+    "categories": [
+     "POSTAL_CODE"
+    ],
+    "detections": 53925,
+    "tp": 53897,
+    "fp": 28,
+    "recall": 99.97,
+    "precision": 99.95,
+    "also_accepts": []
+   },
+   "SECRET": {
+    "support": 5798,
+    "hits": 5213,
+    "mistyped": 77,
+    "partial": 187,
+    "misses": 182,
+    "unlocatable": 139,
+    "categories": [
+     "SECRET"
+    ],
+    "detections": 5269,
+    "tp": 5056,
+    "fp": 213,
+    "recall": 89.91,
+    "precision": 95.96,
+    "also_accepts": []
+   },
+   "SOCIAL_HANDLE": {
+    "support": 2267,
+    "hits": 2267,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "SOCIAL_HANDLE"
+    ],
+    "detections": 2267,
+    "tp": 2267,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "SSN": {
+    "support": 1288,
+    "hits": 1288,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "SOCIAL_SECURITY"
+    ],
+    "detections": 7467,
+    "tp": 7467,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": [
+     "NATIONAL_ID"
+    ]
+   },
+   "TAX_ID": {
+    "support": 3729,
+    "hits": 3729,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "TAX_ID",
+     "TAX_ID_PERSONAL"
+    ],
+    "detections": 14969,
+    "tp": 14969,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "UUID": {
+    "support": 4890,
+    "hits": 4890,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "UUID"
+    ],
+    "detections": 4960,
+    "tp": 4890,
+    "fp": 70,
+    "recall": 100.0,
+    "precision": 98.59,
+    "also_accepts": []
+   },
+   "VAT": {
+    "support": 20525,
+    "hits": 20525,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "TAX_ID_BUSINESS",
+     "VAT_NUMBER"
+    ],
+    "detections": 19543,
+    "tp": 19543,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": [
+     "CHAMBER_OF_COMMERCE",
+     "TAX_ID"
+    ]
+   },
+   "VIN": {
+    "support": 9701,
+    "hits": 9701,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "VIN"
+    ],
+    "detections": 9701,
+    "tp": 9701,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   }
+  },
+  "blind": {
+   "BANK_ACCOUNT": {
+    "support": 126428,
+    "hits": 126428,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "IBAN"
+    ],
+    "detections": 126428,
+    "tp": 126428,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "BIC": {
+    "support": 2830,
+    "hits": 2830,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "SWIFT_BIC"
+    ],
+    "detections": 2951,
+    "tp": 2822,
+    "fp": 129,
+    "recall": 100.0,
+    "precision": 95.63,
+    "also_accepts": []
+   },
+   "CHAMBER_OF_COMMERCE": {
+    "support": 8497,
+    "hits": 8497,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "CHAMBER_OF_COMMERCE"
+    ],
+    "detections": 8355,
+    "tp": 8349,
+    "fp": 6,
+    "recall": 100.0,
+    "precision": 99.93,
+    "also_accepts": [
+     "VAT"
+    ]
+   },
+   "CREDIT_CARD": {
+    "support": 6415,
+    "hits": 6415,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "CREDIT_CARD"
+    ],
+    "detections": 6415,
+    "tp": 6415,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "DOB": {
+    "support": 89805,
+    "hits": 89805,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "DOB"
+    ],
+    "detections": 89805,
+    "tp": 89805,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "EMAIL": {
+    "support": 152938,
+    "hits": 152938,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "EMAIL"
+    ],
+    "detections": 153051,
+    "tp": 152938,
+    "fp": 113,
+    "recall": 100.0,
+    "precision": 99.93,
+    "also_accepts": []
+   },
+   "GPS_COORDINATES": {
+    "support": 950,
+    "hits": 950,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "GPS_COORDINATES"
+    ],
+    "detections": 950,
+    "tp": 950,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "HEALTH_INSURANCE": {
+    "support": 1185,
+    "hits": 1180,
+    "mistyped": 5,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "HEALTH_ID",
+     "HEALTH_INSURANCE"
+    ],
+    "detections": 1029,
+    "tp": 1029,
+    "fp": 0,
+    "recall": 99.58,
+    "precision": 100.0,
+    "also_accepts": [
+     "NATIONAL_ID"
+    ]
+   },
+   "IMEI": {
+    "support": 2443,
+    "hits": 2443,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "IMEI"
+    ],
+    "detections": 2485,
+    "tp": 2443,
+    "fp": 42,
+    "recall": 100.0,
+    "precision": 98.31,
+    "also_accepts": []
+   },
+   "IPV6_ADDRESS": {
+    "support": 636,
+    "hits": 636,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "IP_ADDRESS_V6"
+    ],
+    "detections": 636,
+    "tp": 636,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "IP_ADDRESS": {
+    "support": 10038,
+    "hits": 10027,
+    "mistyped": 11,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "IP_ADDRESS"
+    ],
+    "detections": 10066,
+    "tp": 10027,
+    "fp": 39,
+    "recall": 99.89,
+    "precision": 99.61,
+    "also_accepts": []
+   },
+   "LICENSE_PLATE": {
+    "support": 6445,
+    "hits": 6436,
+    "mistyped": 2,
+    "partial": 2,
+    "misses": 5,
+    "unlocatable": 0,
+    "categories": [
+     "LICENSE_PLATE"
+    ],
+    "detections": 6436,
+    "tp": 6436,
+    "fp": 0,
+    "recall": 99.86,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "MAC_ADDRESS": {
+    "support": 3546,
+    "hits": 3546,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "MAC_ADDRESS"
+    ],
+    "detections": 3546,
+    "tp": 3546,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "NATIONAL_ID": {
+    "support": 118582,
+    "hits": 118077,
+    "mistyped": 135,
+    "partial": 0,
+    "misses": 370,
+    "unlocatable": 0,
+    "categories": [
+     "NATIONAL_ID",
+     "NATIONAL_ID_CARD"
+    ],
+    "detections": 101534,
+    "tp": 100706,
+    "fp": 828,
+    "recall": 99.57,
+    "precision": 99.18,
+    "also_accepts": [
+     "SSN",
+     "TAX_ID"
+    ]
+   },
+   "PASSPORT": {
+    "support": 1072,
+    "hits": 879,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 193,
+    "unlocatable": 0,
+    "categories": [
+     "PASSPORT"
+    ],
+    "detections": 879,
+    "tp": 879,
+    "fp": 0,
+    "recall": 82.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "PHONE": {
+    "support": 123151,
+    "hits": 122169,
+    "mistyped": 929,
+    "partial": 51,
+    "misses": 2,
+    "unlocatable": 0,
+    "categories": [
+     "PHONE"
+    ],
+    "detections": 122334,
+    "tp": 122220,
+    "fp": 114,
+    "recall": 99.2,
+    "precision": 99.91,
+    "also_accepts": []
+   },
+   "POSTAL_CODE": {
+    "support": 53914,
+    "hits": 53897,
+    "mistyped": 10,
+    "partial": 0,
+    "misses": 7,
+    "unlocatable": 0,
+    "categories": [
+     "POSTAL_CODE"
+    ],
+    "detections": 53925,
+    "tp": 53897,
+    "fp": 28,
+    "recall": 99.97,
+    "precision": 99.95,
+    "also_accepts": []
+   },
+   "SECRET": {
+    "support": 5798,
+    "hits": 5213,
+    "mistyped": 77,
+    "partial": 187,
+    "misses": 182,
+    "unlocatable": 139,
+    "categories": [
+     "SECRET"
+    ],
+    "detections": 5269,
+    "tp": 5056,
+    "fp": 213,
+    "recall": 89.91,
+    "precision": 95.96,
+    "also_accepts": []
+   },
+   "SOCIAL_HANDLE": {
+    "support": 2267,
+    "hits": 2267,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "SOCIAL_HANDLE"
+    ],
+    "detections": 2267,
+    "tp": 2267,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   },
+   "SSN": {
+    "support": 1288,
+    "hits": 1283,
+    "mistyped": 5,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "SOCIAL_SECURITY"
+    ],
+    "detections": 7834,
+    "tp": 7834,
+    "fp": 0,
+    "recall": 99.61,
+    "precision": 100.0,
+    "also_accepts": [
+     "NATIONAL_ID"
+    ]
+   },
+   "TAX_ID": {
+    "support": 3729,
+    "hits": 3709,
+    "mistyped": 20,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "TAX_ID",
+     "TAX_ID_PERSONAL"
+    ],
+    "detections": 15176,
+    "tp": 15069,
+    "fp": 107,
+    "recall": 99.46,
+    "precision": 99.29,
+    "also_accepts": []
+   },
+   "UUID": {
+    "support": 4890,
+    "hits": 4890,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "UUID"
+    ],
+    "detections": 4960,
+    "tp": 4890,
+    "fp": 70,
+    "recall": 100.0,
+    "precision": 98.59,
+    "also_accepts": []
+   },
+   "VAT": {
+    "support": 20525,
+    "hits": 20525,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "TAX_ID_BUSINESS",
+     "VAT_NUMBER"
+    ],
+    "detections": 19543,
+    "tp": 19543,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": [
+     "CHAMBER_OF_COMMERCE",
+     "TAX_ID"
+    ]
+   },
+   "VIN": {
+    "support": 9701,
+    "hits": 9701,
+    "mistyped": 0,
+    "partial": 0,
+    "misses": 0,
+    "unlocatable": 0,
+    "categories": [
+     "VIN"
+    ],
+    "detections": 9701,
+    "tp": 9701,
+    "fp": 0,
+    "recall": 100.0,
+    "precision": 100.0,
+    "also_accepts": []
+   }
+  }
+ },
+ "coverage": {
+  "precision_only": [],
+  "not_measured": [
+   "DATE_OF_DEATH",
+   "DRIVERS_LICENSE",
+   "HEALTHCARE_PROVIDER",
+   "INTERNAL_ID",
+   "RESIDENCE_PERMIT"
+  ]
+ },
+ "regressions": {
+  "records": 258,
+  "failures": 0
+ }
+}
