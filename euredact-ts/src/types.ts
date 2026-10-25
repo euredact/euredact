@@ -136,7 +136,13 @@ export interface Detection {
   text: string;
   source: DetectionSource;
   country: string | null;
-  confidence: string;
+  /**
+   * How the type was arrived at: "high", "medium" or "low" for a rules
+   * detection. `null` for a span the cloud model found and reported no
+   * confidence for: the model emits none today, and "high" would claim the
+   * checksum-backed evidence a rules detection has (rules-engine#108).
+   */
+  confidence: string | null;
   /**
    * How strongly the document supports {@link Detection.country}, in [0, 1].
    *

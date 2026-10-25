@@ -672,6 +672,23 @@ test("a rules result has no cloud info", () => {
   assert.equal(redact(DOC, { countries: ["BE"] }).cloud, undefined);
 });
 
+// ── A model span has no confidence of its own (rules-engine#108) ───────────
+
+testAsync("a model span reports no confidence unless the service sends one", async () => {
+  configure({ apiKey: "erk_test", baseUrl: "https://api.test" });
+  const body = { ...SUCCESS, entities: [
+    { start: 8, end: 21, text: "Bas Verhoeven", type: "PERSON_NAME", source: "model" },
+    { start: 27, end: 43, text: "+32 475 12 34 56", type: "PHONE", source: "rules" },
+    { start: 50, end: 64, text: "bas@example.be", type: "EMAIL", source: "model", confidence: "medium" },
+  ] };
+  const { impl } = scripted([{ status: 200, body }]);
+  const r = await new CloudClient().redact(DOC, { country: "BE", fetchImpl: impl });
+  const by = Object.fromEntries(r.detections.map(d => [String(d.entityType), d]));
+  assert.equal(by.PERSON_NAME.confidence, null);
+  assert.equal(by.PHONE.confidence, "high");
+  assert.equal(by.EMAIL.confidence, "medium");
+});
+
 const run = async (): Promise<void> => {
   for (const [name, fn] of asyncTests) {
     try {

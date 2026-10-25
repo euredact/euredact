@@ -204,7 +204,9 @@ def test_svnr_stays_whole_and_labelled():
     doc = "Anschrift: Hauptstrasse 5, 1010 Wien\nSV-Nummer: 1268 040390\n"
     result = sdk.redact(doc, countries=["AT"])
     assert "040390" not in result.redacted_text
-    assert "[NATIONAL_ID]" in result.redacted_text
+    # SSN since rules-engine#111: Austria's SVNr is a separate social-insurance
+    # number (canon SSN). The point of the test, one whole span, is unchanged.
+    assert "[SSN]" in result.redacted_text
 
 
 def test_phone_digits_not_split_by_postal():

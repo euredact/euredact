@@ -38,6 +38,8 @@ which both test suites run.
 
 ### Changed
 
+- The Irish PPSN and the Austrian SVNr are `SSN`, not `NATIONAL_ID`, as the canon defines them (both countries have no separate national ID). *(rules-engine#111)*
+- A span the cloud model found reports no `confidence` (`None` / `null`) instead of an invented `"high"`; filtering on `"high"` keeps checksum-backed rules detections only. *(rules-engine#108)*
 - A daily-quota `429` raises `QuotaExceededError` at once instead of after every retry; the edge's rate-limit `429` is still retried and then raises `RateLimitedError`, a subclass. *(rules-engine#89)*
 - The Python engine is about a quarter faster on long documents: the label lookup that ranks candidates is read once per offset and skipped in one search where no label exists; output unchanged. *(Python only)* *(rules-engine#79)*
 - A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter through a lookaround-free superset; patterns outside it fall from 35 to 23. *(Python only)* *(rules-engine#72)*
@@ -46,6 +48,8 @@ which both test suites run.
 
 ### Fixed
 
+- IMEI and VIN behind their label were missed in forms the patterns did not cover: a 14-digit IMEI, a 16-digit IMEISV, an IMEI with a bad check digit, a lower-case VIN and a VIN written in its three sections. *(rules-engine#110)*
+- Healthcare-provider numbers (Dutch BIG, German LANR and BSNR, UK GMC, French RPPS and ADELI, Polish PWZ) are `HEALTHCARE_PROVIDER` behind their label; they were missed, or typed `PHONE` or a foreign `NATIONAL_ID`. The Dutch BSN label no longer reads "BSNR" as itself, and "Rentenversicherungsnummer" is no longer read as an amount label ("Rent"). *(rules-engine#111)*
 - A Polish military booklet number with the usual two-letter series (`EL 0473218`, `EL0473218`, `seria MS nr 6620419`) was split as `PHONE` or not masked; it is one `INTERNAL_ID` like the three-letter form. *(rules-engine#102)*
 - A Polish case reference (`WSO-II.6151.4471.2025`) had its digits masked as `MAC_ADDRESS` and its office prefix left readable; behind its label it is one `INTERNAL_ID`, and a dotted MAC glued to a longer reference is no longer a MAC. *(rules-engine#105)*
 - A card number is no longer carved out of a longer run of digit groups, such as a Polish account number whose checksum fails (`37 1020 [CREDIT_CARD] 4471`). *(rules-engine#106)*

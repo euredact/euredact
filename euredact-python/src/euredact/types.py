@@ -139,7 +139,11 @@ class Detection:
     text: str
     source: DetectionSource
     country: str | None
-    confidence: str = "high"
+    confidence: str | None = "high"
+    """How the type was arrived at: "high", "medium" or "low" for a rules
+    detection. ``None`` for a span the cloud model found and reported no
+    confidence for: the model emits none today, and "high" would claim the
+    checksum-backed evidence a rules detection has (rules-engine#108)."""
     country_confidence: float = 0.0
     """How strongly the document supports :attr:`country`, in [0, 1].
 

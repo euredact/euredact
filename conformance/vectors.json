@@ -316,10 +316,11 @@
         "POSTAL_CODE": [
           "1010"
         ],
-        "NATIONAL_ID": [
+        "SSN": [
           "1268 040390"
         ]
-      }
+      },
+      "notes": "SSN since rules-engine#111 (canon: the Austrian SVNr is SSN); the case pins that the SVNr stays one span."
     },
     {
       "id": "postal-sentence-final",
@@ -6422,6 +6423,243 @@
       "mustNotDetect": [
         "PHONE"
       ]
+    },
+    {
+      "id": "imei-14-digits-behind-its-label",
+      "text": "IMEI/SV: 35209900176148",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "IMEI": [
+          "35209900176148"
+        ]
+      },
+      "notes": "rules-engine#110"
+    },
+    {
+      "id": "imei-bad-check-digit-behind-its-label",
+      "text": "IMEI: 352099001761482",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "IMEI": [
+          "352099001761482"
+        ]
+      }
+    },
+    {
+      "id": "imeisv-16-digits-behind-its-label",
+      "text": "IMEISV 3520990017614801",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "IMEI": [
+          "3520990017614801"
+        ]
+      }
+    },
+    {
+      "id": "imei-14-digits-without-a-label-stays-unmasked",
+      "text": "Bestellnummer 35209900176148 ohne Label",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "IMEI"
+      ]
+    },
+    {
+      "id": "vin-lower-case-behind-its-label",
+      "text": "VIN: 1hgcm82633a004352",
+      "countries": null,
+      "mustDetect": {
+        "VIN": [
+          "1hgcm82633a004352"
+        ]
+      },
+      "notes": "rules-engine#110"
+    },
+    {
+      "id": "vin-in-sections-behind-its-label",
+      "text": "Fahrgestellnummer 1HG-CM8263-3A004352",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "VIN": [
+          "1HG-CM8263-3A004352"
+        ]
+      }
+    },
+    {
+      "id": "vin-lower-case-without-a-label-stays-unmasked",
+      "text": "code 1hgcm82633a004352 in the log",
+      "countries": null,
+      "mustNotDetect": [
+        "VIN"
+      ]
+    },
+    {
+      "id": "ie-ppsn-is-ssn",
+      "text": "PPSN: 6828836BW",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "SSN": [
+          "6828836BW"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "rules-engine#111: canon SSN, 'A PPSN is SSN, never NATIONAL_ID'."
+    },
+    {
+      "id": "at-svnr-is-ssn",
+      "text": "SVNR: 1237 010180",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "SSN": [
+          "1237 010180"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ]
+    },
+    {
+      "id": "de-rentenversicherungsnummer-is-not-an-amount",
+      "text": "Rentenversicherungsnummer 65 170839 J 003",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "SSN": [
+          "65 170839 J 003"
+        ]
+      },
+      "notes": "rules-engine#111: 'Rent' + 'enversicherungsnummer' read as an amount label."
+    },
+    {
+      "id": "amount-label-still-suppresses",
+      "text": "Rent: 1250000",
+      "countries": [
+        "UK"
+      ],
+      "mustNotDetect": [
+        "PHONE",
+        "NATIONAL_ID"
+      ]
+    },
+    {
+      "id": "nl-big-is-healthcare-provider",
+      "text": "BIG-registratienummer: 49012345601",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "HEALTHCARE_PROVIDER": [
+          "49012345601"
+        ]
+      },
+      "notes": "rules-engine#111"
+    },
+    {
+      "id": "nl-big-phone-shaped-is-healthcare-provider",
+      "text": "BIG-nummer: 0612345678",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "HEALTHCARE_PROVIDER": [
+          "0612345678"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ]
+    },
+    {
+      "id": "de-lanr-is-healthcare-provider",
+      "text": "Lebenslange Arztnummer: 987321564",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "HEALTHCARE_PROVIDER": [
+          "987321564"
+        ]
+      }
+    },
+    {
+      "id": "de-bsnr-is-not-a-bsn",
+      "text": "BSNR 721385600",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "HEALTHCARE_PROVIDER": [
+          "721385600"
+        ]
+      },
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "rules-engine#111: the Dutch 'bsn' cue ran on into 'BSNR'."
+    },
+    {
+      "id": "nl-bsn-label-still-a-cue",
+      "text": "BSN-nummer 111222333",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "111222333"
+        ]
+      }
+    },
+    {
+      "id": "uk-gmc-is-healthcare-provider",
+      "text": "GMC number 7012345",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "HEALTHCARE_PROVIDER": [
+          "7012345"
+        ]
+      }
+    },
+    {
+      "id": "fr-rpps-is-healthcare-provider",
+      "text": "RPPS 10101234567",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "HEALTHCARE_PROVIDER": [
+          "10101234567"
+        ]
+      }
+    },
+    {
+      "id": "pl-pwz-is-healthcare-provider",
+      "text": "numer PWZ 1234567",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "HEALTHCARE_PROVIDER": [
+          "1234567"
+        ]
+      }
     }
   ]
 }

@@ -94,7 +94,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
 
   // National identity number.
   [EntityType.NATIONAL_ID,
-   /(?<![A-Za-z0-9_])(?:bsn|burgerservicenummer(?:\s*\(bsn\))?|personnummer|rijksregisternummer|nationaal\s*nummer|numéro\s*national|national\s*(?:id|number)|identiteitsnummer|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dnie?(?![A-Za-z]|[^\x00-\x7F])|rr|nn|nir|insz|niss|nis|matricule|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu|ahv(?:-?(?:nr|nummer))?|avs)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:bsn(?!r)|burgerservicenummer(?:\s*\(bsn\))?|personnummer|rijksregisternummer|nationaal\s*nummer|numéro\s*national|national\s*(?:id|number)|identiteitsnummer|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie|dnie?(?![A-Za-z]|[^\x00-\x7F])|rr|nn|nir|insz|niss|nis|matricule|id\s*card(?:\s*(?:no|nr|number))?|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu|ahv(?:-?(?:nr|nummer))?|avs)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Cyprus: "ID number" in both official languages, plus the Greek abbreviation
   // ΑΔΤ (Αστυνομική Ταυτότητα). Neither has a phone reading.
@@ -124,7 +124,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
   // Healthcare provider: the clinician or practice, not the patient — the Dutch
   // AGB-code, the German LANR, the UK GMC number.
   [EntityType.HEALTHCARE_PROVIDER,
-   /(?<![A-Za-z0-9_])(?:agb-?code|lanr|bsnr|gmc(?:\s*(?:no|number|reg))?|big-?nummer|zorgverlener(?:snummer)?)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:agb-?code|lanr|bsnr|gmc(?:\s*(?:no|number|reg))?|big(?:-?registratie)?-?(?:nummer|nr)|zorgverlener(?:snummer)?|lebenslange\s*arztnummer|betriebsst[äa]ttennummer|rpps|adeli|pwz)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Company / trade register. "Companies House" and "Company Registration
   // Number" are written out: the tail allows a run-on *or* one qualifier word,

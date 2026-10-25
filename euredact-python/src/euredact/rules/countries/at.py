@@ -14,8 +14,10 @@ class ATConfig(CountryConfig):
         self.name = "Austria"
         self.patterns = [
             # --- SVNR (Sozialversicherungsnummer) — 10 digits ---
+            # SSN: Austria has no national ID, and the SVNr is its separate
+            # social-insurance number (canon SSN; rules-engine#111).
             PatternDef(
-                entity_type=EntityType.NATIONAL_ID,
+                entity_type=EntityType.SSN,
                 pattern=r"\b\d{4}\s?\d{6}\b",
                 validator="austrian_svnr",
                 description="Austrian SVNR — 10 digits with check digit",

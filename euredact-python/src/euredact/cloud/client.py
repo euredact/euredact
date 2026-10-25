@@ -259,7 +259,11 @@ def _to_result(payload: dict, *, text: str) -> RedactResult:
             text=span.get("text", ""),
             source=source,
             country=None,
-            confidence=span.get("confidence") or "high",
+            # A model span carries no evidence of its own: report the service's
+            # confidence when it sends one, never invent "high" (rules-engine#108).
+            confidence=(span.get("confidence") or None)
+            if source is DetectionSource.CLOUD
+            else (span.get("confidence") or "high"),
         ))
     detections.sort(key=lambda d: (d.start, -d.end))
     return RedactResult(

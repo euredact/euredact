@@ -275,7 +275,7 @@ interface Detection {
   text: string;                    // The matched substring
   source: DetectionSource;         // "rules" or "cloud"
   country: string | null;          // ISO code or null for shared/custom patterns
-  confidence: string;              // "high" | "medium" | "low" — see below
+  confidence: string | null;       // "high" | "medium" | "low"; null for a cloud-model span — see below
   countryConfidence?: number;      // How strongly the document supports `country`,
                                    // in [0, 1]. 0 means the attribution rests on
                                    // a checksum alone.
@@ -292,6 +292,7 @@ about whether the span is masked — every detection is, at every level.
 | `"high"` | a pattern matched and, where one exists, its checksum passed |
 | `"medium"` | the type comes from a label touching the span, because no pattern of that type claimed it — `Αρ. Ταυτότητας: 00892341` is a `NATIONAL_ID` although nothing can checksum it |
 | `"low"` | a pattern matched, its checksum *failed*, and the document labels the span as that very type — `Rijksregisternummer: 85.03.19-284.73` is a national number with a bad check digit |
+| `null` | a span the cloud model found (`source` is `cloud`). The model reports no confidence, so none is invented: a model span is not checksum-backed, and filtering on `"high"` keeps rules detections only *(rules-engine#108)* |
 
 Filter on it when you need only checksum-backed detections:
 

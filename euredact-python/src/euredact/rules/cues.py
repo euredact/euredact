@@ -151,7 +151,9 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
 
     # ── National identity number ───────────────────────────────────────
     (EntityType.NATIONAL_ID, re.compile(
-        _B + r"(?:bsn|burgerservicenummer(?:\s*\(bsn\))?"
+        # "bsn" not followed by "r": with the run-on it read the German BSNR
+        # (a practice number) as a Dutch BSN label (rules-engine#111).
+        _B + r"(?:bsn(?!r)|burgerservicenummer(?:\s*\(bsn\))?"
         r"|personnummer|rijksregisternummer|nationaal\s*nummer"
         r"|numéro\s*national|national\s*(?:id|number)|identiteitsnummer"
         r"|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie"
@@ -160,6 +162,9 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         # date after it a national ID (rules-engine#100).
         r"|dnie?(?![A-Za-z]|[^\x00-\x7F])"
         r"|rr|nn|nir|insz|niss|nis|matricule"
+        # The canon's generic "ID card number" (rules-engine#111): without it a
+        # Maltese ID card read as an Irish PPSN in blind mode.
+        r"|id\s*card(?:\s*(?:no|nr|number))?"
         r"|ausweisnummer|personalausweis|osobní\s*číslo|ЕГН|EGN"
         # Polish identity card, in the cases a document uses (rules-engine#75).
         r"|dow[óo]d(?:u|em)?\s*osobist(?:y|ego|ym)|nr\s*dowodu"
@@ -214,7 +219,10 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
     # identifies the insured person.
     (EntityType.HEALTHCARE_PROVIDER, re.compile(
         _B + r"(?:agb-?code|lanr|bsnr|gmc(?:\s*(?:no|number|reg))?"
-        r"|big-?nummer|zorgverlener(?:snummer)?)" + _SEP, re.IGNORECASE)),
+        r"|big(?:-?registratie)?-?(?:nummer|nr)|zorgverlener(?:snummer)?"
+        # rules-engine#111: the canon's other provider registers.
+        r"|lebenslange\s*arztnummer|betriebsst[äa]ttennummer|rpps|adeli|pwz)"
+        + _SEP, re.IGNORECASE)),
 
     # ── Company / trade register ───────────────────────────────────────
     (EntityType.CHAMBER_OF_COMMERCE, re.compile(

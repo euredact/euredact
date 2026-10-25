@@ -34,7 +34,7 @@ const CURRENCY_AFTER = new RegExp(`^\\s*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_
 const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}\\s*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "i");
 const CURRENCY_BEFORE = new RegExp(`(?:(?:${CURRENCY_SYMBOL})|\\b(?:${CURRENCY_WORD}))\\s*$`, "i");
 const AMOUNT_LABEL_BEFORE =
-  /\b(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|Upphæð|Importe|Importo|Valore|Wartość|Kwota|Částka|Összeg|Sum|Beloop|Prix|Preis|Price|Loyer|Miete|Huur|Rent|Betrag)\s*(?:\w+\s*)?:?\s*$/i;
+  /\b(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|Upphæð|Importe|Importo|Valore|Wartość|Kwota|Částka|Összeg|Sum|Beloop|Prix|Preis|Price|Loyer|Miete|Huur|Rent|Betrag)(?:\s+\w+)?\s*:?\s*$/i; // second word separate: not "Rent"+"enversicherungsnummer" (rules-engine#111)
 
 // Use Unicode-aware word boundary via \p{L} negative lookahead instead of \b
 // because JS \b is ASCII-only and fails on Unicode letters (e.g. "München" → \bm\b matches M before ü)

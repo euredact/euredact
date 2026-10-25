@@ -13,6 +13,13 @@ class FRConfig(CountryConfig):
         self.code = "FR"
         self.name = "France"
         self.patterns = [
+            # Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+            PatternDef(entity_type=EntityType.HEALTHCARE_PROVIDER, pattern=r"\b\d{11}\b",
+                       validator=None, description="French RPPS — 11 digits",
+                       context_keywords=["RPPS", "Répertoire Partagé des Professionnels"], requires_context=True),
+            PatternDef(entity_type=EntityType.HEALTHCARE_PROVIDER, pattern=r"\b\d{9}\b",
+                       validator=None, description="French ADELI — 9 digits",
+                       context_keywords=["ADELI"], requires_context=True),
             # --- NIR (Numéro d'Inscription au Répertoire / INSEE number) ---
             # Format: S AA MM DDD CCC NNN CC (15 digits)
             PatternDef(

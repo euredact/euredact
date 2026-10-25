@@ -10,6 +10,10 @@ class UKConfig(CountryConfig):
         self.code = "UK"
         self.name = "United Kingdom"
         self.patterns = [
+            # Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+            PatternDef(entity_type=EntityType.HEALTHCARE_PROVIDER, pattern=r"\b\d{7}\b",
+                       validator=None, description="UK GMC number — 7 digits",
+                       context_keywords=["GMC number", "GMC no", "GMC reference", "GMC reg", "GMC:", "GMC-Nr", "General Medical Council"], requires_context=True),
             # National Insurance Number: LL NN NN NN L. A social-security
             # number, so SSN: the canon defaults NINO to SSN and keeps TAX_ID
             # for a purely fiscal form, which no pattern can see
