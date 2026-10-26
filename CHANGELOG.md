@@ -27,21 +27,23 @@ which both test suites run.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-26
+
 ### Added
 
 - Per-type corpus results under the API's type names (`make eval RESULTS=docs/corpus-results` writes `docs/corpus-results.json` and `.md`): support, hits, mistyped, partial, misses, recall, detections, false positives and precision for every type, in both country modes, with the category-to-type mapping, the conditions behind each figure and the corpus composition computed from the data. The regression records are excluded from the figures and reported as pass/fail. The scorer now locates a labelled value at every occurrence that stands on its own and lies inside no other labelled value: a correct detection of a repeat no longer counts as a false positive (56 per mode), a value left readable at a later occurrence is no longer scored as recalled, and a postal code whose first occurrence sits inside an ID, phone or IBAN is judged where it actually stands (24 more hits). *(rules-engine#109)*
 - Both SDKs cover everything an API key can do: cloud results carry `cloud` (job id, model version, `usage` with its reasons, and what the model could not place); an idempotency key on the top-level cloud call; `Account` (summary, credits, credit history, usage, usage by key, keys, revoke a key), `Jobs.retrieve`, `Batches.list` and the batch cost fields; `NotFoundError`, `ResultExpiredError` and `RateLimitedError`. *(rules-engine#89)*
-- Regression records for the corpus (`euredact-python/tests/regression_corpus.py`, `make regression-corpus`): 258 records over the layouts of #82, #90, #91, #93, #94, #100-#103, #105 and #106, which the generated corpus did not contain, with values that must stay unmasked beside those that must be masked. `make check` runs them as a gate; written into `EUREDACT_CORPUS` they reach `sweep`, `parity` and `eval`. *(rules-engine#82, #90, #91, #93, #94)*
-- Batches for the cloud tier: `create()` masks locally and uploads only masked text, keeping originals in a private local batch file; `results()` maps the answers back from it after a hash check, once, then wipes the originals. Both SDKs share the file format. `custom_id`s are checked against the gateway's character rule before any document is masked. *(rules-engine#84, #88)*
+- Regression records for the corpus (`euredact-python/tests/regression_corpus.py`, `make regression-corpus`): 372 records over the layouts of #82, #90, #91, #93, #94, #100-#103, #105, #106, #110 and #111, which the generated corpus did not contain, with values that must stay unmasked beside those that must be masked. `make check` runs them as a gate; written into `EUREDACT_CORPUS` they reach `sweep`, `parity` and `eval`. *(rules-engine#82, #90, #91, #93, #94)*
+- Batches for the cloud tier: `create()` masks locally and uploads only masked text, keeping originals in a private local batch file; `results()` maps the answers back from it after a hash check, once, then wipes the originals. Both SDKs share the file format. `custom_id`s are checked against the gateway's character rule before any document is masked. Batches need retention on the workspace: without it `create()` raises `CloudError` 403 (`retention_required`) before anything is uploaded; `AccountSummary.batches_available` says so beforehand. *(rules-engine#84, #88)*
 - About 10,400 BIC6 prefixes for the 31 supported countries from the GLEIF BIC-to-LEI mapping (developed by SWIFT, redistributable under the BIC/LEI Mapping Table License Agreement; notice in `NOTICE`), with `scripts/refresh_bic_registry.py` to regenerate them. *(rules-engine#57)*
 
 - Polish identity card (dowód osobisty, with its check digit) as `NATIONAL_ID`, REGON (9 or 14 digits, mod-11) as `CHAMBER_OF_COMMERCE`, and the driving-licence number and document number as `DRIVERS_LICENSE`, each behind its label; beside a passport mention they no longer come out as `[PASSPORT]`. *(rules-engine#75, #76, #77)*
 
 ### Changed
 
-- Every credential is reported as `SECRET`: the cloud model's `CREDENTIAL` maps to it, and `CREDENTIAL` remains only as a legacy alias. *(rules-engine#111)*
-- The Irish PPSN and the Austrian SVNr are `SSN`, not `NATIONAL_ID`, as the canon defines them (both countries have no separate national ID). *(rules-engine#111)*
-- A span the cloud model found reports no `confidence` (`None` / `null`) instead of an invented `"high"`; filtering on `"high"` keeps checksum-backed rules detections only. *(rules-engine#108)*
+- **Breaking:** every credential is reported as `SECRET`, and `EntityType.CREDENTIAL` is now an alias whose value is `"SECRET"`: the cloud model's `CREDENTIAL` maps to it, and `CREDENTIAL` remains only as a legacy alias. *(rules-engine#111)*
+- **Breaking:** the Irish PPSN and the Austrian SVNr are `SSN`, not `NATIONAL_ID`, as the canon defines them (both countries have no separate national ID). *(rules-engine#111)*
+- **Breaking, cloud tier (private alpha):** a span the cloud model found reports no `confidence` (`None` / `null`) instead of an invented `"high"`; filtering on `"high"` keeps checksum-backed rules detections only. *(rules-engine#108)*
 - A daily-quota `429` raises `QuotaExceededError` at once instead of after every retry; the edge's rate-limit `429` is still retried and then raises `RateLimitedError`, a subclass. *(rules-engine#89)*
 - The Python engine is about a quarter faster on long documents: the label lookup that ranks candidates is read once per offset and skipped in one search where no label exists; output unchanged. *(Python only)* *(rules-engine#79)*
 - A pattern RE2 rejects only for a lookaround keeps the RE2 prefilter through a lookaround-free superset; patterns outside it fall from 35 to 23. *(Python only)* *(rules-engine#72)*
@@ -86,7 +88,7 @@ which both test suites run.
 
 ### Security
 
-- The cloud base URL must use TLS: a non-`https` URL (from `configure`, `EUREDACT_BASE_URL` or a hand-built config) now raises instead of sending the API key and text over plain HTTP; `http://` stays allowed to `localhost`, `127.0.0.1` and `::1`. *(rules-engine#86)*
+- **Breaking:** the cloud base URL must use TLS: a non-`https` URL (from `configure`, `EUREDACT_BASE_URL` or a hand-built config) now raises instead of sending the API key and text over plain HTTP; `http://` stays allowed to `localhost`, `127.0.0.1` and `::1`. *(rules-engine#86)*
 
 ## [0.6.0] - 2026-10-05
 
@@ -408,7 +410,8 @@ which both test suites run.
 
 - First release. *(Python only)* 31 countries, 20+ PII entity types, checksum validation, two-pass detection, context-aware detection, batch processing, true async, referential integrity, Aho-Corasick acceleration, and zero required dependencies.
 
-[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v0.6.0...main
+[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.0...main
+[0.7.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.6.0...v0.7.0
 [0.6.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.5.1...v0.6.0
 [0.5.1]: https://git.euredact.dev/euredact/rules-engine/compare/v0.5.0...v0.5.1
 [0.5.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.4.0...v0.5.0

@@ -11,7 +11,7 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
-## Unreleased
+## 0.7.0 (2026-10-26)
 
 ### Added
 

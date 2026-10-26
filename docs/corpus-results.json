@@ -1,12 +1,12 @@
 {
  "engine": {
   "package": "euredact",
-  "version": "0.6.0",
-  "commit": "3dfcb1a",
-  "describe": "v0.6.0-63-g3dfcb1a",
-  "released": false
+  "version": "0.7.0",
+  "commit": "e3b93cd",
+  "describe": "v0.6.0-79-ge3b93cd",
+  "released": true
  },
- "generated": "2026-10-25",
+ "generated": "2026-10-26",
  "corpus": {
   "files": [
    {
@@ -590,11 +590,11 @@
      "NATIONAL_ID",
      "NATIONAL_ID_CARD"
     ],
-    "detections": 101455,
-    "tp": 101291,
-    "fp": 164,
+    "detections": 94411,
+    "tp": 94248,
+    "fp": 163,
     "recall": 99.69,
-    "precision": 99.84,
+    "precision": 99.83,
     "also_accepts": [
      "SSN",
      "TAX_ID"
@@ -695,11 +695,11 @@
     "categories": [
      "SOCIAL_SECURITY"
     ],
-    "detections": 7467,
-    "tp": 7467,
-    "fp": 0,
+    "detections": 14511,
+    "tp": 14510,
+    "fp": 1,
     "recall": 100.0,
-    "precision": 100.0,
+    "precision": 99.99,
     "also_accepts": [
      "NATIONAL_ID"
     ]
@@ -902,8 +902,8 @@
    },
    "HEALTH_INSURANCE": {
     "support": 1185,
-    "hits": 1180,
-    "mistyped": 5,
+    "hits": 1185,
+    "mistyped": 0,
     "partial": 0,
     "misses": 0,
     "unlocatable": 0,
@@ -911,10 +911,10 @@
      "HEALTH_ID",
      "HEALTH_INSURANCE"
     ],
-    "detections": 1029,
-    "tp": 1029,
+    "detections": 1076,
+    "tp": 1076,
     "fp": 0,
-    "recall": 99.58,
+    "recall": 100.0,
     "precision": 100.0,
     "also_accepts": [
      "NATIONAL_ID"
@@ -1016,11 +1016,11 @@
      "NATIONAL_ID",
      "NATIONAL_ID_CARD"
     ],
-    "detections": 101534,
-    "tp": 100706,
-    "fp": 828,
+    "detections": 94728,
+    "tp": 93986,
+    "fp": 742,
     "recall": 99.57,
-    "precision": 99.18,
+    "precision": 99.22,
     "also_accepts": [
      "SSN",
      "TAX_ID"
@@ -1121,11 +1121,11 @@
     "categories": [
      "SOCIAL_SECURITY"
     ],
-    "detections": 7834,
-    "tp": 7834,
-    "fp": 0,
+    "detections": 14598,
+    "tp": 14512,
+    "fp": 86,
     "recall": 99.61,
-    "precision": 100.0,
+    "precision": 99.41,
     "also_accepts": [
      "NATIONAL_ID"
     ]
@@ -1141,11 +1141,11 @@
      "TAX_ID",
      "TAX_ID_PERSONAL"
     ],
-    "detections": 15176,
+    "detections": 15171,
     "tp": 15069,
-    "fp": 107,
+    "fp": 102,
     "recall": 99.46,
-    "precision": 99.29,
+    "precision": 99.33,
     "also_accepts": []
    },
    "UUID": {
@@ -1216,7 +1216,7 @@
   ]
  },
  "regressions": {
-  "records": 258,
+  "records": 372,
   "failures": 0
  }
 }
