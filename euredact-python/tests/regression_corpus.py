@@ -309,6 +309,33 @@ def _account_with_bad_check(rng):
     return f"Nr rachunku: {v}\nKontakt: {e}", [pii(e, "EMAIL", "PL")], [v]
 
 
+def _date_before_masked_birth(rng):
+    """On masked text a birth label is the masked date's (#111)."""
+    d = _date(rng, (2024, 2030))
+    e = email(rng)
+    return (f"Titre de séjour valable jusqu'au {d}, né le [DOB]. Contact: {e}",
+            [pii(e, "EMAIL", "FR")], [d])
+
+
+def _written_birth_year(lead: str, months: list[str], country: str):
+    """The year of a written birth date is not a postcode (#111)."""
+    def build(rng):
+        y = str(rng.randrange(1925, 1950))
+        pc = str(rng.randrange(10000, 99999))
+        text = (f"{lead} {rng.randrange(1, 28)}. {rng.choice(months)} {y}\n"
+                f"Anschrift: Lindenweg {rng.randrange(1, 90)}, {pc} München")
+        return text, [pii(pc, "POSTAL_CODE", country)], [y]
+    return build
+
+
+def _prefixed_reference(rng):
+    """A letter-prefixed number is not a country-prefixed postcode (#111)."""
+    pc = str(rng.randrange(1000, 9999))
+    ref = f"{rng.choice(['K', 'LX', 'B', 'Q'])}-{rng.randrange(10000, 99999)}"
+    text = f"Adresse: Hauptstraße 12, {pc} Linz\nKundennummer: {ref}"
+    return text, [pii(pc, "POSTAL_CODE", "AT")], [ref]
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -361,6 +388,11 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#105: after decyzja", _case_reference("zgodnie z decyzją nr ")),
     # #106: no card inside an account number.
     ("rules-engine#106: account number with a bad check", _account_with_bad_check),
+    # #111: dates and postcodes.
+    ("rules-engine#111: date before a masked birth date", _date_before_masked_birth),
+    ("rules-engine#111: written birth year (de)", _written_birth_year(
+        "Geburtsdatum:", ["Januar", "März", "Juli", "Oktober"], "DE")),
+    ("rules-engine#111: prefixed reference beside an address", _prefixed_reference),
     # #103: residence card and visa sticker.
     ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
     ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),
