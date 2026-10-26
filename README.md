@@ -367,17 +367,24 @@ false positive — see `euredact-python/tests/metrics.py`, which reproduces this
 
 | | precision | recall | F1 |
 |---|---:|---:|---:|
-| With country hints | 99.8% | 99.8% | **99.8%** |
-| Blind (no `countries` passed) | 99.6% | 99.8% | **99.7%** |
+| With country hints | 99.9% | 99.8% | **99.8%** |
+| Blind (no `countries` passed) | 99.7% | 99.7% | **99.7%** |
 
-Blind detection is within 0.2 points of hinted on every measure — recall is
-identical and precision costs 0.2 — so the engine does not need to be told the
-country. False positives are the whole of the difference: 1,232 with hints,
-2,372 blind.
+Blind detection is within 0.2 points of hinted on every measure — recall costs
+0.1 and precision 0.2 — so the engine does not need to be told the country.
+False positives: 759 with hints, 1,684 blind. The whole of the blind recall gap
+is values masked under another type (1,189 against 264 with hints): blind
+detection hides as many values as hinted, and these count as misses here
+because their type is wrong.
 
 Dates of birth are excluded from these figures: the rules engine emits one only
 with a keyword or structural cue, because bare dates are the
-[cloud tier](#cloud-tier)'s job. Measured on its own, DOB recall is 62.8%.
+[cloud tier](#cloud-tier)'s job. Measured on its own, DOB recall is 100.0%
+(89,805 of 89,805; every birth date in this corpus carries such a cue).
+
+Per entity type, under the names the API returns, the figures are in
+[`docs/corpus-results.md`](docs/corpus-results.md), regenerated with each
+release.
 
 ## Running the checks
 

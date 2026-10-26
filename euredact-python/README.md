@@ -1445,7 +1445,7 @@ Custom patterns are always active regardless of either parameter.
 
 Passing neither is safe, and is the right default for mixed-origin data: the
 engine infers what it can and reports it in `result.inferred_countries`. On our
-152,300-document corpus, blind detection scores 99.6% precision against 99.8%
+152,300-document corpus, blind detection scores 99.7% precision against 99.9%
 with country hints — a 0.2-point gap, down from 3.4 points before inference.
 
 ## Chunked documents
