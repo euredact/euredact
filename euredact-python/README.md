@@ -30,7 +30,7 @@ print(result.detections)
 ## Features
 
 - **31 European countries** (see list below)
-- **41 PII entity types** (30 from the rules engine, 11 from the
+- **40 PII entity types** (30 from the rules engine, 10 from the
   [cloud tier](#cloud-tier)): national IDs, IBANs, phone numbers, email addresses,
   VAT numbers, license plates, VIN, credit cards, BIC/SWIFT, IMEI, GPS
   coordinates, UUIDs, social handles, MAC addresses, IP/IPv6 addresses, health
