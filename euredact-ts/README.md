@@ -831,6 +831,7 @@ try {
 | `NotConfiguredError` | — | no API key configured, or no global `fetch` | no |
 | `CloudError` | 401 | the key is wrong or revoked | no |
 | `CloudError` | 403 | the service refused the call. Account calls are accepted with an API key while the service does not require a browser `Origin`; if that changes they answer 403 | no |
+| `CloudError` | 403 | `Batches.create` on a workspace without retention: `detail.code === "retention_required"` (see [Batches](#batches)) | no |
 | `NotFoundError` | 404 | no such job, batch or key — or another account's; also every batch call, `list()` included, while batches are not enabled on the service (`batches_not_enabled`) | no |
 | `CloudError` | 409 | `revokeKey` on a key already revoked | no |
 | `ResultExpiredError` | 410 | the job's result is past retention | no |
@@ -849,8 +850,10 @@ the service (see [Batches](#batches)).
 
 ### Batches
 
-> **Not yet available:** the gateway's `/v1/batches` endpoint is still being
-> built (euredact-inference#40). The SDK side is here so both ship together.
+> **Availability:** private alpha, like the rest of the cloud tier. Batches
+> need **retention** on the workspace (see below); while batches are not
+> enabled on the service, every batch call answers `NotFoundError`
+> (`batches_not_enabled`).
 
 A batch hands up to 5,000 documents to the cloud tier and collects the answers
 within 24 hours, at a lower price and without your plan's concurrency limit.
@@ -877,6 +880,31 @@ if (outcome.status === "resolved") {
   for (const [customId, doc] of Object.entries(outcome.documents)) {
     console.log(customId, doc.ok ? doc.result!.redactedText : `${doc.error}: ${doc.message}`);
   }
+}
+```
+
+**Batches need retention.** The service holds each document until it is
+processed and each result until you fetch it, so a workspace that erases
+documents on delivery (`retentionMode === "none"`, or 0 hours of retention)
+cannot create one. `create()` then throws `CloudError` with status 403 and
+`detail.code === "retention_required"`, before anything is uploaded or written
+locally. The workspace owner turns retention on in the console, on the
+**Account** tab. To check first:
+
+```ts
+import { Account, CloudError } from "euredact";
+
+if (!(await new Account().summary()).batchesAvailable) {
+  // no retention on this workspace: send the documents with mode: "cloud"
+}
+
+try {
+  await batches.create(documents);
+} catch (err) {
+  if (err instanceof CloudError && err.status === 403 && err.detail?.code === "retention_required") {
+    // ask the workspace owner to turn retention on
+  }
+  throw err;
 }
 ```
 
