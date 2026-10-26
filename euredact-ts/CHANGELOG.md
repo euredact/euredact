@@ -84,6 +84,20 @@ narrative lives. Sections here use that vocabulary
 
 ### Changed
 
+- **Every credential is `SECRET`.** The cloud model labels prose credentials
+  (passwords, connection-string secrets) `CREDENTIAL`, and the rules engine
+  types shaped keys and tokens `SECRET`, so one kind of data arrived under two
+  names. The SDK now reports both as `SECRET`; `EntityType.CREDENTIAL` is kept as a
+  legacy alias of it, like `IBAN` for `BANK_ACCOUNT`. *(rules-engine#111)*
+- **The Irish PPSN and the Austrian SVNr are `SSN`.** The canon types a
+  social-security number `SSN` where a country has no separate national ID
+  ("A PPSN is SSN, never NATIONAL_ID"); both were `NATIONAL_ID`. The Swiss
+  AVS/AHV stays `NATIONAL_ID` by the decision on #82. *(rules-engine#111)*
+- **A cloud-model span reports no confidence.** The hosted model emits none,
+  and the SDK filled in `"high"`, so a caller keeping only `"high"` detections
+  (as this README advises for checksum-backed ones) kept every model span too.
+  A model span now has `confidence` `null` unless the
+  service sends one; rules spans are unchanged. *(rules-engine#108)*
 - **A daily-quota `429` is no longer retried.** The gateway's quota answer
   (JSON with `detail.used` and `detail.limit`) will not clear before the day
   does, so retrying it only delayed `QuotaExceededError` through every
@@ -146,6 +160,20 @@ narrative lives. Sections here use that vocabulary
   table header over the lines below it, and its "naissance" labelled the
   date in `délivré le 18.06.2021`. A `label : value` line is no header.
   *(rules-engine#111)*
+- **IMEI and VIN forms behind their label were missed.** A 14-digit IMEI
+  (without its check digit), a 16-digit IMEISV, a 15-digit IMEI whose check
+  digit fails, a lower-case VIN and a VIN in its three sections
+  (`1HG-CM8263-3A004352`) are now masked when "IMEI" or a VIN label
+  (`VIN`, `FIN`, `Fahrgestellnummer`, `châssis`, …) is near. *(rules-engine#110)*
+- **Healthcare-provider numbers are `HEALTHCARE_PROVIDER`.** The label table
+  knew LANR, BSNR, GMC and BIG, but no pattern produced a candidate, so the
+  numbers were missed or claimed by a phone or a foreign checksum. Label-gated
+  patterns now cover the canon's Dutch BIG, German LANR and BSNR, UK GMC,
+  French RPPS and ADELI, and Polish PWZ. Two label bugs went with it: the
+  Dutch `BSN` label ran on into "BSNR", typing a German practice number as a
+  Dutch national ID, and the amount label "Rent" ran on into
+  "Rentenversicherungsnummer", dropping the German pension number after it
+  as a money amount. *(rules-engine#111)*
 - **A Polish military booklet number with a two-letter series was split or
   missed.** The pattern added for #102 took a three-letter series only; the
   usual series has two letters. `EL 0473218` was `EL [PHONE]`, and

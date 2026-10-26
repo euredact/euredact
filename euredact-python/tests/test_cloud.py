@@ -710,3 +710,37 @@ def test_usage_reaches_the_caller_through_cloud_mode(wire, monkeypatch):
 
 def test_a_rules_result_has_no_cloud_info():
     assert euredact.redact(DOC, countries=["BE"]).cloud is None
+
+
+# -- a model span has no confidence of its own (rules-engine#108) -------------
+
+def test_a_model_span_reports_no_confidence_unless_the_service_sends_one():
+    payload = dict(SUCCESS, entities=[
+        {"start": 8, "end": 21, "text": "Bas Verhoeven", "type": "PERSON_NAME",
+         "source": "model"},
+        {"start": 27, "end": 43, "text": "+32 475 12 34 56", "type": "PHONE",
+         "source": "rules"},
+    ])
+    with _client(lambda r: _response(200, payload)) as client:
+        by_type = {d.entity_type: d for d in client.redact(DOC, country="BE").detections}
+    assert by_type[EntityType.PERSON_NAME].confidence is None
+    assert by_type[EntityType.PHONE].confidence == "high"
+
+
+def test_a_model_span_keeps_a_confidence_the_service_sends():
+    payload = dict(SUCCESS, entities=[
+        {"start": 8, "end": 21, "text": "Bas Verhoeven", "type": "PERSON_NAME",
+         "source": "model", "confidence": "medium"}])
+    with _client(lambda r: _response(200, payload)) as client:
+        assert client.redact(DOC, country="BE").detections[0].confidence == "medium"
+
+
+def test_the_models_credential_is_reported_as_secret():
+    """One type for every credential (decided on rules-engine#111)."""
+    payload = dict(SUCCESS, entities=[
+        {"start": 8, "end": 21, "text": "Bas Verhoeven", "type": "CREDENTIAL",
+         "source": "model"}])
+    with _client(lambda r: _response(200, payload)) as client:
+        det = client.redact(DOC, country="BE").detections[0]
+    assert det.entity_type is EntityType.SECRET
+    assert EntityType.CREDENTIAL is EntityType.SECRET

@@ -14,6 +14,13 @@ class DEConfig(CountryConfig):
         self.code = "DE"
         self.name = "Germany"
         self.patterns = [
+            # Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+            PatternDef(entity_type=EntityType.HEALTHCARE_PROVIDER, pattern=r"\b\d{9}\b",
+                       validator=None, description="German LANR — 9 digits",
+                       context_keywords=["LANR", "Lebenslange Arztnummer", "Arztnummer"], requires_context=True),
+            PatternDef(entity_type=EntityType.HEALTHCARE_PROVIDER, pattern=r"\b\d{9}\b",
+                       validator=None, description="German BSNR — 9 digits",
+                       context_keywords=["BSNR", "Betriebsstättennummer", "Betriebsstätten-Nr"], requires_context=True),
             # --- Steuerliche Identifikationsnummer (Tax ID) ---
             # 11 digits, first digit != 0, ISO 7064 check digit
             # Can appear as 11 consecutive digits or grouped with spaces/dots

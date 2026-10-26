@@ -233,6 +233,9 @@ const SHARED: CountryConfig = {
     p(EntityType.BIC, String.raw`\b[A-Z]{4} [A-Z]{2} [A-Z0-9]{2}(?: [A-Z0-9]{3})?\b`, "bic", "BIC/SWIFT code (space-separated groups)"),
     p(EntityType.CREDIT_CARD, String.raw`\b(?:4[0-9]{3}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}|5[1-5][0-9]{2}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}|3[47][0-9]{2}[\s\-]?[0-9]{6}[\s\-]?[0-9]{5})\b`, "luhn"),
     p(EntityType.VIN, String.raw`\b[A-HJ-NPR-Z0-9]{17}\b`, "vin"),
+    // Behind its label: any case, or in its three sections 3-6-8 (rules-engine#110).
+    p(EntityType.VIN, String.raw`\b[A-HJ-NPR-Za-hj-npr-z0-9]{13}\d{4}\b`, "vin", "VIN — any case, behind its label", ["VIN", "FIN:", "FIN-Nr", "FIN-Nummer", "Fahrgestellnummer", "Fahrzeug-Identifizierungsnummer", "Fahrzeugidentifizierungsnummer", "châssis", "chassis", "chassisnummer", "chasisnummer", "numéro de série", "vehicle identification", "numero di telaio", "telaio", "bastidor", "número de bastidor", "VIN-code", "VIN-kod"], true),
+    p(EntityType.VIN, String.raw`\b[A-HJ-NPR-Za-hj-npr-z0-9]{3}[\s\-][A-HJ-NPR-Za-hj-npr-z0-9]{6}[\s\-][A-HJ-NPR-Za-hj-npr-z0-9]{4}\d{4}\b`, "vin", "VIN — in sections, behind its label", ["VIN", "FIN:", "FIN-Nr", "FIN-Nummer", "Fahrgestellnummer", "Fahrzeug-Identifizierungsnummer", "Fahrzeugidentifizierungsnummer", "châssis", "chassis", "chassisnummer", "chasisnummer", "numéro de série", "vehicle identification", "numero di telaio", "telaio", "bastidor", "número de bastidor", "VIN-code", "VIN-kod"], true),
     p(EntityType.IP_ADDRESS, String.raw`\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b`),
     // Branch order is load-bearing: alternation is leftmost-first, not
     // longest-match, so the form that consumes most is tried first, and the
@@ -247,6 +250,8 @@ const SHARED: CountryConfig = {
     p(EntityType.MAC_ADDRESS, String.raw`\b[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\b`, null, "Cisco"),
     p(EntityType.IMEI, String.raw`\b\d{15}\b`, "imei"),
     p(EntityType.IMEI, String.raw`\b\d{2}[\-\s]\d{6}[\-\s]\d{6}[\-\s]\d\b`, "imei", "formatted"),
+    // Behind "IMEI": 14 digits, the 16-digit IMEISV, or 15 with a failed check (rules-engine#110).
+    p(EntityType.IMEI, String.raw`\b\d{14,16}\b`, null, "IMEI / IMEISV — behind its label", ["IMEI"], true),
     p(EntityType.GPS_COORDINATES, String.raw`-?(?:[1-8]?\d(?:\.\d{4,})|90(?:\.0{4,}))\s*[,;/]\s*-?(?:1[0-7]\d(?:\.\d{4,})|180(?:\.0{4,})|\d{1,2}(?:\.\d{4,}))`),
     p(EntityType.UUID, String.raw`\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b`),
     p(EntityType.SOCIAL_HANDLE, String.raw`(?<![\p{L}\p{N}_])@\p{L}[\p{L}\p{N}_.]{1,29}\b`),
@@ -314,6 +319,8 @@ const NL: CountryConfig = {
   code: "NL",
   name: "Netherlands",
   patterns: [
+    // Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+    p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{8,11}\b`, null, "Dutch BIG-registratienummer — 8-11 digits", ["BIG-nummer", "BIG nummer", "BIG-registratie", "BIG registratie", "BIG-nr", "BIG nr", "BIG:"], true),
     p(EntityType.NATIONAL_ID, String.raw`\b[0-9]{9}\b`, "bsn"),
     p(EntityType.NATIONAL_ID, String.raw`\b[0-9]{2,4}\.[0-9]{2,4}\.[0-9]{2,4}\b`, "bsn"),
     p(EntityType.IBAN, String.raw`\bNL\d{2}\s?[A-Z]{4}\s?\d{4}\s?\d{4}\s?\d{2}\b`, "iban"),
@@ -355,6 +362,9 @@ const DE: CountryConfig = {
   code: "DE",
   name: "Germany",
   patterns: [
+    // Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+    p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{9}\b`, null, "German LANR — 9 digits", ["LANR", "Lebenslange Arztnummer", "Arztnummer"], true),
+    p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{9}\b`, null, "German BSNR — 9 digits", ["BSNR", "Betriebsstättennummer", "Betriebsstätten-Nr"], true),
     p(EntityType.TAX_ID, String.raw`\b[1-9]\d{10}\b`, "german_tax_id"),
     p(EntityType.TAX_ID, String.raw`\b[1-9]\d[\s.]?\d{3}[\s.]?\d{3}[\s.]?\d{3}\b`, "german_tax_id"),
     p(EntityType.NATIONAL_ID, String.raw`\b[CFGHJKLMNPRTVWXYZ][0-9CFGHJKLMNPRTVWXYZ]{8}\d?\b`, null, "", ["Personalausweis", "Personalausweisnummer", "Ausweis", "Ausweisnummer", "Ausweis-Nr", "identity card", "Identitätskarte", "Perso", "PA-Nummer"], true),
@@ -384,7 +394,8 @@ const AT: CountryConfig = {
   code: "AT",
   name: "Austria",
   patterns: [
-    p(EntityType.NATIONAL_ID, String.raw`\b\d{4}\s?\d{6}\b`, "austrian_svnr"),
+    // SSN: Austria has no national ID; the SVNr is its separate social-insurance number (rules-engine#111).
+    p(EntityType.SSN, String.raw`\b\d{4}\s?\d{6}\b`, "austrian_svnr"),
     p(EntityType.IBAN, String.raw`\bAT\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bATU[\s.]?\d{8}\b`),
     p(EntityType.PHONE, String.raw`\b0\d{3,4}[\s\-]?\d{5,8}\b`),
@@ -423,6 +434,9 @@ const FR: CountryConfig = {
   code: "FR",
   name: "France",
   patterns: [
+    // Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+    p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{11}\b`, null, "French RPPS — 11 digits", ["RPPS", "Répertoire Partagé des Professionnels"], true),
+    p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{9}\b`, null, "French ADELI — 9 digits", ["ADELI"], true),
     p(EntityType.NATIONAL_ID, String.raw`\b[12]\s?\d{2}\s?(?:0[1-9]|1[0-2]|[2-9]\d)\s?\d{2}[0-9AB]?\s?\d{3}\s?\d{3}\s?\d{2}\b`, "french_nir"),
     p(EntityType.NATIONAL_ID, String.raw`\b\d{12}\b`, null, "", ["carte d'identité", "CNI", "carte nationale", "identity card", "pièce d'identité"], true),
     p(EntityType.IBAN, String.raw`\bFR\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{3}\b`, "iban"),
@@ -598,6 +612,8 @@ const PL: CountryConfig = {
   code: "PL",
   name: "Poland",
   patterns: [
+    // Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+    p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{7}\b`, null, "Polish PWZ — 7 digits", ["PWZ", "prawa wykonywania zawodu", "prawo wykonywania zawodu"], true),
     p(EntityType.NATIONAL_ID, String.raw`\b\d{11}\b`, "polish_pesel"),
     // NIP in the company (3-3-2-2) or the personal (3-2-2-3) grouping (rules-engine#94).
     p(EntityType.TAX_ID, String.raw`\b(?:\d{3}-?\d{3}-?\d{2}-?\d{2}|\d{3}-\d{2}-\d{2}-\d{3})\b`, "polish_nip"),
@@ -630,7 +646,8 @@ const IE: CountryConfig = {
   code: "IE",
   name: "Ireland",
   patterns: [
-    p(EntityType.NATIONAL_ID, String.raw`\b\d{7}[A-W][ABWTXZ]?\b`, "irish_pps"),
+    // The PPSN is SSN, never NATIONAL_ID: Ireland has no national ID (canon SSN; rules-engine#111).
+    p(EntityType.SSN, String.raw`\b\d{7}[A-W][ABWTXZ]?\b`, "irish_pps"),
     p(EntityType.IBAN, String.raw`\bIE\d{2}\s?[A-Z]{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b`, "iban"),
     p(EntityType.IBAN, String.raw`\bIE\d{2}[A-Z]{4}\d{14}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bIE[\s.]?\d{7}[A-Z]\b`),
@@ -646,6 +663,8 @@ const UK: CountryConfig = {
   code: "UK",
   name: "United Kingdom",
   patterns: [
+    // Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+    p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{7}\b`, null, "UK GMC number — 7 digits", ["GMC number", "GMC no", "GMC reference", "GMC reg", "GMC:", "GMC-Nr", "General Medical Council"], true),
     // UK NINO: a social-security number, so SSN, as the canon defaults it (rules-engine#47).
     p(EntityType.SSN, String.raw`\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?\d{2}\s?\d{2}\s?\d{2}\s?[ABCD]\b`),
     p(EntityType.HEALTH_INSURANCE, String.raw`\b\d{3}\s?\d{3}\s?\d{4}\b`, "uk_nhs", "", ["NHS", "NHS number", "health number", "NHS no"], true),

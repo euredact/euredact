@@ -69,7 +69,11 @@ class EntityType(str, Enum):
     BIOMETRIC_REF = "BIOMETRIC_REF"
     FINANCIAL_AMOUNT = "FINANCIAL_AMOUNT"
     QUASI_IDENTIFIER = "QUASI_IDENTIFIER"
-    CREDENTIAL = "CREDENTIAL"
+    # One type for every credential (decided on rules-engine#111): the model's
+    # CREDENTIAL (prose passwords, connection-string secrets) and the rules'
+    # SECRET (shaped keys and tokens) are both reported as SECRET. Kept as an
+    # alias, like IBAN, so code naming EntityType.CREDENTIAL keeps working.
+    CREDENTIAL = "SECRET"  # legacy alias -> SECRET
     URL = "URL"
 
     OTHER = "OTHER"
@@ -98,6 +102,9 @@ LEGACY_TYPE_ALIASES: dict[str, str] = {
     "NAME": "PERSON_NAME",
     "STREET_ADDRESS": "ADDRESS",
     "NATIONALITY_ETHNICITY": "SENSITIVE_ATTRIBUTE",
+    # The service's model labels prose credentials CREDENTIAL; the SDK reports
+    # every credential as SECRET (rules-engine#111).
+    "CREDENTIAL": "SECRET",
 }
 
 
@@ -139,7 +146,11 @@ class Detection:
     text: str
     source: DetectionSource
     country: str | None
-    confidence: str = "high"
+    confidence: str | None = "high"
+    """How the type was arrived at: "high", "medium" or "low" for a rules
+    detection. ``None`` for a span the cloud model found and reported no
+    confidence for: the model emits none today, and "high" would claim the
+    checksum-backed evidence a rules detection has (rules-engine#108)."""
     country_confidence: float = 0.0
     """How strongly the document supports :attr:`country`, in [0, 1].
 

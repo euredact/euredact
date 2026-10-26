@@ -50,7 +50,10 @@ _AMOUNT_LABEL_BEFORE = re.compile(
     r"\b(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|"
     r"Upphæð|Importe|Importo|Valore|Wartość|Kwota|Částka|Összeg|"
     r"Sum|Beloop|Prix|Preis|Price|Loyer|Miete|Huur|Rent|Betrag)"
-    r"\s*(?:\w+\s*)?:?\s*$",
+    # The optional second word must be a word of its own. Glued on, it let
+    # "Rent" + "enversicherungsnummer" read as an amount label and dropped the
+    # German pension number after it (rules-engine#111).
+    r"(?:\s+\w+)?\s*:?\s*$",
     re.IGNORECASE,
 )
 

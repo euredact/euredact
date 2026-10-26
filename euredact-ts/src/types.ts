@@ -75,7 +75,8 @@ export enum EntityType {
   BIOMETRIC_REF = "BIOMETRIC_REF",
   FINANCIAL_AMOUNT = "FINANCIAL_AMOUNT",
   QUASI_IDENTIFIER = "QUASI_IDENTIFIER",
-  CREDENTIAL = "CREDENTIAL",
+  /** Legacy alias of SECRET: every credential, the model's included, is SECRET (rules-engine#111). */
+  CREDENTIAL = "SECRET",
   URL = "URL",
 
   OTHER = "OTHER",
@@ -91,6 +92,8 @@ export const LEGACY_TYPE_ALIASES: Record<string, string> = {
   NAME: "PERSON_NAME",
   STREET_ADDRESS: "ADDRESS",
   NATIONALITY_ETHNICITY: "SENSITIVE_ATTRIBUTE",
+  // The model labels prose credentials CREDENTIAL; the SDK reports every credential as SECRET (rules-engine#111).
+  CREDENTIAL: "SECRET",
 };
 
 /**
@@ -136,7 +139,13 @@ export interface Detection {
   text: string;
   source: DetectionSource;
   country: string | null;
-  confidence: string;
+  /**
+   * How the type was arrived at: "high", "medium" or "low" for a rules
+   * detection. `null` for a span the cloud model found and reported no
+   * confidence for: the model emits none today, and "high" would claim the
+   * checksum-backed evidence a rules detection has (rules-engine#108).
+   */
+  confidence: string | null;
   /**
    * How strongly the document supports {@link Detection.country}, in [0, 1].
    *

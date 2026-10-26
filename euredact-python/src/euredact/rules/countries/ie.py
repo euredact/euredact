@@ -10,7 +10,10 @@ class IEConfig(CountryConfig):
         self.code = "IE"
         self.name = "Ireland"
         self.patterns = [
-            PatternDef(entity_type=EntityType.NATIONAL_ID,
+            # The PPSN is SSN, never NATIONAL_ID: Ireland has no national identity
+            # number, so it is a separate social-services number (canon SSN,
+            # 2026-07-14; rules-engine#111).
+            PatternDef(entity_type=EntityType.SSN,
                        pattern=r"\b\d{7}[A-W][ABWTXZ]?\b",
                        validator="irish_pps",
                        description="Irish PPS Number — 7 digits + check letter(s)"),

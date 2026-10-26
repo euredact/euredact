@@ -14,6 +14,10 @@ class NLConfig(CountryConfig):
         self.code = "NL"
         self.name = "Netherlands"
         self.patterns = [
+            # Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+            PatternDef(entity_type=EntityType.HEALTHCARE_PROVIDER, pattern=r"\b\d{8,11}\b",
+                       validator=None, description="Dutch BIG-registratienummer — 8-11 digits",
+                       context_keywords=["BIG-nummer", "BIG nummer", "BIG-registratie", "BIG registratie", "BIG-nr", "BIG nr", "BIG:"], requires_context=True),
             # --- BSN (Burgerservicenummer) ---
             PatternDef(
                 entity_type=EntityType.NATIONAL_ID,

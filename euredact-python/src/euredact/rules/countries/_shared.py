@@ -358,6 +358,27 @@ class SharedConfig(CountryConfig):
                 validator="vin",
                 description="Vehicle Identification Number (ISO 3779)",
             ),
+            # Behind its label, a VIN written in lower or mixed case, or in its
+            # three sections (WMI-VDS-VIS, 3-6-8) with spaces or dashes. Both
+            # were left in the clear end to end (rules-engine#110). The last four
+            # characters are digits (ISO 3779), which keeps words out:
+            # "PPS Number 2482031U" is 3-6-8 too.
+            PatternDef(
+                entity_type=EntityType.VIN,
+                pattern=r"\b[A-HJ-NPR-Za-hj-npr-z0-9]{13}\d{4}\b",
+                validator="vin",
+                description="VIN — any case, behind its label",
+                context_keywords=["VIN", "FIN:", "FIN-Nr", "FIN-Nummer", "Fahrgestellnummer", "Fahrzeug-Identifizierungsnummer", "Fahrzeugidentifizierungsnummer", "châssis", "chassis", "chassisnummer", "chasisnummer", "numéro de série", "vehicle identification", "numero di telaio", "telaio", "bastidor", "número de bastidor", "VIN-code", "VIN-kod"],
+                requires_context=True,
+            ),
+            PatternDef(
+                entity_type=EntityType.VIN,
+                pattern=r"\b[A-HJ-NPR-Za-hj-npr-z0-9]{3}[\s\-][A-HJ-NPR-Za-hj-npr-z0-9]{6}[\s\-][A-HJ-NPR-Za-hj-npr-z0-9]{4}\d{4}\b",
+                validator="vin",
+                description="VIN — in sections (3-6-8), behind its label",
+                context_keywords=["VIN", "FIN:", "FIN-Nr", "FIN-Nummer", "Fahrgestellnummer", "Fahrzeug-Identifizierungsnummer", "Fahrzeugidentifizierungsnummer", "châssis", "chassis", "chassisnummer", "chasisnummer", "numéro de série", "vehicle identification", "numero di telaio", "telaio", "bastidor", "número de bastidor", "VIN-code", "VIN-kod"],
+                requires_context=True,
+            ),
             # --- IPv4 ---
             PatternDef(
                 entity_type=EntityType.IP_ADDRESS,
@@ -424,6 +445,18 @@ class SharedConfig(CountryConfig):
                 pattern=r"\b\d{2}[\-\s]\d{6}[\-\s]\d{6}[\-\s]\d\b",
                 validator="imei",
                 description="IMEI — formatted with separators",
+            ),
+            # Behind "IMEI" (also "IMEISV", "IMEI/SV"): the 14-digit form
+            # without its check digit, the 16-digit IMEISV, and a 15-digit IMEI
+            # whose check digit fails. Each was left in the clear end to end
+            # (rules-engine#110); the label is the evidence, as for the AHV in #82.
+            PatternDef(
+                entity_type=EntityType.IMEI,
+                pattern=r"\b\d{14,16}\b",
+                validator=None,
+                description="IMEI / IMEISV — 14-16 digits, behind its label",
+                context_keywords=["IMEI"],
+                requires_context=True,
             ),
             # --- GPS Coordinates (decimal degrees) ---
             # Latitude: -90 to 90, Longitude: -180 to 180, at least 4 decimal places

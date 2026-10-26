@@ -264,7 +264,9 @@ export function toResult(payload: WireResult, text: string): RedactResult {
     text: span.text,
     source: span.source === "model" ? DetectionSource.CLOUD : DetectionSource.RULES,
     country: null,
-    confidence: span.confidence ?? "high",
+    // A model span carries no evidence of its own: the service's confidence
+    // when it sends one, never an invented "high" (rules-engine#108).
+    confidence: span.source === "model" ? (span.confidence ?? null) : (span.confidence ?? "high"),
   }));
   detections.sort((a, b) => a.start - b.start || b.end - a.end);
   return {

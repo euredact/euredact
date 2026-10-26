@@ -65,8 +65,12 @@ does **not** cover the corpus, because the corpus lives outside the repository.
 - **`make parity`** — do both SDKs mask the same characters? Conformance
   vectors pin named cases; this compares whole corpora. TypeScript was once
   leaving 19,014 characters unmasked that Python caught, and no vector showed it.
-- **`make eval`** — recall and precision, so a number quoted in the changelog
-  is one that was just measured rather than carried forward.
+- **`make eval RESULTS=docs/corpus-results`** — recall and precision, and the
+  per-type results file (`docs/corpus-results.json` and `.md`) that the
+  Instructions for use on euredact.dev read. Commit both with the release, so
+  the published figures are the released engine's (rules-engine#109), and a
+  number quoted in the changelog is one that was just measured rather than
+  carried forward.
 
 Run `make verify` after any change to ranking, suppression or validation, not
 just before a release. `ruff` alone has caught a real import-format error that

@@ -34,7 +34,7 @@ console.log(result.detections);
 ## Features
 
 - **31 European countries** with country-specific patterns
-- **41 PII entity types** (30 from the rules engine, 11 from the
+- **40 PII entity types** (30 from the rules engine, 10 from the
   [cloud tier](#cloud-tier)): national IDs, IBANs, phone numbers, email, VAT
   numbers, license plates, credit cards, BIC/SWIFT, VIN, IMEI, GPS coordinates,
   UUIDs, social handles, IP/IPv6, MAC addresses, secrets/API keys, and more
@@ -275,7 +275,7 @@ interface Detection {
   text: string;                    // The matched substring
   source: DetectionSource;         // "rules" or "cloud"
   country: string | null;          // ISO code or null for shared/custom patterns
-  confidence: string;              // "high" | "medium" | "low" — see below
+  confidence: string | null;       // "high" | "medium" | "low"; null for a cloud-model span — see below
   countryConfidence?: number;      // How strongly the document supports `country`,
                                    // in [0, 1]. 0 means the attribution rests on
                                    // a checksum alone.
@@ -292,6 +292,7 @@ about whether the span is masked — every detection is, at every level.
 | `"high"` | a pattern matched and, where one exists, its checksum passed |
 | `"medium"` | the type comes from a label touching the span, because no pattern of that type claimed it — `Αρ. Ταυτότητας: 00892341` is a `NATIONAL_ID` although nothing can checksum it |
 | `"low"` | a pattern matched, its checksum *failed*, and the document labels the span as that very type — `Rijksregisternummer: 85.03.19-284.73` is a national number with a bad check digit |
+| `null` | a span the cloud model found (`source` is `cloud`). The model reports no confidence, so none is invented: a model span is not checksum-backed, and filtering on `"high"` keeps rules detections only *(rules-engine#108)* |
 
 Filter on it when you need only checksum-backed detections:
 
@@ -322,9 +323,14 @@ Cloud tier only — the rule engine never emits these, because there is no shape
 to match on. That is precisely why the model exists:
 
 ORGANISATION_NAME JOB_TITLE         MEDICAL_CONDITION SENSITIVE_ATTRIBUTE
-BIOMETRIC_REF     FINANCIAL_AMOUNT  QUASI_IDENTIFIER  CREDENTIAL
-URL
+BIOMETRIC_REF     FINANCIAL_AMOUNT  QUASI_IDENTIFIER  URL
 ```
+
+`SECRET` is the one type for credentials, whichever layer finds them: the rules
+engine's shaped keys and tokens, and the cloud model's prose passwords and
+connection-string secrets, which the service labels `CREDENTIAL`. The SDK
+reports those as `SECRET`, and `CREDENTIAL` remains only as a legacy alias of
+it (rules-engine#111).
 
 `INTERNAL_ID` — an employee, badge or customer number tied to a person — is
 emitted **only** when an explicit label names it (`medarbejdernummer:`,
@@ -825,6 +831,7 @@ try {
 | `NotConfiguredError` | — | no API key configured, or no global `fetch` | no |
 | `CloudError` | 401 | the key is wrong or revoked | no |
 | `CloudError` | 403 | the service refused the call. Account calls are accepted with an API key while the service does not require a browser `Origin`; if that changes they answer 403 | no |
+| `CloudError` | 403 | `Batches.create` on a workspace without retention: `detail.code === "retention_required"` (see [Batches](#batches)) | no |
 | `NotFoundError` | 404 | no such job, batch or key — or another account's; also every batch call, `list()` included, while batches are not enabled on the service (`batches_not_enabled`) | no |
 | `CloudError` | 409 | `revokeKey` on a key already revoked | no |
 | `ResultExpiredError` | 410 | the job's result is past retention | no |
@@ -843,8 +850,10 @@ the service (see [Batches](#batches)).
 
 ### Batches
 
-> **Not yet available:** the gateway's `/v1/batches` endpoint is still being
-> built (euredact-inference#40). The SDK side is here so both ship together.
+> **Availability:** private alpha, like the rest of the cloud tier. Batches
+> need **retention** on the workspace (see below); while batches are not
+> enabled on the service, every batch call answers `NotFoundError`
+> (`batches_not_enabled`).
 
 A batch hands up to 5,000 documents to the cloud tier and collects the answers
 within 24 hours, at a lower price and without your plan's concurrency limit.
@@ -871,6 +880,31 @@ if (outcome.status === "resolved") {
   for (const [customId, doc] of Object.entries(outcome.documents)) {
     console.log(customId, doc.ok ? doc.result!.redactedText : `${doc.error}: ${doc.message}`);
   }
+}
+```
+
+**Batches need retention.** The service holds each document until it is
+processed and each result until you fetch it, so a workspace that erases
+documents on delivery (`retentionMode === "none"`, or 0 hours of retention)
+cannot create one. `create()` then throws `CloudError` with status 403 and
+`detail.code === "retention_required"`, before anything is uploaded or written
+locally. The workspace owner turns retention on in the console, on the
+**Account** tab. To check first:
+
+```ts
+import { Account, CloudError } from "euredact";
+
+if (!(await new Account().summary()).batchesAvailable) {
+  // no retention on this workspace: send the documents with mode: "cloud"
+}
+
+try {
+  await batches.create(documents);
+} catch (err) {
+  if (err instanceof CloudError && err.status === 403 && err.detail?.code === "retention_required") {
+    // ask the workspace owner to turn retention on
+  }
+  throw err;
 }
 ```
 

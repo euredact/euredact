@@ -10,6 +10,10 @@ class PLConfig(CountryConfig):
         self.code = "PL"
         self.name = "Poland"
         self.patterns = [
+            # Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
+            PatternDef(entity_type=EntityType.HEALTHCARE_PROVIDER, pattern=r"\b\d{7}\b",
+                       validator=None, description="Polish PWZ — 7 digits",
+                       context_keywords=["PWZ", "prawa wykonywania zawodu", "prawo wykonywania zawodu"], requires_context=True),
             PatternDef(entity_type=EntityType.NATIONAL_ID, pattern=r"\b\d{11}\b",
                        validator="polish_pesel", description="Polish PESEL — 11 digits"),
             # NIP in the company grouping (3-3-2-2) or the one used for natural

@@ -86,9 +86,12 @@ parity:
 	@echo "==> cross-SDK masking parity ($(PARITY_LIMIT) documents)"
 	@$(PY) scripts/parity.py --limit $(PARITY_LIMIT)
 
+# RESULTS=docs/corpus-results also writes the per-type results the
+# Instructions for use publish (JSON + markdown, rules-engine#109).
+RESULTS ?=
 eval:
 	@echo "==> accuracy over the full corpus"
-	@cd $(PYDIR) && PYTHONPATH=src $(PY) tests/eval_full.py
+	@cd $(PYDIR) && PYTHONPATH=src $(PY) tests/eval_full.py $(if $(RESULTS),--results $(abspath $(RESULTS)))
 
 # The layouts the generated corpus lacked, as corpus records, so eval, sweep and
 # parity see them. Deterministic: rerunning rewrites the same file. The same

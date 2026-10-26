@@ -17,7 +17,9 @@ when every character of its span is masked.
 """
 from __future__ import annotations
 
+import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -115,3 +117,126 @@ class TestRecallOutcome:
     def test_outcomes_are_exhaustive(self, dets, expected):
         assert _recall_outcome("mail jan@example.com now", dets, "jan@example.com",
                                self.ACCEPT) == expected
+
+
+# ── Every occurrence, and per-type results (rules-engine#109) ─────────────
+
+from eval_full import CATEGORY_MAP, _occurrences, evaluate  # noqa: E402
+
+import corpus_results  # noqa: E402
+
+
+class TestOccurrences:
+    def test_every_standalone_occurrence_is_found(self):
+        text = "BIC GEBABEBB, again GEBABEBB."
+        assert _occurrences(text, "GEBABEBB") == [4, 20]
+
+    def test_a_later_occurrence_inside_a_longer_token_is_not_one(self):
+        assert _occurrences("Postcode 1000, Kantoor 10000", "1000") == [9]
+
+    def test_the_first_occurrence_counts_as_before_even_inside_a_token(self):
+        assert _occurrences("ref10007", "1000") == [3]
+
+    def test_absent_is_empty(self):
+        assert _occurrences("nothing here", "1000") == []
+
+
+class TestEveryOccurrenceMustBeMasked:
+    TEXT = "Mail a@b.be or a@b.be"
+
+    def test_both_masked_is_a_hit(self):
+        dets = [_det(5, 11, "a@b.be"), _det(15, 21, "a@b.be")]
+        assert _recall_outcome(self.TEXT, dets, "a@b.be", {"EMAIL"}) == "hit"
+
+    def test_one_left_readable_is_partial(self):
+        dets = [_det(5, 11, "a@b.be")]
+        assert _recall_outcome(self.TEXT, dets, "a@b.be", {"EMAIL"}) == "partial"
+
+    def test_none_masked_is_a_miss(self):
+        assert _recall_outcome(self.TEXT, [], "a@b.be", {"EMAIL"}) == "miss"
+
+
+def test_a_second_occurrence_is_not_a_false_positive():
+    data = [{"source_text": "IBAN BE68 5390 0754 7034, repeat BE68 5390 0754 7034.",
+             "PII": [{"PII_identifier": "BE68 5390 0754 7034", "PII_category": "IBAN",
+                      "PII_country": "BE"}]}]
+    s = evaluate(data, use_country_hints=True)
+    assert s["det_fp_by_type"].get("BANK_ACCOUNT", 0) == 0
+    assert s["det_tp_by_type"]["BANK_ACCOUNT"] == 2
+    assert s["cat_tp"]["IBAN"] == 1
+
+
+DATA = [
+    {"source_text": "Mail jan@example.be, IBAN BE68 5390 0754 7034, BIC GEBABEBB.",
+     "PII": [{"PII_identifier": "jan@example.be", "PII_category": "EMAIL", "PII_country": "BE"},
+             {"PII_identifier": "BE68 5390 0754 7034", "PII_category": "IBAN", "PII_country": "BE"},
+             {"PII_identifier": "GEBABEBB", "PII_category": "SWIFT_BIC", "PII_country": "BE"}]},
+    {"source_text": "Burgerservicenummer 111222333, tel 06 12345678, mail x@y.nl",
+     "PII": [{"PII_identifier": "111222333", "PII_category": "SOCIAL_SECURITY", "PII_country": "NL"},
+             {"PII_identifier": "x@y.nl", "PII_category": "EMAIL", "PII_country": "NL"}]},
+]
+
+
+class TestTypeRows:
+    def test_rows_are_api_types_and_add_up_to_the_totals(self):
+        s = evaluate(DATA, use_country_hints=True)
+        rows = corpus_results.type_rows(s, CATEGORY_MAP)
+        assert {"EMAIL", "BANK_ACCOUNT", "BIC", "SSN"} <= set(rows)
+        assert "IBAN" not in rows and "SWIFT_BIC" not in rows
+        assert sum(r["support"] for r in rows.values()) == sum(s["cat_total"].values())
+        assert sum(r["hits"] for r in rows.values()) == sum(s["cat_tp"].values())
+        assert sum(r["tp"] for r in rows.values()) == s["total_tp_det"]
+        assert sum(r["fp"] for r in rows.values()) == s["total_fp_det"]
+        for r in rows.values():
+            assert r["support"] == (r["hits"] + r["mistyped"] + r["partial"]
+                                    + r["misses"] + r["unlocatable"])
+
+    def test_a_category_that_accepts_other_types_says_so(self):
+        rows = corpus_results.type_rows(evaluate(DATA, True), CATEGORY_MAP)
+        assert rows["SSN"]["categories"] == ["SOCIAL_SECURITY"]
+        assert rows["SSN"]["also_accepts"] == ["NATIONAL_ID"]
+
+    def test_a_type_detected_but_never_labelled_has_precision_and_no_recall(self):
+        stats = {"cat_total": Counter(), "cat_tp": Counter(), "cat_mistyped": Counter(),
+                 "cat_partial": Counter(), "cat_unlocatable": Counter(),
+                 "det_tp_by_type": Counter(), "det_fp_by_type": Counter({"URL": 3})}
+        row = corpus_results.type_rows(stats, CATEGORY_MAP)["URL"]
+        assert row["recall"] is None and row["precision"] == 0.0 and row["fp"] == 3
+
+
+def test_the_results_render_and_carry_composition_and_conditions():
+    modes = {"hinted": evaluate(DATA, True), "blind": evaluate(DATA, False)}
+    corpus = corpus_results.composition([("a.json", DATA)], {"euromask_regressions.json"})
+    assert corpus["documents"] == 2 and corpus["labels"] == 5
+    assert corpus["countries"] == ["BE", "NL"]
+    res = corpus_results.build_results(version="0.0.0", modes=modes, category_map=CATEGORY_MAP,
+                                       corpus=corpus, regressions={"records": 1, "failures": 0},
+                                       generated="2026-10-25")
+    md = corpus_results.render_markdown(res)
+    assert "## Per entity type — hinted" in md and "## Per entity type — blind" in md
+    assert "`BANK_ACCOUNT`" in md and "| `IBAN` | `BANK_ACCOUNT` |" in md
+    assert "lower bound" in md and "euromask_regressions.json" in md
+    assert json.loads(json.dumps(res))["modes"]["hinted"]["EMAIL"]["support"] == 2
+
+
+class TestPlacesInsideOtherLabels:
+    """A short value's first occurrence is often inside another identifier."""
+
+    def test_a_postal_code_inside_a_national_id_is_not_its_place(self):
+        from eval_full import _label_places
+        text = "kennitala 3101718919. Heimilisfang: Selfoss, 171."
+        labels = [{"PII_identifier": "3101718919", "PII_category": "NATIONAL_ID"},
+                  {"PII_identifier": "171", "PII_category": "POSTAL_CODE"}]
+        assert _label_places(text, labels) == [[10], [text.index("Selfoss, 171") + 9]]
+
+    def test_a_postal_code_inside_a_phone_label_is_not_its_place(self):
+        from eval_full import _label_places
+        text = "Reykjavík, 776. sími +354 776 9806"
+        labels = [{"PII_identifier": "776", "PII_category": "POSTAL_CODE"},
+                  {"PII_identifier": "+354 776 9806", "PII_category": "PHONE"}]
+        assert _label_places(text, labels)[0] == [11]
+
+    def test_with_no_standalone_place_the_first_stands_in(self):
+        from eval_full import _label_places
+        labels = [{"PII_identifier": "1000", "PII_category": "POSTAL_CODE"}]
+        assert _label_places("ref10007", labels) == [[3]]
