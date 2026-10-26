@@ -99,7 +99,7 @@ const NUMERIC_TYPES = new Set<EntityType | string>([EntityType.PHONE, EntityType
 // Month names in the languages this engine covers. Long, but it is data: the
 // alternative is a proximity heuristic, and proximity is what caused the defect
 // this guards against. Kept in sync with the Python SDK's suppressors.py.
-const MONTH_NAMES =
+export const MONTH_NAMES =
   "january|february|march|april|may|june|july|august|september|october|november|december" +
   "|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec" +
   "|januar|jänner|februar|märz|mai|juni|juli|oktober|dezember|dez|okt|mrz" +
@@ -1123,7 +1123,8 @@ const DATE_LABEL_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityTyp
 
 /** Any common numeric date, to tell whether a label belongs to another date. */
 // A masked date counts as one: the gateway's rules pass reads SDK-masked text (rules-engine#111).
-const ANY_DATE = /\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[(?:dob|date_of_death)\]/i;
+// ... and a written-month date, now a DOB shape of its own (rules-engine#115).
+const ANY_DATE = new RegExp(String.raw`\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[(?:dob|date_of_death)\]|(?<![A-Za-z0-9_])\d{1,2}\.?\s+(?:` + MONTH_NAMES + String.raw`)\.?\s+\d{4}(?![A-Za-z0-9_])`, "i");
 
 /**
  * True when one of `keywords` is this date's own label: before the date with no
@@ -1207,7 +1208,7 @@ function labelsThisDate(
  * one before it ("Verstorben am 01.02.2020, geboren am 12.03.1940").
  */
 // ... or into a value already masked ("né le [DOB]"): the label is that value's (rules-engine#111).
-const LEADS_TO_A_DATE = /^[\s:.\-]*(?:[a-zà-ÿ]{1,3}[\s:.]+)?(?:\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[[a-z_]+\])/;
+const LEADS_TO_A_DATE = new RegExp(String.raw`^[\s:.\-]*(?:[a-zà-ÿ]{1,3}[\s:.]+)?(?:\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[[a-z_]+\]|\d{1,2}\.?\s+(?:` + MONTH_NAMES + String.raw`)\.?\s+\d{4})`, "i");
 
 /** Field separators a table row may use. */
 const COLUMN_SEPARATORS = [";", "|", "\t", ","];

@@ -1,5 +1,14 @@
 import { EntityType, type CountryConfig, type PatternDef } from "../../types.js";
 import { IBAN_LENGTHS } from "../validators.js";
+import { MONTH_NAMES } from "../suppressors.js";
+
+/** Day, month as a word, year ("4. März 1948"), behind a date label (rules-engine#115). */
+function writtenDatePattern(): string {
+  const names = new Set(MONTH_NAMES.split("|").filter(Boolean));
+  for (const m of [...names]) names.add(m.charAt(0).toUpperCase() + m.slice(1));
+  const months = [...names].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0)).join("|");
+  return String.raw`\b(?:0?[1-9]|[12][0-9]|3[01])\.?\s+(?:` + months + String.raw`)\.?\s+(?:19|20)\d{2}\b`;
+}
 
 /**
  * Build a country-independent IBAN pattern from the ISO 13616 length table.
@@ -294,6 +303,9 @@ const SHARED: CountryConfig = {
     p(EntityType.SECRET, String.raw`\b[A-Za-z0-9_\-+/]{24,}[A-Za-z0-9_\-+/=]*(?![A-Za-z0-9_\-+/=])`, "high_entropy", "High-entropy token", SECRET_CONTEXT, true),
     p(EntityType.DOB, String.raw`\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b`, null, "DD/MM/YYYY", DOB_CONTEXT, true),
     p(EntityType.DATE_OF_DEATH, String.raw`\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b`, null, "", DATE_OF_DEATH_CONTEXT, true),
+    // Written-month dates, behind the same labels (rules-engine#115).
+    p(EntityType.DOB, writtenDatePattern(), null, "Date with a written month", DOB_CONTEXT, true),
+    p(EntityType.DATE_OF_DEATH, writtenDatePattern(), null, "Date of death with a written month", DATE_OF_DEATH_CONTEXT, true),
     p(EntityType.DOB, String.raw`\b(?:19|20)\d{2}[/.\-](?:0[1-9]|1[0-2])[/.\-](?:0[1-9]|[12][0-9]|3[01])\b`, null, "ISO YYYY-MM-DD", DOB_CONTEXT, true),
   ],
 };

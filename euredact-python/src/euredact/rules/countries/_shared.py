@@ -63,6 +63,33 @@ _GENERIC_IBAN = _build_iban_pattern()
 #:   names appearing as e-mail local parts. ``"born "`` with the trailing space
 #:   has 5,581 corpus hits and no embedded occurrences, so that is the form
 #:   listed. The same reasoning kept bare ``pass`` out of PASSPORT_CONTEXT.
+DOD_CONTEXT = [
+    "overleden", "overlijdensdatum", "date de décès", "décédé le",
+    "date of death", "Sterbedatum", "verstorben am", "gestorven",
+    "death date", "died on", "mort le", "décès",
+    # The window used to find these through some other word
+    # nearby; a label now has to be the date's own (#52).
+    "datum van overlijden", "décédée le", "Sterbetag",
+]
+
+
+def _written_date_pattern() -> str:
+    """Day, month as a word, year: "4. März 1948", "2 January 1943".
+
+    The month names are the suppressors' list (one list, kept in sync with the
+    TypeScript port), with capitalised forms, since patterns are matched case
+    sensitively. Imported here rather than at module level to keep the
+    country tables free of a dependency on the suppressors at import time.
+    """
+    from euredact.rules.suppressors import _MONTH_NAMES
+
+    names = {m for m in _MONTH_NAMES.split("|") if m}
+    names |= {m[:1].upper() + m[1:] for m in names}
+    months = "|".join(sorted(names, key=len, reverse=True))
+    return (r"\b(?:0?[1-9]|[12][0-9]|3[01])\.?\s+(?:" + months
+            + r")\.?\s+(?:19|20)\d{2}\b")
+
+
 DOB_CONTEXT = [
     # Germanic / Romance — the original set, kept verbatim.
     "geboren", "geboortedatum", "date de naissance", "né le", "née le",
@@ -647,14 +674,28 @@ class SharedConfig(CountryConfig):
                 pattern=r"\b(?:0[1-9]|[12][0-9]|3[01])[/.\-](?:0[1-9]|1[0-2])[/.\-](?:19|20)\d{2}\b",
                 validator=None,
                 description="Date of death — requires context",
-                context_keywords=[
-                    "overleden", "overlijdensdatum", "date de décès", "décédé le",
-                    "date of death", "Sterbedatum", "verstorben am", "gestorven",
-                    "death date", "died on", "mort le", "décès",
-                    # The window used to find these through some other word
-                    # nearby; a label now has to be the date's own (#52).
-                    "datum van overlijden", "décédée le", "Sterbetag",
-                ],
+                context_keywords=DOD_CONTEXT,
+                requires_context=True,
+            ),
+            # --- Written-month dates: "4. März 1948", "2 January 1943" ---
+            # Behind the same labels as the numeric forms. Without these a
+            # birth date with the month as a word was not detected at all;
+            # only its year was masked, by accident, as a postcode -- which
+            # rules-engine#111 removed (rules-engine#115).
+            PatternDef(
+                entity_type=EntityType.DOB,
+                pattern=_written_date_pattern(),
+                validator=None,
+                description="Date with a written month — requires context",
+                context_keywords=DOB_CONTEXT,
+                requires_context=True,
+            ),
+            PatternDef(
+                entity_type=EntityType.DATE_OF_DEATH,
+                pattern=_written_date_pattern(),
+                validator=None,
+                description="Date of death with a written month — requires context",
+                context_keywords=DOD_CONTEXT,
                 requires_context=True,
             ),
             # --- ISO date format YYYY-MM-DD (DOB, requires context) ---

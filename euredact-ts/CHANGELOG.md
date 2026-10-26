@@ -101,6 +101,14 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A date of birth with a written month was not detected.** Only numeric
+  dates had a `DOB` shape, so `Geburtsdatum: 4. März 1948`,
+  `Date of birth: 2 January 1943` and `Né le 4 février 1948` were left in
+  the clear; until #111 their year was masked by accident, as a postcode.
+  Behind the same labels as the numeric forms they are now `DOB`, and
+  `DATE_OF_DEATH` behind a death label. A written-month date also counts as
+  a date in the label checks, so `geboren am 12. März 1940, verstorben am
+  1. Februar 2020` types both correctly. *(rules-engine#115)*
 - **Dates on masked text were typed `DOB`.** In cloud mode the gateway runs
   its rules pass on the text the SDK already masked, where a birth date reads
   `né le [DOB]`. The label no longer ran into a date of its own, so it reached

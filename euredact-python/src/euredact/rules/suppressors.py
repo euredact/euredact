@@ -1636,7 +1636,9 @@ _DATE_LABEL_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
 #: SDK masked first, where "Date of birth: 12.03.1980" is "Date of birth: [DOB]"
 #: (rules-engine#111).
 _ANY_DATE = re.compile(
-    r"\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[(?:dob|date_of_death)\]", re.IGNORECASE)
+    r"\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[(?:dob|date_of_death)\]"
+    # ... and a written-month date, now a DOB shape of its own (rules-engine#115).
+    rf"|\b\d{{1,2}}\.?\s+(?:{_MONTH_NAMES})\.?\s+\d{{4}}\b", re.IGNORECASE)
 
 
 def _keyword_at(haystack: str, keyword: str, *, last: bool) -> int:
@@ -1749,7 +1751,8 @@ _LEADS_TO_A_DATE = re.compile(
     # ... or into a value already masked: in "valable jusqu'au 14/06/2029, né le
     # [DOB]" the label is the masked date's, and typed the expiry date a date of
     # birth on masked text (rules-engine#111).
-    r"(?:\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[[a-z_]+\])")
+    r"(?:\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[[a-z_]+\]"
+    rf"|\d{{1,2}}\.?\s+(?:{_MONTH_NAMES})\.?\s+\d{{4}})", re.IGNORECASE)
 
 
 #: Field separators a table row may use.

@@ -46,6 +46,7 @@ which both test suites run.
 
 ### Fixed
 
+- A date of birth or death with the month as a word (`Geburtsdatum: 4. März 1948`, `Date of birth: 2 January 1943`, `Né le 4 février 1948`) was not detected; behind its label it is now `DOB` / `DATE_OF_DEATH`. *(rules-engine#115)*
 - On text already masked — what the gateway's rules pass reads — a date before a masked birth date (`valable jusqu'au 14/06/2029, né le [DOB]`), or after a `[DOB]` placeholder, was typed `DOB`; a placeholder is now read as the masked date it is. *(rules-engine#111)*
 - The year of a written birth date before 1950 (`Geburtsdatum: 21. Januar 1944`) was masked as `POSTAL_CODE`; a number after a letter prefix that is no postal country prefix (`K-40817`, `#LX-20419`, `B-51823`) or glued to a reference (`CPS-HR-2026-019`) is no longer a postcode. *(rules-engine#111)*
 - A Polish military booklet number with the usual two-letter series (`EL 0473218`, `EL0473218`, `seria MS nr 6620419`) was split as `PHONE` or not masked; it is one `INTERNAL_ID` like the three-letter form. *(rules-engine#102)*

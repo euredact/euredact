@@ -324,7 +324,8 @@ def _written_birth_year(lead: str, months: list[str], country: str):
         pc = str(rng.randrange(10000, 99999))
         text = (f"{lead} {rng.randrange(1, 28)}. {rng.choice(months)} {y}\n"
                 f"Anschrift: Lindenweg {rng.randrange(1, 90)}, {pc} München")
-        return text, [pii(pc, "POSTAL_CODE", country)], [y]
+        date = text.split(lead + " ", 1)[1].split("\n", 1)[0]
+        return text, [pii(pc, "POSTAL_CODE", country), pii(date, "DOB", country)], []
     return build
 
 

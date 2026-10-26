@@ -6476,6 +6476,9 @@
       "mustDetect": {
         "POSTAL_CODE": [
           "80331"
+        ],
+        "DOB": [
+          "4. März 1948"
         ]
       }
     },
@@ -6488,6 +6491,9 @@
       "mustDetect": {
         "POSTAL_CODE": [
           "L-1611"
+        ],
+        "DOB": [
+          "4 février 1948"
         ]
       }
     },
@@ -6500,6 +6506,9 @@
       "mustDetect": {
         "POSTAL_CODE": [
           "T12 X8Y2"
+        ],
+        "DOB": [
+          "2 January 1943"
         ]
       }
     },
@@ -6561,6 +6570,82 @@
           "1100-053"
         ]
       }
+    },
+    {
+      "id": "dob-written-month-de",
+      "text": "Geburtsdatum: 4. März 1948",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "4. März 1948"
+        ]
+      },
+      "notes": "rules-engine#115"
+    },
+    {
+      "id": "dob-written-month-en",
+      "text": "Date of birth: 2 January 1943",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "2 January 1943"
+        ]
+      }
+    },
+    {
+      "id": "dob-written-month-fr",
+      "text": "Né le 4 février 1948",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "4 février 1948"
+        ]
+      }
+    },
+    {
+      "id": "dob-written-month-nl",
+      "text": "geboren op 19 maart 1947",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "19 maart 1947"
+        ]
+      }
+    },
+    {
+      "id": "dob-and-dod-written-month",
+      "text": "geboren am 12. März 1940, verstorben am 1. Februar 2020",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12. März 1940"
+        ],
+        "DATE_OF_DEATH": [
+          "1. Februar 2020"
+        ]
+      }
+    },
+    {
+      "id": "written-month-date-without-a-birth-label-stays-unmasked",
+      "text": "Datum: 14. Oktober 2020",
+      "countries": [
+        "AT"
+      ],
+      "mustNotDetect": [
+        "DOB",
+        "DATE_OF_DEATH",
+        "POSTAL_CODE"
+      ]
     }
   ]
 }
