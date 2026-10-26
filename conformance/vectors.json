@@ -6422,6 +6422,145 @@
       "mustNotDetect": [
         "PHONE"
       ]
+    },
+    {
+      "id": "dob-label-of-a-masked-date-does-not-reach-back",
+      "text": "valable jusqu'au 14/06/2029, né le [DOB]",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ],
+      "notes": "rules-engine#111: on masked text the label is the masked date's; the gateway's rules pass reads SDK-masked text."
+    },
+    {
+      "id": "dob-placeholder-is-not-a-label",
+      "text": "Copies des lettres de rappel (dates : [DOB], 09.01.2026 et 03.02.2026)",
+      "countries": [
+        "CH"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ]
+    },
+    {
+      "id": "dob-after-a-masked-birth-date-is-not-a-dob",
+      "text": "urodzona dnia [DOB] w Lublinie, zmarła dnia 03.06.2026 we Wrocławiu",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ]
+    },
+    {
+      "id": "dob-unmasked-still-detected",
+      "text": "valable jusqu'au 14/06/2029, né le 12.03.1980",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.03.1980"
+        ]
+      }
+    },
+    {
+      "id": "postal-not-the-year-of-a-written-birth-date-de",
+      "text": "Erblasser: Herr Reinhold Kastenmeier (†16. Juli 2023)\nGeburtsdatum:             4. März 1948\nAnschrift: Lindenweg 4, 80331 München",
+      "countries": [
+        "DE"
+      ],
+      "notes": "rules-engine#111: years before 1950 skipped the date-construction test.",
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "80331"
+        ]
+      }
+    },
+    {
+      "id": "postal-not-the-year-of-a-written-birth-date-fr",
+      "text": "Patient : M. Théo Wagener-Hoffmann\nNé le 4 février 1948\nDomicile : 7, rue de la Gare, L-1611 Luxembourg",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "L-1611"
+        ]
+      }
+    },
+    {
+      "id": "postal-not-the-year-of-a-written-birth-date-en",
+      "text": "Life assured: Mr Peadar Fitzmaurice\nDate of birth: 2 January 1943\nLast address: 8 Ballyclough Road, Cork T12 X8Y2",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "T12 X8Y2"
+        ]
+      }
+    },
+    {
+      "id": "postal-not-after-a-letter-prefix-that-is-no-country",
+      "text": "Adresse: Hauptstraße 12, 4614 Marchtrenk\nKundennummer: K-40817",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "4614"
+        ]
+      },
+      "notes": "rules-engine#111: any one or two capitals passed as a postal country prefix."
+    },
+    {
+      "id": "postal-not-after-a-country-prefix-of-the-wrong-length",
+      "text": "Hauptstr. 5, 10115 Berlin. Berufsausweis-Nr. B-51823",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "10115"
+        ]
+      }
+    },
+    {
+      "id": "postal-not-a-ticket-number",
+      "text": "Musterstraße 1, 4614 Marchtrenk. Ticket #LX-20419",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "4614"
+        ]
+      }
+    },
+    {
+      "id": "postal-not-the-tail-of-a-reference",
+      "text": "HR ref: CPS-HR-2026-019",
+      "countries": [
+        "PT"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ]
+    },
+    {
+      "id": "postal-portuguese-prefixed-still-a-postcode",
+      "text": "P-1100-053 Lisboa",
+      "countries": [
+        "PT"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1100-053"
+        ]
+      }
     }
   ]
 }

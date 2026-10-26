@@ -147,6 +147,11 @@ _SEQUENTIAL_PATTERNS = re.compile(
 # ── Year-like 4-digit number (not a postal code) ───────────────────────
 
 _RECENT_YEAR = re.compile(r"^(?:19[5-9]\d|20[0-3]\d)$")
+#: Any year a written date can carry. The date-construction test below applies
+#: to all of them: a birth year before 1950 ("Geburtsdatum: 21. Januar 1944")
+#: was outside _RECENT_YEAR, skipped that test and became a postcode
+#: (rules-engine#111).
+_DATE_YEAR = re.compile(r"^(?:1[89]\d\d|20\d\d)$")
 _POSTAL_CONTEXT_NEAR = re.compile(
     r"(?:postcode|postal|code\s*postal|PLZ|Postleitzahl|postnummer|postinumero|"
     r"póstnúmer|zip|straat|straße|strasse|rue\s|via\s|calle\s|rua\s|ulica|utca|"
@@ -207,7 +212,19 @@ _POSTAL_LABEL_CUE = re.compile(r"post", re.IGNORECASE)
 #
 # A real prefix opens its token: it follows the start of the text, whitespace,
 # or punctuation that is not a hyphen joining it to a previous segment.
-_COUNTRY_PREFIXED = re.compile(r"(?:^|[^A-Za-z0-9\-])[A-Z]{1,2}$")
+_COUNTRY_PREFIXED = re.compile(r"(?:^|[^A-Za-z0-9\-])([A-Z]{1,3})$")
+
+#: The postal country prefixes in use, with the length of that country's
+#: postcode. Any one or two capitals used to pass as a prefix, so "K-40817",
+#: "#LX-20419" and "B-51823" (a Belgian prefix on five digits) were
+#: "country-prefixed postcodes" and an address elsewhere kept them
+#: (rules-engine#111).
+_POSTAL_PREFIX_DIGITS: dict[str, int] = {"A": 4, "AT": 4, "B": 4, "BE": 4, "BG": 4, "CH": 4, "CY": 4, "CZ": 5, "D": 5, "DE": 5, "DK": 4, "E": 5, "EE": 5, "ES": 5, "F": 5, "FI": 5, "FIN": 5, "FR": 5, "GR": 5, "H": 4, "HR": 5, "I": 5, "IT": 5, "L": 4, "LT": 5, "LU": 4, "LV": 4, "N": 4, "NL": 4, "NO": 4, "P": 4, "PL": 5, "PT": 4, "RO": 6, "S": 5, "SE": 5, "SI": 4, "SK": 5, "SLO": 4}
+
+
+def _country_prefixed(before: str, digits: str) -> bool:
+    m = _COUNTRY_PREFIXED.search(before)
+    return m is not None and _POSTAL_PREFIX_DIGITS.get(m.group(1)) == len(digits)
 
 # ── Phone: preceded by ID/tax label ────────────────────────────────────
 #
@@ -866,7 +883,7 @@ def suppress_year_as_postal(text: str, match: RawMatch) -> bool:
     if match.pattern_def.entity_type != EntityType.POSTAL_CODE:
         return False
     clean = match.text.strip()
-    if not _RECENT_YEAR.match(clean):
+    if not _DATE_YEAR.match(clean):
         return False
     # A date construction *touching* the candidate settles it, whatever the
     # rest of the document says. Without this, the postal-context test below
@@ -878,6 +895,8 @@ def suppress_year_as_postal(text: str, match: RawMatch) -> bool:
         return True
     if _DATE_AFTER.match(text[match.end:match.end + 8]):
         return True
+    if not _RECENT_YEAR.match(clean):
+        return False
 
     # Keep as postal code only when the value sits in address *structure*.
     #
@@ -1483,6 +1502,12 @@ def suppress_postal_in_longer_identifier(text: str, match: RawMatch) -> bool:
         return False
     clean = match.text.strip()
     if not clean.isdigit():
+        # A structured form glued on by a hyphen is the tail of a reference:
+        # "CPS-HR-2026-019" is not the Portuguese postcode "2026-019" (#111).
+        glued = text[match.start - 2:match.start]
+        if len(glued) == 2 and glued[1] == "-" and glued[0].isalnum():
+            m = _COUNTRY_PREFIXED.search(text[:match.start - 1])
+            return not (m and m.group(1) in _POSTAL_PREFIX_DIGITS)
         return False
 
     before_char = text[match.start - 1] if match.start > 0 else ""
@@ -1505,7 +1530,7 @@ def suppress_postal_in_longer_identifier(text: str, match: RawMatch) -> bool:
         return True
     if after_char == "-" and next_next.isdigit():
         return True
-    if before_char == "-" and not _COUNTRY_PREFIXED.search(text[:match.start - 1]):
+    if before_char == "-" and not _country_prefixed(text[:match.start - 1], clean):
         # "A-1010 Wien" is an address; "12-3456" is one number
         return True
 
@@ -1607,7 +1632,11 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
 _DATE_LABEL_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
 
 #: Any common numeric date, to tell whether a label belongs to another date.
-_ANY_DATE = re.compile(r"\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}")
+#: A date already masked counts as one: the gateway's rules pass reads text the
+#: SDK masked first, where "Date of birth: 12.03.1980" is "Date of birth: [DOB]"
+#: (rules-engine#111).
+_ANY_DATE = re.compile(
+    r"\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[(?:dob|date_of_death)\]", re.IGNORECASE)
 
 
 def _keyword_at(haystack: str, keyword: str, *, last: bool) -> int:
@@ -1627,6 +1656,8 @@ def _keyword_at(haystack: str, keyword: str, *, last: bool) -> int:
               else re.finditer(re.escape(kw), haystack)):
         before = haystack[m.start() - 1:m.start()]
         after = haystack[m.end():m.end() + 2]
+        if before == "[" and after[:1] == "]":
+            continue            # a placeholder ("[DOB]"), not a label (#111)
         if after[:1] == "s":
             after = after[1:]
         if not (before.isalpha() or after[:1].isalpha()):
@@ -1714,7 +1745,11 @@ _BIRTH_SIGN = re.compile(r"(?<![a-z])°\s?$")
 #: "geboren" is the second date's. A verb-final clause ("am 12.03.1940 geboren
 #: und ist am …") is not this shape and still labels the date before it.
 _LEADS_TO_A_DATE = re.compile(
-    r"[\s:.\-]*(?:[a-zà-ÿ]{1,3}[\s:.]+)?\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}")
+    r"[\s:.\-]*(?:[a-zà-ÿ]{1,3}[\s:.]+)?"
+    # ... or into a value already masked: in "valable jusqu'au 14/06/2029, né le
+    # [DOB]" the label is the masked date's, and typed the expiry date a date of
+    # birth on masked text (rules-engine#111).
+    r"(?:\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[[a-z_]+\])")
 
 
 #: Field separators a table row may use.

@@ -415,6 +415,8 @@ function suppressRedactionPlaceholder(_text: string, match: RawMatch): boolean {
 }
 
 const RECENT_YEAR = /^(?:19[5-9]\d|20[0-3]\d)$/;
+// Any year a written date can carry: the date-construction test applies to all of them (rules-engine#111).
+const DATE_YEAR = /^(?:1[89]\d\d|20\d\d)$/;
 const POSTAL_CONTEXT_NEAR = /(?:postcode|postal|code\s*postal|PLZ|Postleitzahl|postnummer|postinumero|póstnúmer|zip|straat|straße|strasse|rue\s|via\s|calle\s|rua\s|ulica|utca|street|avenue|laan\s|weg\s|plein|adres|adresse|address|woonplaats|wonende|woonachtig|gevestigd|domicili|demeurant|résidant|residant|bosatt|bopæl|wohnhaft|ansässig|stad\b|ville\b|city\b|Stadt|città|ciudad|cidade|miasto|město|város)/i;
 const DATE_KEYWORD_NEAR = /(?:født|fødselsdato|fødsel|Fødselsdato|född|födelsedatum|födelsedag|syntynyt|syntymäaika|fæddur|fæðingardagur|geboren|geboortedatum|Geburtsdatum|nascido|nacido|data di nascita|nato il|nata il|Tiltr[æa]delsesdato|Tiltredelsesdato|datum|date\b|Datum|jaar|year|année|Jahr|since|sinds|depuis|seit|\d{2}\.\d{2}\.|(?:januar|februar|marts|april|maj|juni|juli|august|september|oktober|november|december|januari|februari|mars|mei|juin|juillet|août))/i;
 
@@ -472,7 +474,7 @@ function yearSitsInAddressStructure(text: string, start: number, end: number): b
 function suppressYearAsPostal(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
   const clean = match.text.trim();
-  if (!RECENT_YEAR.test(clean)) return false;
+  if (!DATE_YEAR.test(clean)) return false;
   // A date construction *touching* the candidate settles it, whatever the rest
   // of the document says. Without this, the postal-context test below rescued
   // every year in every document with an address in it — and "Adresse", "rue"
@@ -481,6 +483,7 @@ function suppressYearAsPostal(text: string, match: RawMatch): boolean {
   // 1,636 of them literally "2025".
   if (DATE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start))) return true;
   if (DATE_AFTER.test(text.slice(match.end, match.end + 8))) return true;
+  if (!RECENT_YEAR.test(clean)) return false;
 
   const [before, after] = getContext(text, match.start, match.end);
   const context = before + after;
@@ -993,7 +996,14 @@ const DIALLING_PREFIX_BEFORE = /\+\d{1,3}[\d\s\-().]*$/;
 // read as a country-prefixed address: in "PV-2026-LU-09143" the `LU` is
 // preceded by `-` and the German five-digit postal pattern kept `09143`
 // (rules-engine#31).
-const COUNTRY_PREFIXED = /(?:^|[^A-Za-z0-9\-])[A-Z]{1,2}$/;
+const COUNTRY_PREFIXED = /(?:^|[^A-Za-z0-9\-])([A-Z]{1,3})$/;
+// Postal country prefixes and the length of that country's postcode: any one or two capitals
+// used to pass, so "K-40817" and "B-51823" were country-prefixed postcodes (rules-engine#111).
+const POSTAL_PREFIX_DIGITS: Record<string, number> = { A: 4, AT: 4, B: 4, BE: 4, BG: 4, CH: 4, CY: 4, CZ: 5, D: 5, DE: 5, DK: 4, E: 5, EE: 5, ES: 5, F: 5, FI: 5, FIN: 5, FR: 5, GR: 5, H: 4, HR: 5, I: 5, IT: 5, L: 4, LT: 5, LU: 4, LV: 4, N: 4, NL: 4, NO: 4, P: 4, PL: 5, PT: 4, RO: 6, S: 5, SE: 5, SI: 4, SK: 5, SLO: 4 };
+function countryPrefixed(before: string, digits: string): boolean {
+  const m = COUNTRY_PREFIXED.exec(before);
+  return m !== null && POSTAL_PREFIX_DIGITS[m[1]] === digits.length;
+}
 
 /**
  * Suppress bare digit runs that belong to a longer number, not an address.
@@ -1009,7 +1019,15 @@ const COUNTRY_PREFIXED = /(?:^|[^A-Za-z0-9\-])[A-Z]{1,2}$/;
 function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
   const clean = match.text.trim();
-  if (!/^\d+$/.test(clean)) return false;
+  if (!/^\d+$/.test(clean)) {
+    // A structured form glued on by a hyphen is the tail of a reference: "CPS-HR-2026-019" (#111).
+    const glued = text.slice(Math.max(0, match.start - 2), match.start);
+    if (glued.length === 2 && glued[1] === "-" && /[A-Za-z0-9]/.test(glued[0])) {
+      const m = COUNTRY_PREFIXED.exec(text.slice(0, match.start - 1));
+      return !(m && m[1] in POSTAL_PREFIX_DIGITS);
+    }
+    return false;
+  }
 
   const beforeChar = match.start > 0 ? text[match.start - 1] : "";
   const afterChar = match.end < text.length ? text[match.end] : "";
@@ -1027,7 +1045,7 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   if ("._/".includes(beforeChar) && /\d/.test(prevPrev)) return true;
   if ("._/".includes(afterChar) && /\d/.test(nextNext)) return true;
   if (afterChar === "-" && /\d/.test(nextNext)) return true;
-  if (beforeChar === "-" && !COUNTRY_PREFIXED.test(text.slice(0, match.start - 1))) return true;
+  if (beforeChar === "-" && !countryPrefixed(text.slice(0, match.start - 1), clean)) return true;
 
   // A further digit group on the same line: "1268 040390", "1234 5678 925",
   // "+43 664 8213 907". Horizontal whitespace only — a digit on the *next*
@@ -1104,7 +1122,8 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
 const DATE_LABEL_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
 
 /** Any common numeric date, to tell whether a label belongs to another date. */
-const ANY_DATE = /\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}/;
+// A masked date counts as one: the gateway's rules pass reads SDK-masked text (rules-engine#111).
+const ANY_DATE = /\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[(?:dob|date_of_death)\]/i;
 
 /**
  * True when one of `keywords` is this date's own label: before the date with no
@@ -1144,6 +1163,7 @@ function keywordAt(haystack: string, keyword: string, last: boolean): number {
   const hits: number[] = [];
   for (let i = haystack.indexOf(kw); i !== -1; i = haystack.indexOf(kw, i + 1)) {
     let next = i + kw.length;
+    if (haystack[i - 1] === "[" && haystack[next] === "]") continue; // a placeholder ("[DOB]"), not a label (#111)
     if (haystack[next] === "s") next++;
     if (!isLetter(haystack.slice(i - 1, i)) && !isLetter(haystack.slice(next, next + 1))) {
       hits.push(i);
@@ -1186,7 +1206,8 @@ function labelsThisDate(
  * A label running straight into a date of its own introduces that date, not the
  * one before it ("Verstorben am 01.02.2020, geboren am 12.03.1940").
  */
-const LEADS_TO_A_DATE = /^[\s:.\-]*(?:[a-zà-ÿ]{1,3}[\s:.]+)?\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}/;
+// ... or into a value already masked ("né le [DOB]"): the label is that value's (rules-engine#111).
+const LEADS_TO_A_DATE = /^[\s:.\-]*(?:[a-zà-ÿ]{1,3}[\s:.]+)?(?:\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}|\[[a-z_]+\])/;
 
 /** Field separators a table row may use. */
 const COLUMN_SEPARATORS = [";", "|", "\t", ","];

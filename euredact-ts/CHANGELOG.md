@@ -101,6 +101,21 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **Dates on masked text were typed `DOB`.** In cloud mode the gateway runs
+  its rules pass on the text the SDK already masked, where a birth date reads
+  `né le [DOB]`. The label no longer ran into a date of its own, so it reached
+  back to the date before it (`valable jusqu'au 14/06/2029, né le [DOB]` gave
+  the expiry date as `DOB`), and the keyword "DOB" inside a `[DOB]`
+  placeholder labelled the dates after it. A placeholder now counts as the
+  masked date it is, and is never a label. *(rules-engine#111)*
+- **Birth years and reference numbers were masked as `POSTAL_CODE`.** The
+  date-construction test (`21. Januar 1944`) only covered years from 1950, so
+  an older birth year became a postcode. Any one or two capitals passed as a
+  postal country prefix, so `K-40817`, `#LX-20419` and `B-51823` (a Belgian
+  prefix on five digits) were kept as postcodes when an address was nearby; a
+  prefix now counts only when it is one, with that country's postcode length.
+  A structured postcode glued to a reference (`CPS-HR-2026-019`) is no longer
+  one either. *(rules-engine#111)*
 - **A Polish military booklet number with a two-letter series was split or
   missed.** The pattern added for #102 took a three-letter series only; the
   usual series has two letters. `EL 0473218` was `EL [PHONE]`, and
