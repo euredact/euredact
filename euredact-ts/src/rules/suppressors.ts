@@ -104,6 +104,7 @@ export const MONTH_NAMES =
   "|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec" +
   "|januar|jänner|februar|märz|mai|juni|juli|oktober|dezember|dez|okt|mrz" +
   "|janvier|février|mars|avril|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre" +
+  "|janv|févr|fevr|avr|juil|déc" +
   "|januari|februari|maart|mei|augustus|mrt" +
   "|gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|dicembre" +
   "|enero|febrero|abril|mayo|junio|julio|septiembre|octubre|noviembre|diciembre" +
@@ -456,10 +457,23 @@ const CITY_AFTER = /^[ \t](?![\p{L}\p{N}_]+\s*:)[A-ZÀ-ÞŁŠŽ][\p{L}\p{N}_\-']
 // Every position is local to the value or inside its own sentence. Proximity to
 // an address *word* anywhere in a 300-character window is what the old rescue
 // asked, and that is a neighbourhood rather than a position (rules-engine#32).
+/**
+ * The comma of an address line: the word before it is a place name or a number.
+ * "myocardial infarction, 2016" is a year in a list (rules-engine#111).
+ */
+const ADDRESS_COMMA = /(?<!\S)(?:[A-ZÀ-Þ\d][^\s,]*|[^\s,]*\]),[ \t]*$/;
+
+/**
+ * A redaction placeholder: "[POSTAL_CODE]" holds the words the address test
+ * looks for, so on masked text it made every year in its sentence a postcode
+ * (rules-engine#111). A masked value is no address word.
+ */
+const MASKED_VALUE = /\[[A-Z][A-Z_]*\]/g;
+
 function yearSitsInAddressStructure(text: string, start: number, end: number): boolean {
   const before = text.slice(Math.max(0, start - 28), start);
   // "Amsterdam, 2026" -- the comma of an address line.
-  if (/,[ \t]*$/.test(before)) return true;
+  if (ADDRESS_COMMA.test(before)) return true;
   // "PLZ: 2011" -- a postal label with nothing but punctuation between.
   if (POSTAL_LABEL_TOUCHING.test(before)) return true;
   // A capitalised place name immediately after.
@@ -468,7 +482,7 @@ function yearSitsInAddressStructure(text: string, start: number, end: number): b
   // 12, rustige ligging in 2018, vlakbij openbaar vervoer." is an Antwerp
   // postal code in prose; the false positives put the year and the address in
   // different sentences.
-  return POSTAL_CONTEXT_NEAR.test(sentenceAround(text, start, end));
+  return POSTAL_CONTEXT_NEAR.test(sentenceAround(text, start, end).replace(MASKED_VALUE, " "));
 }
 
 function suppressYearAsPostal(text: string, match: RawMatch): boolean {
@@ -491,9 +505,6 @@ function suppressYearAsPostal(text: string, match: RawMatch): boolean {
   // see yearSitsInAddressStructure for why a 300-character window of address
   // words was the defect rather than the keyword list.
   if (yearSitsInAddressStructure(text, match.start, match.end)) return false;
-  // Keep if preceded by comma+space (address pattern: "Amsterdam, 2026")
-  const immediateBefore = text.slice(Math.max(0, match.start - 3), match.start);
-  if (/,\s*$/.test(immediateBefore)) return false;
   // Suppress if date keyword nearby (birth date, employment date, etc.)
   if (DATE_KEYWORD_NEAR.test(context)) return true;
   // Suppress: recent years without postal context are almost never postal codes
@@ -544,11 +555,28 @@ const TOWN_AFTER = /^\s*[A-ZÀ-ÞĀ-Ž]/;
 const EXTENSION_BEFORE =
   /(?<![A-Za-z0-9_])(?:toest(?:el)?|ext|extension|poste|durchwahl|doorkiesnummer|tst|nebenstelle)\.?\s*(?:[a-zà-ÿ]{2,10}\s*)?[:.]?\s*$/i;
 
+/**
+ * What else a bare digit run after these is (rules-engine#111): a head count
+ * ("Employees: 214"), a standard ("ISO/IEC 27001"), a product model with an
+ * inner capital ("Dell OptiPlex 7090"). Not the digits after "[PHONE]": the
+ * rest of a number an earlier pass cut short, safer masked as a postcode.
+ */
+const COUNT_LABEL_BEFORE =
+  /(?<![A-Za-z0-9_])(?:employees|headcount|staff|mitarbeiter(?:innen)?|beschäftigte|werknemers|medewerkers|employés|salariés|effectifs?|dipendenti|empleados|pracowników|zaměstnanců)\s*[:=]?\s*$/i;
+const NOT_POSTAL_BEFORE =
+  /(?<![A-Za-z0-9_])(?:(?:ISO(?:\/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*|[A-Za-z]*[a-z][A-Z][A-Za-z]*\s+)$/;
+
+/** A thousands group of an amount: the "750" of "£28,750,000". */
+const GROUP_BEFORE = /\d[,.]$/;
+const GROUP_AFTER = /^[,.]\d{3}(?!\d)/;
+
 /** Suppress a postal code the word in front of it rules out. */
 function suppressPostalAfterDisqualifyingWord(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
   const before = text.slice(Math.max(0, match.start - 24), match.start);
-  if (EXTENSION_BEFORE.test(before)) return true;
+  if (EXTENSION_BEFORE.test(before) || COUNT_LABEL_BEFORE.test(before)
+    || NOT_POSTAL_BEFORE.test(before)) return true;
+  if (GROUP_BEFORE.test(before) && GROUP_AFTER.test(text.slice(match.end, match.end + 5))) return true;
   return RECENT_YEAR.test(match.text.trim())
     && (YEAR_WORD_BEFORE.test(before) || YEAR_VERB_BEFORE.test(before))
     && !TOWN_AFTER.test(text.slice(match.end, match.end + 3));
@@ -1045,6 +1073,8 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   if ("._/".includes(beforeChar) && /\d/.test(prevPrev)) return true;
   if ("._/".includes(afterChar) && /\d/.test(nextNext)) return true;
   if (afterChar === "-" && /\d/.test(nextNext)) return true;
+  // A hyphenated chain goes on after it: "réf. : L-2025-HD-0412" is a reference (#111).
+  if (/^-[A-Za-z0-9]+-/.test(text.slice(match.end, match.end + 12))) return true;
   if (beforeChar === "-" && !countryPrefixed(text.slice(0, match.start - 1), clean)) return true;
 
   // A further digit group on the same line: "1268 040390", "1234 5678 925",
@@ -1234,6 +1264,8 @@ function columnHeader(text: string, start: number): string | null {
     const cells = line.split(sep);
     const column = text.slice(lineStart, start).split(sep).length - 1;
     for (const header of [...above].reverse()) {
+      // A "label : value" field with a comma in its value is not a header (#111).
+      if (header.includes(":")) continue;
       const heads = header.split(sep);
       if (heads.length === cells.length && !ANY_DATE.test(header)) return heads[column].toLowerCase();
     }

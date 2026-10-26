@@ -57,7 +57,7 @@ class NLConfig(CountryConfig):
             # --- Phone (national landline — 3-digit area code) ---
             PatternDef(
                 entity_type=EntityType.PHONE,
-                pattern=r"\b0[1-9]\d[\s\-]?\d{3}[\s\-]?\d{4}\b",
+                pattern=r"\b0[1-9]\d(?:\s-\s|[\s\-])?\d{3}[\s\-]?\d{4}\b",
                 validator=None,
                 description="Dutch landline — 0xx xxx xxxx (3-digit area)",
             ),

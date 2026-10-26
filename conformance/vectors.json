@@ -6646,6 +6646,131 @@
         "DATE_OF_DEATH",
         "POSTAL_CODE"
       ]
+    },
+    {
+      "id": "postal-not-a-year-beside-a-masked-postcode",
+      "text": "Adresse: Bahnhofstrasse 4, [POSTAL_CODE] Zürich\n\n=== AUSBILDUNG ===\n\n2013 — [POSTAL_CODE]\nMaster of Science in Informatik (ETH)",
+      "countries": [
+        "CH"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ],
+      "notes": "rules-engine#111: the placeholder's word \"POSTAL\" counted as address context for every year in its sentence."
+    },
+    {
+      "id": "postal-not-the-year-of-a-standard-beside-a-placeholder",
+      "text": "Adresse : 8 rue de la Paix, [POSTAL_CODE] Paris\n\nNorme: ISO [POSTAL_CODE]:2015 (CERT2474117)",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ],
+      "notes": "rules-engine#111."
+    },
+    {
+      "id": "postal-not-a-year-after-a-lowercase-comma",
+      "text": "Past history:\n- Type 2 diabetes mellitus, diet controlled\n- Previous anterior myocardial infarction, 2016\n\nAddress: 14 Main Street, Dublin",
+      "countries": [
+        "IE"
+      ],
+      "mustNotDetect": [
+        "POSTAL_CODE"
+      ],
+      "notes": "rules-engine#111: any comma before a year read as the comma of an address line."
+    },
+    {
+      "id": "postal-not-a-thousands-group-or-a-headcount",
+      "text": "Annual Revenue:     £28,750,000\nEmployees:          214\nAddress: 1 King Street, London EC2V 8AU",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "EC2V 8AU"
+        ]
+      },
+      "notes": "rules-engine#111: \"750\" and \"214\" were Icelandic postcodes."
+    },
+    {
+      "id": "postal-not-a-standard-or-a-model-number",
+      "text": "Adresse : rue de la Loi 16, 1000 Bruxelles. Poste fixe Dell OptiPlex 7090, audit ISO/IEC 27001 en novembre.",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1000"
+        ]
+      },
+      "notes": "rules-engine#111."
+    },
+    {
+      "id": "postal-not-inside-a-hyphenated-reference",
+      "text": "Adresse : 12 rue de Hollerich, L-1741 Luxembourg\nSoins à domicile (réf. : L-2417-HD-0412)",
+      "countries": [
+        "LU"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "L-1741"
+        ]
+      },
+      "notes": "rules-engine#111: \"L-2417\" of a reference was a Luxembourg postcode."
+    },
+    {
+      "id": "dod-written-month-abbreviated-french",
+      "text": "Il s'agit de ma mère (décédée le 8 déc. 2025), domiciliée 14 rue des Tanneurs, 69007 Lyon.",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "DATE_OF_DEATH": [
+          "8 déc. 2025"
+        ],
+        "POSTAL_CODE": [
+          "69007"
+        ]
+      },
+      "notes": "rules-engine#111: \"déc.\" was no month, so the year became a postcode."
+    },
+    {
+      "id": "phone-dutch-landline-with-a-spaced-hyphen",
+      "text": "Correspondentieadres: Haarlemmerdijk 117, 1013 KH Amsterdam\nTelefoon: 020 - 638 4455",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "020 - 638 4455"
+        ]
+      },
+      "notes": "rules-engine#111: the phone stopped at \"020 - 638\" and \"4455\" was a postcode."
+    },
+    {
+      "id": "internal-id-garda-collar-number",
+      "text": "Station: Pearse Street, Dublin 2\nSupervisor on duty: Sgt. B. Fahy (collar 11047)\nAddress of incident: 4 Main Street",
+      "countries": [
+        "IE"
+      ],
+      "mustDetect": {
+        "INTERNAL_ID": [
+          "11047"
+        ]
+      },
+      "notes": "rules-engine#111: the collar number was a German postcode."
+    },
+    {
+      "id": "dob-not-from-a-place-of-birth-field-read-as-a-header",
+      "text": "Lieu de naissance : Esch-sur-Alzette, Luxembourg\nNationalité : Luxembourgeoise\nNuméro de passeport : LU-P7724419 (délivré le 18.06.2021, valable jusqu'au 17.06.2031)",
+      "countries": [
+        "LU"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ],
+      "notes": "rules-engine#111: a field with a comma in its value was read as a table header over the passport line."
     }
   ]
 }

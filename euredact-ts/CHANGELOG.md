@@ -124,6 +124,28 @@ narrative lives. Sections here use that vocabulary
   prefix now counts only when it is one, with that country's postcode length.
   A structured postcode glued to a reference (`CPS-HR-2026-019`) is no longer
   one either. *(rules-engine#111)*
+- **Years, amounts and model numbers in running text were masked as
+  `POSTAL_CODE`.** On text that already holds placeholders, the word in
+  `[POSTAL_CODE]` or `[ADDRESS]` counted as address context for every year in
+  its sentence (`2013 — [POSTAL_CODE]` in a CV, `ISO [POSTAL_CODE]:2015`); a
+  comma after any word made a year an address line (`myocardial infarction,
+  2016`); and a thousands group (`£28,750,000`), a head count
+  (`Employees: 214`), a standard (`ISO/IEC 27001`), a model number
+  (`Dell OptiPlex 7090`) or the middle of a reference (`L-2025-HD-0412`) passed
+  as a postcode. A placeholder is no longer address context, the comma must
+  follow a place name or a number, and those words rule a postcode out.
+  `décédée le 8 déc. 2025` is a date of death: abbreviated French months are
+  months. *(rules-engine#111)*
+- **A Dutch landline written `020 - 638 4455` was cut short.** The phone ended
+  at `020 - 638` and `4455` became a postcode; the spaced hyphen is now part
+  of the number. *(rules-engine#111)*
+- **A garda's collar number was a postcode.** Behind "collar" it is an
+  `INTERNAL_ID`. *(rules-engine#111)*
+- **A passport's issue date was typed `DOB`.** A field with a comma in its
+  value (`Lieu de naissance : Esch-sur-Alzette, Luxembourg`) was read as a
+  table header over the lines below it, and its "naissance" labelled the
+  date in `délivré le 18.06.2021`. A `label : value` line is no header.
+  *(rules-engine#111)*
 - **A Polish military booklet number with a two-letter series was split or
   missed.** The pattern added for #102 took a three-letter series only; the
   usual series has two letters. `EL 0473218` was `EL [PHONE]`, and

@@ -319,7 +319,7 @@ const NL: CountryConfig = {
     p(EntityType.IBAN, String.raw`\bNL\d{2}\s?[A-Z]{4}\s?\d{4}\s?\d{4}\s?\d{2}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bNL[\s.]?\d{9}B\d{2}\b`, "vat_nl"),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b\d{8}\b`, "kvk", "", ["KvK", "Kamer van Koophandel", "kvk-nummer", "KVK-nummer", "handelsregister", "chamber of commerce"], true),
-    p(EntityType.PHONE, String.raw`\b0[1-9]\d[\s\-]?\d{3}[\s\-]?\d{4}\b`),
+    p(EntityType.PHONE, String.raw`\b0[1-9]\d(?:\s-\s|[\s\-])?\d{3}[\s\-]?\d{4}\b`),
     p(EntityType.PHONE, String.raw`\b0[1-9]\d{2}[\s\-]?\d{6,7}\b`),
     p(EntityType.PHONE, String.raw`\b06[\s\-]?\d{4}[\s\-]?\d{4}\b`),
     p(EntityType.PHONE, String.raw`\b06\d{8}\b`),

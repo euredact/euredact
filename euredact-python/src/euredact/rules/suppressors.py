@@ -390,6 +390,8 @@ _MONTH_NAMES = (
     # fr
     "|janvier|février|février|mars|avril|juin|juillet|août|aout|septembre"
     "|octobre|novembre|décembre|decembre"
+    # ... and their abbreviations ("décédée le 8 déc. 2025"; rules-engine#111)
+    "|janv|févr|fevr|avr|juil|déc"
     # nl
     "|januari|februari|maart|mei|juni|juli|augustus|oktober|mrt"
     # it
@@ -845,6 +847,19 @@ def _sentence_around(text: str, start: int, end: int, reach: int = 160) -> str:
     return before + after
 
 
+#: The comma of an address line: "Amsterdam, 2026", "rue du Commerce 130, 2026".
+#: The word before it is a place name or a number. "myocardial infarction,
+#: 2016" is a year in a list, not an address (rules-engine#111).
+_ADDRESS_COMMA = re.compile(r"(?<!\S)(?:[A-ZÀ-Þ\d][^\s,]*|[^\s,]*\]),[ \t]*$")
+
+#: A redaction placeholder. "[POSTAL_CODE]" and "[ADDRESS]" contain the words
+#: the address test looks for, and on text already masked once they made every
+#: year in their sentence a postcode: "2013 — [POSTAL_CODE]" in a CV,
+#: "ISO [POSTAL_CODE]:2015" (rules-engine#111). A masked value is no address
+#: word.
+_MASKED_VALUE = re.compile(r"\[[A-Z][A-Z_]*\]")
+
+
 def _year_sits_in_address_structure(text: str, start: int, end: int) -> bool:
     """True when a year-shaped value is positioned as a postal code.
 
@@ -854,7 +869,7 @@ def _year_sits_in_address_structure(text: str, start: int, end: int) -> bool:
     """
     before = text[max(0, start - 28):start]
     # "Amsterdam, 2026" — the comma of an address line.
-    if re.search(r",[ \t]*$", before):
+    if _ADDRESS_COMMA.search(before):
         return True
     # "PLZ: 2011" — a postal label with nothing but punctuation between.
     if _POSTAL_LABEL_TOUCHING.search(before):
@@ -871,7 +886,8 @@ def _year_sits_in_address_structure(text: str, start: int, end: int) -> bool:
     # separates it from the false positives: there the year and the address sit
     # in different sentences ("... revenus 2022. ... Adresse : rue du Commerce
     # 130, 89654 Angers.") and the address carries its own code.
-    return bool(_POSTAL_CONTEXT_NEAR.search(_sentence_around(text, start, end)))
+    sentence = _MASKED_VALUE.sub(" ", _sentence_around(text, start, end))
+    return bool(_POSTAL_CONTEXT_NEAR.search(sentence))
 
 
 def suppress_year_as_postal(text: str, match: RawMatch) -> bool:
@@ -916,10 +932,6 @@ def suppress_year_as_postal(text: str, match: RawMatch) -> bool:
     # capitalised city, while "2022" follows "revenus " and precedes ". ".
     # So a year is rescued only by structure that touches it.
     if _year_sits_in_address_structure(text, match.start, match.end):
-        return False
-    # Keep if preceded by comma+space (address pattern: "Amsterdam, 2026")
-    immediate_before = text[max(0, match.start - 3):match.start]
-    if re.search(r",\s*$", immediate_before):
         return False
     # Suppress: years without postal context are almost never postal codes
     return True
@@ -974,12 +986,37 @@ _EXTENSION_BEFORE = re.compile(
 )
 
 
+#: What else a bare digit run after these is (rules-engine#111): a head count
+#: ("Employees: 214"), a standard ("ISO/IEC 27001", "EN 1090"), a product model
+#: written with an inner capital ("Dell OptiPlex 7090", "ThinkPad 1234").
+#: Not the digits after "[PHONE]": those are the rest of a number an earlier
+#: pass cut short, and masking them as a postcode is the safer error.
+_COUNT_LABEL_BEFORE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:employees|headcount|staff|mitarbeiter(?:innen)?"
+    r"|beschäftigte|werknemers|medewerkers|employés|salariés|effectifs?"
+    r"|dipendenti|empleados|pracowników|zaměstnanců)\s*[:=]?\s*$",
+    re.IGNORECASE,
+)
+_NOT_POSTAL_BEFORE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:(?:ISO(?:/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?"
+    r"|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*"
+    r"|[A-Za-z]*[a-z][A-Z][A-Za-z]*\s+)$")
+
+#: A thousands group of an amount: the "750" of "£28,750,000".
+_GROUP_BEFORE = re.compile(r"\d[,.]$")
+_GROUP_AFTER = re.compile(r"^[,.]\d{3}(?!\d)")
+
+
 def suppress_postal_after_disqualifying_word(text: str, match: RawMatch) -> bool:
     """Suppress a postal code the word in front of it rules out."""
     if match.pattern_def.entity_type != EntityType.POSTAL_CODE:
         return False
     before = text[max(0, match.start - 24):match.start]
-    if _EXTENSION_BEFORE.search(before):
+    if (_EXTENSION_BEFORE.search(before) or _COUNT_LABEL_BEFORE.search(before)
+            or _NOT_POSTAL_BEFORE.search(before)):
+        return True
+    if (_GROUP_BEFORE.search(before)
+            and _GROUP_AFTER.match(text[match.end:match.end + 5])):
         return True
     if (_RECENT_YEAR.match(match.text.strip())
             and (_YEAR_WORD_BEFORE.search(before)
@@ -1530,6 +1567,10 @@ def suppress_postal_in_longer_identifier(text: str, match: RawMatch) -> bool:
         return True
     if after_char == "-" and next_next.isdigit():
         return True
+    # A hyphenated chain goes on after it: "réf. : L-2025-HD-0412" is a
+    # reference, though "L-2025" alone would be a Luxembourg postcode (#111).
+    if re.match(r"-[A-Za-z0-9]+-", text[match.end:match.end + 12]):
+        return True
     if before_char == "-" and not _country_prefixed(text[:match.start - 1], clean):
         # "A-1010 Wien" is an address; "12-3456" is one number
         return True
@@ -1786,6 +1827,11 @@ def _column_header(text: str, start: int) -> str | None:
         cells = line.split(sep)
         column = text[line_start:start].count(sep)
         for header in reversed(above):
+            # "Lieu de naissance : Esch-sur-Alzette, Luxembourg" is a field
+            # with a comma in its value, not a header: it labelled the
+            # passport's issue date two lines down a date of birth (#111).
+            if ":" in header:
+                continue
             heads = header.split(sep)
             if len(heads) == len(cells) and not _ANY_DATE.search(header):
                 return heads[column].lower()

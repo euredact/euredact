@@ -321,6 +321,8 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         r"|num[ée]ro\s*de\s*sinistre|numero\s*(?:di\s*)?sinistro"
         r"|n[úu]mero\s*de\s*siniestro|skade(?:nummer|sag)"
         r"|claim\s*(?:no|number|id)"
+        # A garda's or police officer's collar number (rules-engine#111).
+        r"|collar"
         r"|osobní\s*(?:číslo\s*)?zaměstnance)" + _SEP, re.IGNORECASE)),
 
     # ── Credential ─────────────────────────────────────────────────────
