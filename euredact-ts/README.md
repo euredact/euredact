@@ -323,9 +323,14 @@ Cloud tier only — the rule engine never emits these, because there is no shape
 to match on. That is precisely why the model exists:
 
 ORGANISATION_NAME JOB_TITLE         MEDICAL_CONDITION SENSITIVE_ATTRIBUTE
-BIOMETRIC_REF     FINANCIAL_AMOUNT  QUASI_IDENTIFIER  CREDENTIAL
-URL
+BIOMETRIC_REF     FINANCIAL_AMOUNT  QUASI_IDENTIFIER  URL
 ```
+
+`SECRET` is the one type for credentials, whichever layer finds them: the rules
+engine's shaped keys and tokens, and the cloud model's prose passwords and
+connection-string secrets, which the service labels `CREDENTIAL`. The SDK
+reports those as `SECRET`, and `CREDENTIAL` remains only as a legacy alias of
+it (rules-engine#111).
 
 `INTERNAL_ID` — an employee, badge or customer number tied to a person — is
 emitted **only** when an explicit label names it (`medarbejdernummer:`,

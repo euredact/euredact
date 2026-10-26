@@ -38,6 +38,7 @@ which both test suites run.
 
 ### Changed
 
+- Every credential is reported as `SECRET`: the cloud model's `CREDENTIAL` maps to it, and `CREDENTIAL` remains only as a legacy alias. *(rules-engine#111)*
 - The Irish PPSN and the Austrian SVNr are `SSN`, not `NATIONAL_ID`, as the canon defines them (both countries have no separate national ID). *(rules-engine#111)*
 - A span the cloud model found reports no `confidence` (`None` / `null`) instead of an invented `"high"`; filtering on `"high"` keeps checksum-backed rules detections only. *(rules-engine#108)*
 - A daily-quota `429` raises `QuotaExceededError` at once instead of after every retry; the edge's rate-limit `429` is still retried and then raises `RateLimitedError`, a subclass. *(rules-engine#89)*

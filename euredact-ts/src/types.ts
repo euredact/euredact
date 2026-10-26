@@ -75,7 +75,8 @@ export enum EntityType {
   BIOMETRIC_REF = "BIOMETRIC_REF",
   FINANCIAL_AMOUNT = "FINANCIAL_AMOUNT",
   QUASI_IDENTIFIER = "QUASI_IDENTIFIER",
-  CREDENTIAL = "CREDENTIAL",
+  /** Legacy alias of SECRET: every credential, the model's included, is SECRET (rules-engine#111). */
+  CREDENTIAL = "SECRET",
   URL = "URL",
 
   OTHER = "OTHER",
@@ -91,6 +92,8 @@ export const LEGACY_TYPE_ALIASES: Record<string, string> = {
   NAME: "PERSON_NAME",
   STREET_ADDRESS: "ADDRESS",
   NATIONALITY_ETHNICITY: "SENSITIVE_ATTRIBUTE",
+  // The model labels prose credentials CREDENTIAL; the SDK reports every credential as SECRET (rules-engine#111).
+  CREDENTIAL: "SECRET",
 };
 
 /**

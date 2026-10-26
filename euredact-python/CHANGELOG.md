@@ -86,6 +86,11 @@ narrative lives. Sections here use that vocabulary
 
 ### Changed
 
+- **Every credential is `SECRET`.** The cloud model labels prose credentials
+  (passwords, connection-string secrets) `CREDENTIAL`, and the rules engine
+  types shaped keys and tokens `SECRET`, so one kind of data arrived under two
+  names. The SDK now reports both as `SECRET`; `EntityType.CREDENTIAL` is kept as a
+  legacy alias of it, like `IBAN` for `BANK_ACCOUNT`. *(rules-engine#111)*
 - **The Irish PPSN and the Austrian SVNr are `SSN`.** The canon types a
   social-security number `SSN` where a country has no separate national ID
   ("A PPSN is SSN, never NATIONAL_ID"); both were `NATIONAL_ID`. The Swiss

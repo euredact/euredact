@@ -69,7 +69,11 @@ class EntityType(str, Enum):
     BIOMETRIC_REF = "BIOMETRIC_REF"
     FINANCIAL_AMOUNT = "FINANCIAL_AMOUNT"
     QUASI_IDENTIFIER = "QUASI_IDENTIFIER"
-    CREDENTIAL = "CREDENTIAL"
+    # One type for every credential (decided on rules-engine#111): the model's
+    # CREDENTIAL (prose passwords, connection-string secrets) and the rules'
+    # SECRET (shaped keys and tokens) are both reported as SECRET. Kept as an
+    # alias, like IBAN, so code naming EntityType.CREDENTIAL keeps working.
+    CREDENTIAL = "SECRET"  # legacy alias -> SECRET
     URL = "URL"
 
     OTHER = "OTHER"
@@ -98,6 +102,9 @@ LEGACY_TYPE_ALIASES: dict[str, str] = {
     "NAME": "PERSON_NAME",
     "STREET_ADDRESS": "ADDRESS",
     "NATIONALITY_ETHNICITY": "SENSITIVE_ATTRIBUTE",
+    # The service's model labels prose credentials CREDENTIAL; the SDK reports
+    # every credential as SECRET (rules-engine#111).
+    "CREDENTIAL": "SECRET",
 }
 
 

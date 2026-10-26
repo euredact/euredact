@@ -160,9 +160,15 @@ test("an unknown type is passed through, not dropped", () => {
 test("the cloud-only types exist", () => {
   for (const t of ["ORGANISATION_NAME", "JOB_TITLE", "MEDICAL_CONDITION",
                    "SENSITIVE_ATTRIBUTE", "BIOMETRIC_REF", "FINANCIAL_AMOUNT",
-                   "QUASI_IDENTIFIER", "CREDENTIAL", "URL"]) {
+                   "QUASI_IDENTIFIER", "URL"]) {
     assert.ok((Object.values(EntityType) as string[]).includes(t), `${t} missing`);
   }
+});
+
+// Decided on rules-engine#111: one type for every credential.
+test("the model's CREDENTIAL is reported as SECRET", () => {
+  assert.equal(canonicalType("CREDENTIAL"), "SECRET");
+  assert.equal(EntityType.CREDENTIAL, EntityType.SECRET);
 });
 
 // ── Configuration ──────────────────────────────────────────────────────────

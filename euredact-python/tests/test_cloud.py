@@ -733,3 +733,14 @@ def test_a_model_span_keeps_a_confidence_the_service_sends():
          "source": "model", "confidence": "medium"}])
     with _client(lambda r: _response(200, payload)) as client:
         assert client.redact(DOC, country="BE").detections[0].confidence == "medium"
+
+
+def test_the_models_credential_is_reported_as_secret():
+    """One type for every credential (decided on rules-engine#111)."""
+    payload = dict(SUCCESS, entities=[
+        {"start": 8, "end": 21, "text": "Bas Verhoeven", "type": "CREDENTIAL",
+         "source": "model"}])
+    with _client(lambda r: _response(200, payload)) as client:
+        det = client.redact(DOC, country="BE").detections[0]
+    assert det.entity_type is EntityType.SECRET
+    assert EntityType.CREDENTIAL is EntityType.SECRET
