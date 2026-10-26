@@ -337,6 +337,45 @@ def _prefixed_reference(rng):
     return text, [pii(pc, "POSTAL_CODE", "AT")], [ref]
 
 
+def _year_beside_masked_postcode(rng):
+    """A placeholder is no address word: "2013 — [POSTAL_CODE]" in a CV (#111)."""
+    pc, y = str(rng.randrange(3000, 9999)), str(rng.randrange(2005, 2019))
+    text = (f"Adresse: Bahnhofstrasse {rng.randrange(1, 90)}, {pc} Zürich\n\n"
+            f"=== AUSBILDUNG ===\n\n{y} — [POSTAL_CODE]\nMaster of Science (ETH)")
+    return text, [pii(pc, "POSTAL_CODE", "CH")], [y]
+
+
+def _amount_and_headcount(rng):
+    """A thousands group and a head count are not postcodes (#111)."""
+    amount = f"£{rng.randrange(10, 99)},{rng.randrange(100, 999)},000"
+    count = f"Employees: {rng.randrange(100, 999)}"
+    text = f"Annual Revenue: {amount}\n{count}\nAddress: 1 King Street, London EC2V 8AU"
+    return text, [pii("EC2V 8AU", "POSTAL_CODE", "UK")], [amount, count]
+
+
+def _nl_spaced_landline(rng):
+    """"020 - 638 4455" is one phone number, not a phone and a postcode (#111)."""
+    phone = f"020 - {rng.randrange(200, 999)} {rng.randrange(1000, 9999)}"
+    text = (f"Correspondentieadres: Haarlemmerdijk {rng.randrange(1, 200)}, 1013 KH Amsterdam\n"
+            f"Telefoon: {phone}")
+    return text, [pii(phone, "PHONE", "NL"), pii("1013 KH", "POSTAL_CODE", "NL")], []
+
+
+def _collar_number(rng):
+    """A garda's collar number is an INTERNAL_ID, not a postcode (#111)."""
+    n = str(rng.randrange(10000, 99999))
+    text = (f"Station: Pearse Street, Dublin 2\nSupervisor on duty: Sgt. B. Fahy (collar {n})\n"
+            f"Address of incident: 4 Main Street")
+    return text, [pii(n, "INTERNAL_ID", "IE")], []
+
+
+def _abbreviated_death_date(rng):
+    """"8 déc. 2025": an abbreviated French month is a month (#111)."""
+    date = f"{rng.randrange(1, 28)} {rng.choice(['déc.', 'janv.', 'févr.', 'avr.', 'juil.'])} {rng.randrange(2020, 2026)}"
+    text = f"Il s'agit de ma mère (décédée le {date}), domiciliée 14 rue des Tanneurs, 69007 Lyon."
+    return text, [pii(date, "DATE_OF_DEATH", "FR"), pii("69007", "POSTAL_CODE", "FR")], []
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -394,6 +433,11 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#111: written birth year (de)", _written_birth_year(
         "Geburtsdatum:", ["Januar", "März", "Juli", "Oktober"], "DE")),
     ("rules-engine#111: prefixed reference beside an address", _prefixed_reference),
+    ("rules-engine#111: year beside a masked postcode", _year_beside_masked_postcode),
+    ("rules-engine#111: amount and head count", _amount_and_headcount),
+    ("rules-engine#111: NL landline with a spaced hyphen", _nl_spaced_landline),
+    ("rules-engine#111: garda collar number", _collar_number),
+    ("rules-engine#111: abbreviated French death date", _abbreviated_death_date),
     # #103: residence card and visa sticker.
     ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
     ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),
