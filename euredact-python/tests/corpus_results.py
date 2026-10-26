@@ -193,14 +193,22 @@ def _git(*args: str) -> str | None:
 def engine_info(version: str) -> dict:
     """Which engine was measured. `version` alone misleads between releases:
     `main` keeps the last release's number until the next one is cut, so the
-    figures say how far past the tag they were measured (rules-engine#109)."""
+    figures say how far past the tag they were measured (rules-engine#109).
+
+    A version with no tag yet is the release being cut: the release skill
+    measures after the version bump and tags after the commit, so on the tag
+    alone the figures it publishes would read "unreleased" (rules-engine#116).
+    """
     describe = _git("describe", "--tags")
+    tag = f"v{version}"
     return {
         "package": "euredact",
         "version": version,
         "commit": _git("rev-parse", "--short", "HEAD"),
         "describe": describe,
-        "released": describe == f"v{version}",
+        # Without git (no repository, no tags) nothing can be said: unreleased.
+        "released": describe is not None and (
+            describe == tag or not _git("tag", "--list", tag)),
     }
 
 

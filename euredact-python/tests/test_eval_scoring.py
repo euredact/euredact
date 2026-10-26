@@ -240,3 +240,48 @@ class TestPlacesInsideOtherLabels:
         from eval_full import _label_places
         labels = [{"PII_identifier": "1000", "PII_category": "POSTAL_CODE"}]
         assert _label_places("ref10007", labels) == [[3]]
+
+
+class TestEngineLabel:
+    """Which release the published figures are labelled with (rules-engine#116)."""
+
+    @staticmethod
+    def _info(monkeypatch, version, describe, tags):
+        def fake_git(*args):
+            if args[:2] == ("describe", "--tags"):
+                return describe
+            if args[:2] == ("rev-parse", "--short"):
+                return "abc1234"
+            if args[:2] == ("tag", "--list"):
+                return "\n".join(t for t in tags if t == args[2])
+            return None
+        monkeypatch.setattr(corpus_results, "_git", fake_git)
+        return corpus_results.engine_info(version)
+
+    @staticmethod
+    def _heading(info):
+        res = corpus_results.build_results(
+            version=info["version"], modes={"hinted": evaluate(DATA, True)},
+            category_map=CATEGORY_MAP,
+            corpus=corpus_results.composition([("a.json", DATA)], set()),
+            regressions={"records": 0, "failures": 0}, generated="2026-10-26")
+        res["engine"] = info
+        return corpus_results.render_markdown(res).splitlines()[0]
+
+    def test_on_the_tag_is_released(self, monkeypatch):
+        assert self._info(monkeypatch, "0.6.0", "v0.6.0", ["v0.6.0"])["released"]
+
+    def test_past_the_tag_is_unreleased(self, monkeypatch):
+        info = self._info(monkeypatch, "0.6.0", "v0.6.0-63-g3dfcb1a", ["v0.6.0"])
+        assert not info["released"]
+        assert self._heading(info) == (
+            "# Corpus results — euredact 0.6.0, unreleased (v0.6.0-63-g3dfcb1a)")
+
+    def test_without_git_it_is_not_called_released(self, monkeypatch):
+        assert not self._info(monkeypatch, "0.7.0", None, [])["released"]
+
+    def test_a_bumped_version_not_yet_tagged_is_the_release_being_cut(self, monkeypatch):
+        # The release skill measures after the bump and tags after the commit.
+        info = self._info(monkeypatch, "0.7.0", "v0.6.0-77-g79ef1dd", ["v0.6.0"])
+        assert info["released"]
+        assert self._heading(info) == "# Corpus results — euredact 0.7.0 (`abc1234`)"
