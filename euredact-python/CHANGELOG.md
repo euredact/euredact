@@ -141,6 +141,13 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A UK NHS number was typed Austrian without `countries`.** Its ten digits
+  also pass the Austrian SVNr check, and with neither country supported by
+  the document the Austrian pattern won: `NHS Number: 5556953627` was a
+  `NATIONAL_ID` (an `SSN` since the SVNr became one). "NHS", "NHS no" and
+  "NHS number" are now a health-insurance label, so the label decides and it
+  is `HEALTH_INSURANCE`. Masked either way; only the type changes.
+  *(rules-engine#118)*
 - **A date of birth with a written month was not detected.** Only numeric
   dates had a `DOB` shape, so `Geburtsdatum: 4. März 1948`,
   `Date of birth: 2 January 1943` and `Né le 4 février 1948` were left in

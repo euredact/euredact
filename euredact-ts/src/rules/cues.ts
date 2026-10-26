@@ -119,7 +119,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
 
   // Health insurance: the insured person.
   [EntityType.HEALTH_INSURANCE,
-   /(?<![A-Za-z0-9_])(?:versichertennummer|krankenversicherung|kvnr|kv-?nr|mutualité|ziekenfonds|aansluitingsnummer|medical\s*card(?:\s*(?:no|number))?)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:versichertennummer|krankenversicherung|kvnr|kv-?nr|mutualité|ziekenfonds|aansluitingsnummer|medical\s*card(?:\s*(?:no|number))?|nhs(?:\s*(?:no|number))?)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Healthcare provider: the clinician or practice, not the patient — the Dutch
   // AGB-code, the German LANR, the UK GMC number.

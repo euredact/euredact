@@ -50,6 +50,7 @@ which both test suites run.
 
 ### Fixed
 
+- Without `countries`, a UK NHS number behind its label (`NHS Number: 5556953627`) was typed as an Austrian `NATIONAL_ID` (then `SSN`), because its digits also pass the Austrian SVNr check; the label now decides, and it is `HEALTH_INSURANCE`. *(rules-engine#118)*
 - A date of birth or death with the month as a word (`Geburtsdatum: 4. März 1948`, `Date of birth: 2 January 1943`, `Né le 4 février 1948`) was not detected; behind its label it is now `DOB` / `DATE_OF_DEATH`. *(rules-engine#115)*
 - On text already masked — what the gateway's rules pass reads — a date before a masked birth date (`valable jusqu'au 14/06/2029, né le [DOB]`), or after a `[DOB]` placeholder, was typed `DOB`; a placeholder is now read as the masked date it is. *(rules-engine#111)*
 - The year of a written birth date before 1950 (`Geburtsdatum: 21. Januar 1944`) was masked as `POSTAL_CODE`; a number after a letter prefix that is no postal country prefix (`K-40817`, `#LX-20419`, `B-51823`) or glued to a reference (`CPS-HR-2026-019`) is no longer a postcode. *(rules-engine#111)*

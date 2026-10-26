@@ -210,7 +210,11 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
     (EntityType.HEALTH_INSURANCE, re.compile(
         _B + r"(?:versichertennummer|krankenversicherung|kvnr|kv-?nr"
         r"|mutualité|ziekenfonds|aansluitingsnummer"
-        r"|medical\s*card(?:\s*(?:no|number))?)" + _SEP,
+        r"|medical\s*card(?:\s*(?:no|number))?"
+        # The UK NHS number. Blind, its 10 digits also pass the Austrian SVNr
+        # check, and with neither country supported only the label can say
+        # which it is (rules-engine#118).
+        r"|nhs(?:\s*(?:no|number))?)" + _SEP,
         re.IGNORECASE)),
 
     # ── Healthcare provider ────────────────────────────────────────────

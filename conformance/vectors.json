@@ -7009,6 +7009,21 @@
         "DOB"
       ],
       "notes": "rules-engine#111: a field with a comma in its value was read as a table header over the passport line."
+    },
+    {
+      "id": "health-insurance-nhs-number-blind-by-its-label",
+      "text": "Patient record: NHS Number: 5556953627. Contact: ward 4.",
+      "countries": null,
+      "mustDetect": {
+        "HEALTH_INSURANCE": [
+          "5556953627"
+        ]
+      },
+      "mustNotDetect": [
+        "SSN",
+        "NATIONAL_ID"
+      ],
+      "notes": "rules-engine#118: the digits also pass the Austrian SVNr check; blind, with neither country supported, the NHS label decides. It was the Austrian NATIONAL_ID (0.6.0), then SSN."
     }
   ]
 }
