@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a euRedact release — version bump, changelogs, verification, tag, publish to PyPI and npm. Use whenever releasing, bumping a version, tagging, or fixing a failed publish run. The step order matters; releasing out of order is the cause of every publish failure this repo has had.
+description: Cut a euRedact release — version bump, changelogs, verification, tag, publish to PyPI and npm, then tell the inference, pipeline and website streams by issue. Use whenever releasing, bumping a version, tagging, or fixing a failed publish run. The step order matters; releasing out of order is the cause of every publish failure this repo has had.
 ---
 
 # Releasing euRedact
@@ -146,6 +146,47 @@ Metadata of any kind is still not the final word — install and exercise the ne
 release's actual features, not just its version string. A correct
 `__version__` on code that predates the feature would pass a version check and
 fail a user.
+
+## 7. Tell the other streams: one issue each
+
+A release reaches customers through more than the registries. The gateway pins
+the engine for its own rules pass, the training pipeline measures end to end
+against it, and the website quotes its figures and documents its API. None of
+them watches this repo, so **once step 6 passes**, file one issue per stream
+with the `product-issues` skill. The release is not done until all three exist.
+
+| stream | component label | `--repo` | what the issue asks for |
+|---|---|---|---|
+| inference stack | `gateway` | `inference` | bump `euredact[fast]==X.Y.Z` in `euredact-inference/pyproject.toml`, in a deploy of its own (the bundle's `euredact_version` is reported, not enforced); name every change its own code may see: types it keys on, what the rules pass now masks before the model, wire or error changes |
+| training pipeline | `training-data` | `pipeline` | evaluation and type mapping follow the release; any end-to-end re-run waits for the gateway upgrade, or it measures the old engine; gold or generator gaps that rules-engine issues found |
+| website | `website` | `site` | the figures from `docs/corpus-results.{json,md}` and the README's Accuracy section, as measured in step 3, with their conditions; type changes; upgrade notes; new API docs; version strings |
+
+For each:
+
+1. **Search first** (`list --repo <alias> --state open`). Link the stream's
+   related issues instead of duplicating them; comment on one that already
+   covers the release.
+2. **Write it from the tagged commit**, in the `product-issues` format:
+   - the version, the tag and the commit;
+   - the changelog entries that touch that stream;
+   - the figures from step 3, never carried forward;
+   - for the gateway, the exact files and lines its code keys on.
+
+   Mark what is a decision for that stream rather than a task. In 0.7.0 that
+   was whether the HTTP API returns `CREDENTIAL` or `SECRET`.
+3. **Order the dependencies.** The pipeline's re-run waits for the gateway
+   upgrade; the website waits for the registries.
+4. **Cross-link** the issues to each other, and comment them onto the
+   rules-engine issues whose follow-ups wait on them.
+
+The issues use synthetic values only, like every issue.
+
+Why: after 0.6.0 the gateway stayed on its old pin while the fixes shipped,
+and a v15 end-to-end run measured an engine the fixes never reached
+(rules-engine#111: all 100 gateway-layer `DOB` mistypes reproduced on 0.6.0
+and none on 0.7.0). For 0.7.0 the issues were filed by hand and serve as the
+example: euredact/euredact-inference#120, euredact/euredact-training-pipeline#41,
+euredact/public-site#25 (rules-engine#122).
 
 ## Recovering a failed publish
 
