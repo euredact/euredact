@@ -10,6 +10,13 @@ class UKConfig(CountryConfig):
         self.code = "UK"
         self.name = "United Kingdom"
         self.patterns = [
+            # A sort code behind its label. It used to be found only as a
+            # Portuguese plate shape retyped by the label; Portugal's plates are
+            # now matched in their real formats, and NN-NN-NN is not one of
+            # them (rules-engine#126).
+            PatternDef(entity_type=EntityType.BANK_ACCOUNT, pattern=r"\b\d{2}-\d{2}-\d{2}\b",
+                       validator=None, description="UK sort code — NN-NN-NN, behind its label",
+                       context_keywords=["sort code", "sortcode", "sort-code"], requires_context=True),
             # Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
             PatternDef(entity_type=EntityType.HEALTHCARE_PROVIDER, pattern=r"\b\d{7}\b",
                        validator=None, description="UK GMC number — 7 digits",

@@ -575,6 +575,40 @@ def suppress_secret_over_structured(text: str, match: RawMatch) -> bool:
     return False
 
 
+#: Values an assigned-secret rule finds after a "=" or ":" that are names, not
+#: secrets (rules-engine#126, from the IT/HR/MED benchmark):
+#:   references   "${S3_SECRET_KEY}", "${POSTGRES_PASSWORD:-changeme}" -- where
+#:                a secret is kept, not the secret
+#:   identifiers  "svc_terraform", "AWS_SECRET_ACCESS_KEY",
+#:                "ClusterSecretStore" (three words or more)
+#:   compounds    "Conditional-Access-Richtlinie", "IT-Security", "HMAC-SHA256"
+#:   image tags   "redis:7.4-alpine" -- a tag, never "admin:hunter22"
+#:   versions     "FortiClient/7.0.13"
+#:   code         'os.getenv("EXPORT_DB_PASS', 'Host(`api.staging.facturo.be'
+#: Not paths, host names or reference numbers, though most are not secrets
+#: either: "uk/personal/fenwick_chloe", "mac-mhartmann88" and the employee
+#: number "PN-86260" carry personal data that only the mistyped SECRET masked.
+_SECRET_NAME_SHAPES = re.compile(
+    r"^\$\{[A-Za-z_][A-Za-z0-9_]*(?::?[-=?+][^}]*)?\}?$"
+    r"|^[a-z]{2,}(?:_[a-z]{2,})+$|^[A-Z]{2,}(?:_[A-Z]{2,})+$"
+    r"|^(?:[A-Z]+[a-z]{2,}){3,}(?:V?\d{1,2})?$"
+    r"|^[a-z][a-z0-9._/-]*:(?:\d+(?:\.\d+)*(?:-[a-z0-9]+)*|latest|stable|alpine|slim)$"
+    r"|^[A-Za-z][\w.-]*/\d+(?:\.\d+)+$"
+    r"|^[\w.]+\([\"'`]"
+)
+
+#: A hyphenated compound of words and acronyms: "Conditional-Access-Richtlinie",
+#: "IT-Security", "HMAC-SHA256", "Authenticatie-informatie". Two capitalised
+#: words alone are left alone: "Ann-Sophie" and "Caron-Cordier" are names.
+_COMPOUND_PART = r"(?:[A-ZÀ-Þ]{2,6}\d{0,3}|[A-Za-zÀ-ÿ][a-zß-ÿ]{2,})"
+_COMPOUND = re.compile(rf"^{_COMPOUND_PART}(?:-{_COMPOUND_PART})+$")
+_NAME_PAIR = re.compile(r"^[A-ZÀ-Þ][a-zß-ÿ]{2,}-[A-ZÀ-Þ][a-zß-ÿ]{2,}$")
+
+#: A connection string whose password is a reference: the credential is kept
+#: elsewhere ("postgresql://app:${DB_PASS}@db:5432/hr").
+_CONNECTION_WITH_REFERENCE = re.compile(r"^[a-z]+://[^\s:@]+:\$\{[^}]*\}@")
+
+
 def suppress_secret_not_a_secret(text: str, match: RawMatch) -> bool:
     """Reject the three things the ":"-anchored secret rule reliably mistakes.
 
@@ -602,6 +636,10 @@ def suppress_secret_not_a_secret(text: str, match: RawMatch) -> bool:
     if _LDAP_DN.match(bare):
         return True
     if _HYPHENATED_WORDS.match(bare):
+        return True
+    if _SECRET_NAME_SHAPES.match(bare) or _CONNECTION_WITH_REFERENCE.match(bare):
+        return True
+    if _COMPOUND.match(bare) and not _NAME_PAIR.match(bare):
         return True
     if bare.isalpha() and (bare.islower() or (bare[:1].isupper() and bare[1:].islower())):
         return True
@@ -805,12 +843,31 @@ _PLACEHOLDER = re.compile(
 )
 
 
+_PLACEHOLDER_INSIDE = re.compile(r"\[([A-Z][A-Z0-9_]*)\]")
+
+
 def _known_type_names() -> frozenset[str]:
     return frozenset(e.value for e in EntityType)
 
 
 def suppress_redaction_placeholder(text: str, match: RawMatch) -> bool:
     """Suppress a span that is entirely one of the engine's own placeholders."""
+    # The name between the brackets: an assigned value now starts after an
+    # opening bracket, so "credentials: [POSTAL_CODE]" offers "POSTAL_CODE"
+    # alone (rules-engine#33, #126).
+    if (text[match.start - 1:match.start] == "["
+            and text[match.end:match.end + 1] == "]"
+            and match.text in _known_type_names()):
+        return True
+    # A placeholder inside the span: on text masked once, a value that runs
+    # across "[IP_ADDRESS]" is two things joined, and masking it reported the
+    # inner value twice under two types (rules-engine#126).
+    # One character either side, since a span may start just inside the
+    # bracket: "IP_ADDRESS],[IP_ADDRESS" out of "=[IP_ADDRESS],[IP_ADDRESS]".
+    around = text[max(0, match.start - 1):match.end + 1]
+    if any(m.group(1) in _known_type_names()
+           for m in _PLACEHOLDER_INSIDE.finditer(around)):
+        return True
     found = _PLACEHOLDER.match(match.text)
     if found is None:
         return False
@@ -1010,6 +1067,43 @@ _GROUP_BEFORE = re.compile(r"\d[,.]$")
 _GROUP_AFTER = re.compile(r"^[,.]\d{3}(?!\d)")
 
 
+#: What else a number is, by what touches it (rules-engine#126, from the IT,
+#: HR and medical benchmark sets): a build, version, event, lease, policy or
+#: ticket number; a port; an invoice, reference or study-subject number; a
+#: process id ("sshd[21877]"); a JSON id or port field; an HTTP response size;
+#: the hour after a date ("03.10.2026 23:50"); a lab reference range between
+#: HL7 pipes or after "(N :"; or a quantity with its unit after it.
+_TECH_WORD_BEFORE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:build|version|policy\s+id|ticket(?:\s+[A-Za-z]{2,10})?"
+    r"|event|lease|pid|job|port|rfc|facture|invoice|r[ée]f[ée]rence|n[°º]"
+    r"|tn|sae|uczestnik|subject|narratief|participant)"
+    r"\.?\s*[:#=]?\s*[\"(«\[]?\s*$", re.IGNORECASE)
+_TECH_SHAPE_BEFORE = re.compile(
+    r"(?:\"[A-Za-z_]*(?:id|port)\"\s*:\s*\"?"          # "parent_id": 4400
+    r"|(?<![A-Za-z0-9])[A-Z_]*PORT\s*[:=]\s*\"?"          # DB_PORT: "5432"
+    r"|(?:localhost|[a-z0-9\-]+\.[a-z0-9.\-]+):"           # localhost:3000
+    r"|(?<![\d.])\d{2,5}:"                                 # "8080:8080"
+    r"|HTTP/\d(?:\.\d)?\"?\s+\d{3}\s+"                  # "GET ... HTTP/1.1" 200 2048
+    r"|\d+\.\d+(?:\.\d+)+\s*\("                          # build 2.4.0 (4012)
+    r"|(?<!\d)\d{1,2}[./]\d{1,2}[./]"                      # 03.10.2026 23:50
+    r"|\((?:N|norm(?:al)?|ref)\s*:?\s*"                   # (N : 30-400)
+    r"|\|)$", re.IGNORECASE)
+_POSTAL_UNIT_AFTER = re.compile(
+    r"^(?:\s?(?:ms|s|sec|secs|seconds?|secondes?|sekunden|sek|min|bits?|bytes?"
+    r"|kb|mb|gb|tb|kbps|mbps|px|%|records|rows|entries|datensätze|einträge"
+    r"|micrograms|µg|ug|mg|mmol|fl)(?![A-Za-zÀ-ÿ])"
+    r"|\s*→\s*\d+\s*(?:bits?|bytes?)(?![A-Za-z])"           # 2048 → 3072 Bit
+    r"|:\d|\|)", re.IGNORECASE)
+_PID_BEFORE = re.compile(r"[A-Za-z0-9_\-]\[$")
+#: A standard's name as the letters of a lettered postcode: "RFC 5737" is
+#: not a Maltese one. Not BS or EN: those are Bristol and Enfield.
+_STANDARD_LETTERS = re.compile(r"^(?:RFC|ISO|IEC|DIN)\s?\d")
+#: A year closing a range: "1998–2011", "2012–2026". En and em dashes only; a
+#: hyphen joins a Portuguese postcode.
+_YEAR_RANGE_BEFORE = re.compile(r"(?:19|20)\d\d\s?[–—]\s?$")
+_YEAR_RANGE_AFTER = re.compile(r"^\s?[–—]\s?(?:19|20)\d\d(?!\d)")
+
+
 def suppress_postal_after_disqualifying_word(text: str, match: RawMatch) -> bool:
     """Suppress a postal code the word in front of it rules out."""
     if match.pattern_def.entity_type != EntityType.POSTAL_CODE:
@@ -1021,11 +1115,107 @@ def suppress_postal_after_disqualifying_word(text: str, match: RawMatch) -> bool
     if (_GROUP_BEFORE.search(before)
             and _GROUP_AFTER.match(text[match.end:match.end + 5])):
         return True
+    after = text[match.end:match.end + 24]
+    if (_TECH_WORD_BEFORE.search(before) or _TECH_SHAPE_BEFORE.search(before)
+            or _POSTAL_UNIT_AFTER.match(after) or _STANDARD_LETTERS.match(match.text)):
+        return True
+    if _PID_BEFORE.search(before) and after[:1] == "]":
+        return True
+    if _DATE_YEAR.match(match.text.strip()) and (
+            _YEAR_RANGE_BEFORE.search(before) or _YEAR_RANGE_AFTER.match(after)):
+        return True
     if (_RECENT_YEAR.match(match.text.strip())
             and (_YEAR_WORD_BEFORE.search(before)
                  or _YEAR_VERB_BEFORE.search(before))
             and not _TOWN_AFTER.match(text[match.end:match.end + 3])):
         return True
+    return False
+
+
+#: A group with a leading zero: "2.00.079.01" is a version, not an address.
+_IP_LEADING_ZERO = re.compile(r"(?:^|\.)0\d")
+#: The prefix of a CIDR range right after the address: "10.40.0.0/16".
+_CIDR_PREFIX_AFTER = re.compile(r"^/(\d{1,2})(?!\d)")
+#: RFC 5737's documentation ranges: reserved, never routed, used in examples.
+_DOCUMENTATION_NETS = ("192.0.2.", "198.51.100.", "203.0.113.")
+
+
+def suppress_ip_not_a_host(text: str, match: RawMatch) -> bool:
+    """An IPv4 shape that names no host (rules-engine#126).
+
+    A network address ("10.40.0.0/16": the host part is all zeros), an address
+    in a documentation range, or a dotted version number with leading zeros
+    ("HANA-Revision 2.00.079.01"). An interface address with its prefix
+    ("192.168.1.23/24") is a host, and stays.
+    """
+    if match.pattern_def.entity_type != EntityType.IP_ADDRESS:
+        return False
+    ip = match.text
+    if _IP_LEADING_ZERO.search(ip) or ip.startswith(_DOCUMENTATION_NETS):
+        return True
+    # Part of a longer dotted run: "urn:oid:1.2.250.1.71.4.2.1" is an OID.
+    if (re.search(r"\d\.$", text[max(0, match.start - 2):match.start])
+            or re.match(r"^\.\d", text[match.end:match.end + 2])):
+        return True
+    prefix = _CIDR_PREFIX_AFTER.match(text[match.end:match.end + 4])
+    if prefix is not None and int(prefix.group(1)) < 32:
+        value = int.from_bytes(bytes(int(o) for o in ip.split(".")), "big")
+        return value % (1 << (32 - int(prefix.group(1)))) == 0
+    return False
+
+
+#: The specimen of a form: "das Muster „C01X00T47“". Only "Muster": "z. B.",
+#: "e.g." and "np." introduce real values in prose as often as samples --
+#: "Kennzeichen (z. B. K-D 102 für S. Keller)" is S. Keller's plate.
+_EXAMPLE_BEFORE = re.compile(r"(?<![A-Za-z])muster\s*[:,]?\s*[„\"«']?$", re.IGNORECASE)
+
+#: A dummy value, written in placeholder glyphs: "XX0000000", "999 999 9999",
+#: "00000/00/0000", or MAC groups of one repeated letter ("aa:bb:cc:dd:ee:ff"):
+#: five glyphs or more, with an X or a single repeated digit. Not repeated
+#: digits in general -- "111222333" is the standard test BSN -- and not "9000"
+#: or "90000", which are Ghent and Belfort.
+_DUMMY_VALUE = re.compile(
+    r"^(?=(?:[\s:\-./]*[X09]){5})(?:[X\s:\-./]*[X][X0\s:\-./]*|[X9\s:\-./]*X[X9\s:\-./]*"
+    r"|[0\s:\-./]+|[9\s:\-./]+)$"
+    r"|^(?:([a-fA-F])\1[:\-]){2,}([a-fA-F])\2$")
+
+#: Algorithm names in a key or signature line: "ED25519", "SHA256".
+_ALGORITHM = re.compile(
+    r"^(?:ED25519|ED448|SHA-?(?:1|224|256|384|512)|MD5|AES-?\d{3}|RSA-?\d{3,4}"
+    r"|[HRE]S(?:256|384|512))$", re.IGNORECASE)
+
+#: A date exactly, which no national number is written as.
+_EXACT_DOTTED_DATE = re.compile(
+    r"^(?:0[1-9]|[12]\d|3[01])\.(?:0[1-9]|1[0-2])\.(?:19|20)\d\d$")
+
+
+def suppress_dummy_value(text: str, match: RawMatch) -> bool:
+    """A placeholder written in the shape of a value, for any type: once a
+    dummy stops being a plate, "XX 00000" must not become a postcode (#126)."""
+    return bool(_DUMMY_VALUE.match(match.text.strip()))
+
+
+def suppress_example_value(text: str, match: RawMatch) -> bool:
+    """An identifier given as a form's specimen, not anyone's (#126)."""
+    if match.pattern_def.entity_type not in _EXAMPLE_TYPES:
+        return False
+    return bool(_EXAMPLE_BEFORE.search(text[max(0, match.start - 24):match.start]))
+
+
+def suppress_not_an_identifier(text: str, match: RawMatch) -> bool:
+    """Shapes that fit an identifier pattern and are something else (#126):
+    a passport without a single digit ("SCREENING", "POZYTYWNY"), an
+    algorithm read as a plate ("SHA256"), a law citation read as a plate
+    ("§ 1666 BGB"), a date read as a dotted national number ("24.11.2026")."""
+    etype = match.pattern_def.entity_type
+    value = match.text.strip()
+    if etype == EntityType.PASSPORT:
+        return not any(c.isdigit() for c in value)
+    if etype == EntityType.LICENSE_PLATE:
+        return bool(_ALGORITHM.match(value)
+                    or re.search(r"§\s*$", text[max(0, match.start - 4):match.start]))
+    if etype == EntityType.NATIONAL_ID:
+        return bool(_EXACT_DOTTED_DATE.match(value))
     return False
 
 
@@ -1199,7 +1389,11 @@ def suppress_de_plate_unknown_district(text: str, match: RawMatch) -> bool:
     parts = re.split(r"[\s\-]+", match.text.strip())
     if not parts or not parts[0]:
         return False
-    if parts[0].upper() in DE_DISTRICT_CODES:
+    # A German plate number never starts with 0: without a plate cue,
+    # "GR-NB-0412" is an asset tag and "HR-IT-03" a form (rules-engine#126).
+    digits = re.search(r"\d+", match.text)
+    leading_zero = digits is not None and digits.group(0).startswith("0")
+    if parts[0].upper() in DE_DISTRICT_CODES and not leading_zero:
         return False
 
     before, after = _get_context(text, match.start, match.end)
@@ -1659,7 +1853,14 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
     # cue leaves only the broad shape. The types below have shapes specific
     # enough that a whole field matching one is already strong evidence.
     if (match.pattern_def.entity_type in _DELIMITED_FIELD_TYPES
-            and _fills_a_delimited_field(text, match.start, match.end)):
+            and _fills_a_delimited_field(text, match.start, match.end)
+            # A date's column decides when the table names it: under "début",
+            # "fin" or "last_day" a date is a leave or return date, not a
+            # birth date. Filling a field was enough on its own, and every
+            # date in a leave table or an asset list became a DOB
+            # (rules-engine#126). Without a header the field still counts.
+            and not (match.pattern_def.entity_type in _DATE_LABEL_TYPES
+                     and _column_header(text, match.start) is not None)):
         return False
     if match.pattern_def.entity_type in _DATE_LABEL_TYPES:
         return not _labels_this_date(
@@ -1691,13 +1892,19 @@ def _keyword_at(haystack: str, keyword: str, *, last: bool) -> int:
     An all-capitals keyword is an abbreviation and counts only as a word of its
     own: "DOB" is a label, the "dob" in Polish "dobrowolnej" is not, and it typed
     a call-up date as a date of birth (rules-engine#100). A plural "s" may
-    follow ("DOBs e.g. 04/09/1978, ..."). Every other keyword
-    still matches inside a longer word, which the inflected forms need
-    ("urodzenia", "geborene").
+    follow ("DOBs e.g. 04/09/1978, ..."). Every other keyword must start a
+    word but may run on into a longer one, which the inflected forms need
+    ("urodzenia", "geborene"). Starting inside a word it is another word:
+    "née le" in "signée le", "né le" in "Signé le", "born" in "Newborn",
+    "naissance" in "connaissance" typed signature and screening dates as
+    dates of birth (rules-engine#126).
     """
     kw = keyword.lower()
     if not keyword.isupper():
-        return haystack.rfind(kw) if last else haystack.find(kw)
+        i = haystack.rfind(kw) if last else haystack.find(kw)
+        while i > 0 and haystack[i - 1].isalpha():
+            i = haystack.rfind(kw, 0, i - 1 + len(kw)) if last else haystack.find(kw, i + 1)
+        return i
     for m in (reversed(list(re.finditer(re.escape(kw), haystack))) if last
               else re.finditer(re.escape(kw), haystack)):
         before = haystack[m.start() - 1:m.start()]
@@ -1810,41 +2017,51 @@ def _column_header(text: str, start: int) -> str | None:
     supplies the label:
     "Name | Aufnahme | Sterbedatum" over "Müller | 12.02.2024 | 15.02.2024" has
     "Sterbedatum" before the admission date with no date between, and only the
-    column says it labels the other one. A header is one of the three lines
-    above, split by the row's separator into the same number of cells.
+    column says it labels the other one. A header is a line above, split by
+    the row's separator into the same number of cells: one of the three lines
+    above, or further up through rows of the same table -- a leave table's
+    header sits dozens of rows above its last dates (rules-engine#126).
     """
     line_start = text.rfind("\n", 0, start) + 1
     line_end = text.find("\n", start)
     line = text[line_start:line_end if line_end >= 0 else len(text)]
-    # The three lines above, found by rfind: splitting the whole prefix made
-    # this quadratic in the document, once per date candidate.
-    above_start = line_start - 1
-    for _ in range(3):
-        if above_start < 0:
-            break
-        above_start = text.rfind("\n", 0, above_start)
-    above = text[above_start + 1:max(0, line_start - 1)].split("\n") if line_start else []
     for sep in _COLUMN_SEPARATORS:
         if sep not in line:
             continue
         cells = line.split(sep)
         column = text[line_start:start].count(sep)
-        for header in reversed(above):
+        # Lines above, one rfind at a time: splitting the whole prefix made
+        # this quadratic in the document, once per date candidate.
+        end = line_start - 1
+        seen = 0
+        while end >= 0 and seen < _HEADER_REACH:
+            begin = text.rfind("\n", 0, end) + 1
+            header = text[begin:end]
+            seen += 1
+            heads = header.split(sep)
+            same = len(heads) == len(cells)
             # "Lieu de naissance : Esch-sur-Alzette, Luxembourg" is a field
             # with a comma in its value, not a header: it labelled the
-            # passport's issue date two lines down a date of birth (#111).
-            if ":" in header:
-                continue
-            heads = header.split(sep)
-            if len(heads) == len(cells) and not _ANY_DATE.search(header):
+            # passport's issue date two lines down a date of birth (#111). A
+            # commented header ("# Spalten: Name;von;bis") is a header (#126).
+            if (same and (":" not in header or header.lstrip().startswith("#"))
+                    and not _ANY_DATE.search(header)):
                 return heads[column].lower()
+            if seen >= 3 and not same:
+                break           # past the table this value sits in
+            end = begin - 1
     return None
+
+
+#: How many lines up a table's header is looked for.
+_HEADER_REACH = 200
 
 
 # ── Dispatch table: entity type → applicable suppressors ────────────────
 # This avoids calling 16 functions that each start with "if type != X: return False"
 
-_UNIVERSAL = [suppress_sequential, suppress_redaction_placeholder]  # Applies to all types
+_UNIVERSAL = [suppress_sequential, suppress_redaction_placeholder,
+              suppress_dummy_value]  # Applies to all types
 _CONTEXT_ONLY = [suppress_requires_context]  # Always last
 
 _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
@@ -1883,7 +2100,17 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
     EntityType.CHAMBER_OF_COMMERCE: [suppress_reference],
     EntityType.MAC_ADDRESS: [suppress_mac_in_reference],
     EntityType.CREDIT_CARD: [suppress_card_inside_digit_run],
+    EntityType.IP_ADDRESS: [suppress_ip_not_a_host],
 }
+#: The identifier types an example marker or a dummy value rules out.
+_EXAMPLE_TYPES = frozenset({
+    EntityType.NATIONAL_ID, EntityType.PASSPORT, EntityType.LICENSE_PLATE,
+    EntityType.HEALTH_INSURANCE, EntityType.MAC_ADDRESS,
+    EntityType.DRIVERS_LICENSE, EntityType.SSN, EntityType.TAX_ID,
+})
+for _etype in _EXAMPLE_TYPES:
+    _TYPE_SUPPRESSORS.setdefault(_etype, []).extend(
+        [suppress_example_value, suppress_not_an_identifier])
 
 
 # ── Span-pure vs claim-sensitive ────────────────────────────────────────

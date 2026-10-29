@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- Non-personal values in IT, HR and medical documents are no longer masked (rules-engine#126, measured on the IT-250, HR-200 and MED-200 benchmark sets): dates in a table whose column names them (`von`, `bis`, `last_day`) as `DOB`, and dates after a birth word inside a longer one (`signée le`, `Newborn`); quotes, brackets, `${VAR}` references, identifiers and hyphenated compounds as `SECRET`, and no span runs across a `[TYPE]` placeholder; builds, durations, counts, process ids, ports, id fields, references, years in ranges and lab ranges as `POSTAL_CODE`; network addresses with a prefix, documentation addresses and version numbers as `IP_ADDRESS`; asset tags and form numbers numbered from 0, algorithm names and law citations as plates; words without a digit as `PASSPORT`; a dotted date and a form's specimen („Muster“) as `NATIONAL_ID`; placeholder values (`XX0000000`, `999 999 9999`) as any type. A quoted secret is what the quotes hold. Portuguese plates match their real formats anywhere and any three pairs only behind a plate label, and a UK sort code behind its label is `BANK_ACCOUNT` on a pattern of its own. *(rules-engine#126)*
+
 ## [0.7.0] - 2026-10-26
 
 ### Added

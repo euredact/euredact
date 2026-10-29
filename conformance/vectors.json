@@ -3066,10 +3066,11 @@
       ],
       "mustDetect": {
         "SECRET": [
-          "[AKIAIOSFODNN7EXAMPLE]"
+          "AKIAIOSFODNN7EXAMPLE"
         ]
       },
-      "notes": "The guard is restricted to real entity-type names for this reason: a bracketed upper-case token can also be a live AWS key, and a redaction library may not trade a false negative for tidiness."
+      "notes": "The guard is restricted to real entity-type names for this reason: a bracketed upper-case token can also be a live AWS key, and a redaction library may not trade a false negative for tidiness. The brackets are outside the span since rules-engine#126: an assigned value starts after an opening bracket and ends before its closer, so the key is masked and the brackets stay.",
+      "expectRedactedText": "credentials: [[SECRET]] rotated."
     },
     {
       "id": "postal-year-and-address-in-different-sentences",
@@ -7024,6 +7025,382 @@
         "NATIONAL_ID"
       ],
       "notes": "rules-engine#118: the digits also pass the Austrian SVNr check; blind, with neither country supported, the NHS label decides. It was the Austrian NATIONAL_ID (0.6.0), then SSN."
+    },
+    {
+      "id": "dob-not-a-date-under-a-leave-column",
+      "text": "Name;Art;von;bis\nAnna Weber;Urlaub;20.07.2026;31.07.2026\nJonas Kern;AU;03.08.2026;14.08.2026",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "DOB",
+        "DATE_OF_DEATH"
+      ],
+      "notes": "rules-engine#126: a date filling a delimited field was a DOB whatever its column said."
+    },
+    {
+      "id": "dob-the-header-of-a-long-table-still-decides",
+      "text": "Name;Art;von;bis\nA1;Urlaub;01.07.2026;02.07.2026\nA2;Urlaub;03.07.2026;04.07.2026\nA3;Urlaub;05.07.2026;06.07.2026\nA4;Urlaub;07.07.2026;08.07.2026\nA5;Urlaub;09.07.2026;10.07.2026",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "DOB",
+        "DATE_OF_DEATH"
+      ],
+      "notes": "rules-engine#126: the header was looked for three lines up only."
+    },
+    {
+      "id": "dob-a-commented-header-is-a-header",
+      "text": "# Spalten: Name;Art;von;bis\nAnna Weber;Urlaub;20.07.2026;31.07.2026",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ],
+      "notes": "rules-engine#126: '# Spalten: ...' was skipped for its colon."
+    },
+    {
+      "id": "dob-a-birth-column-still-labels-its-dates",
+      "text": "Name;Geburtsdatum;Ort\nAnna Weber;12.03.1985;Köln\nJonas Kern;04.11.1979;Bonn",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.03.1985",
+          "04.11.1979"
+        ]
+      },
+      "notes": "rules-engine#126: guard."
+    },
+    {
+      "id": "dob-a-date-in-a-headerless-row-still-counts",
+      "text": "Anna Weber;12.03.1985;Köln;anna.weber@example.de",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "12.03.1985"
+        ],
+        "EMAIL": [
+          "anna.weber@example.de"
+        ]
+      },
+      "notes": "rules-engine#126: guard; without a header a filled field is still context."
+    },
+    {
+      "id": "dob-a-keyword-must-start-a-word",
+      "text": "Conclusion signée le 06/11/2026, conformément à l'accord du patient.",
+      "countries": [
+        "FR"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ],
+      "notes": "rules-engine#126: 'née le' inside 'signée le'."
+    },
+    {
+      "id": "dob-born-inside-newborn-is-no-label",
+      "text": "Antenatal and Newborn Screening, London\n26 November 2026\nYour screening results",
+      "countries": [
+        "UK"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ],
+      "notes": "rules-engine#126: 'born' inside 'Newborn'."
+    },
+    {
+      "id": "dob-a-keyword-starting-a-word-still-labels",
+      "text": "Patiente née le 06/11/1960 à Lyon.",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "06/11/1960"
+        ]
+      },
+      "notes": "rules-engine#126: guard."
+    },
+    {
+      "id": "secret-assigned-value-excludes-its-quotes",
+      "text": "# secrets\nSMTP_PASSWORD: \"Zomer1644$x\"",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "Zomer1644$x"
+        ]
+      },
+      "expectRedactedText": "# secrets\nSMTP_PASSWORD: \"[SECRET]\"",
+      "notes": "rules-engine#126: the span began with the opening quote."
+    },
+    {
+      "id": "secret-quoted-value-keeps-its-closing-punctuation",
+      "text": "mot de passe en clair ($pwd = \"Hiver122!\")",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "Hiver122!"
+        ]
+      },
+      "notes": "rules-engine#126: a quoted value is what the quotes hold."
+    },
+    {
+      "id": "secret-a-bracketed-list-is-not-one-value",
+      "text": "# secrets\nallowed_admin_cidrs = [\"10.40.8.0/24\"]",
+      "countries": [
+        "UK"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "notes": "rules-engine#126: '[\"10.40.8.0/24\"]' was a SECRET; a CIDR range is not one."
+    },
+    {
+      "id": "secret-a-reference-is-not-the-secret",
+      "text": "environment:\n  S3_SECRET_KEY: ${S3_SECRET_KEY}\n  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}\n  DATABASE_URL: postgres://app:${DB_PASS}@db:5432/hr",
+      "countries": [
+        "BE"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "notes": "rules-engine#126: a ${VAR} reference says where a secret is kept."
+    },
+    {
+      "id": "secret-identifiers-and-compounds-are-not-secrets",
+      "text": "Passwort-Richtlinie: Multi-Faktor-Authentifizierung per Conditional-Access-Richtlinie. secret_name: AWS_SECRET_ACCESS_KEY, credentials_user = svc_terraform, image: postgres:16-alpine",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "notes": "rules-engine#126."
+    },
+    {
+      "id": "secret-connection-string-stops-at-the-quote",
+      "text": "DB_URL = \"postgresql://etl:Az9xQ2pL7v@db5.internal:5432/hr\"",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "postgresql://etl:Az9xQ2pL7v@db5.internal:5432/hr"
+        ]
+      },
+      "notes": "rules-engine#126: the closing quote was in the span."
+    },
+    {
+      "id": "secret-never-runs-across-a-placeholder",
+      "text": "password: \"[EMAIL]x9!kk\" and api_key = abc[EMAIL]def1",
+      "countries": [
+        "UK"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "notes": "rules-engine#126: on masked text, a span across '[EMAIL]' reported the inner value twice."
+    },
+    {
+      "id": "secret-a-real-key-after-a-quote-is-still-one",
+      "text": "const GH_TOKEN = \"ghp_ByBkqAWTzuHwNaSuIHuoJuW6cyMqxj48pmD7\";",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "ghp_ByBkqAWTzuHwNaSuIHuoJuW6cyMqxj48pmD7"
+        ]
+      },
+      "notes": "rules-engine#126: guard."
+    },
+    {
+      "id": "postal-not-a-build-a-duration-or-a-count",
+      "text": "Adresse: Hauptstraße 5, 10115 Berlin\nFirmware 7.4.5 build 2726, Timeout nach 3000 ms, Lease 28800 seconds, 2048 → 3072 Bit, 4120 Datensätze.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "10115"
+        ]
+      },
+      "notes": "rules-engine#126."
+    },
+    {
+      "id": "postal-not-a-process-id-or-a-port",
+      "text": "Oct 23 06:41:12 bastion01 sshd[21877]: Accepted publickey for jan from 192.168.33.8 port 52144 ssh2\nAdresse: Hauptstraße 5, 10115 Berlin",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "10115"
+        ],
+        "IP_ADDRESS": [
+          "192.168.33.8"
+        ]
+      },
+      "notes": "rules-engine#126."
+    },
+    {
+      "id": "postal-not-a-port-mapping-or-an-id-field",
+      "text": "ports: [\"8080:8080\"]\nAPP_URL=http://localhost:3000\n\"parent_id\": 4400, DB_PORT: \"5432\"\nAdresse: Hauptstraße 5, 10115 Berlin",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "10115"
+        ]
+      },
+      "notes": "rules-engine#126."
+    },
+    {
+      "id": "postal-not-the-end-of-a-year-range",
+      "text": "Lebenslauf: 1998–2011 Fernverkehr, 2012–2026 Baustellen. Adresse: Hauptstraße 5, 10115 Berlin",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "10115"
+        ]
+      },
+      "notes": "rules-engine#126."
+    },
+    {
+      "id": "postal-not-a-reference-after-facture",
+      "text": "Objet : Facture 2026-014 – mission API\nAdresse : Rua Augusta 10, 1100-053 Lisboa",
+      "countries": [
+        "PT"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "1100-053"
+        ]
+      },
+      "notes": "rules-engine#126: '2026-014' has the Portuguese postcode shape."
+    },
+    {
+      "id": "postal-not-the-hour-after-a-date",
+      "text": "Triage und Erstbefund 03.10.2026 23:50, Adresse: Hauptstraße 5, 10115 Berlin",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "10115"
+        ]
+      },
+      "notes": "rules-engine#126."
+    },
+    {
+      "id": "ip-not-a-network-a-documentation-address-or-a-version",
+      "text": "vpc_cidr = \"10.40.0.0/16\"\nhost 10.40.1.23/24, documentation 192.0.2.10, HANA-Revision 2.00.079.01, urn:oid:1.2.250.1.71.4.2.1",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "IP_ADDRESS": [
+          "10.40.1.23"
+        ]
+      },
+      "notes": "rules-engine#126: an interface address with its prefix is a host and stays."
+    },
+    {
+      "id": "passport-needs-a-digit",
+      "text": "DEEL C — SCREENING (in te vullen door HR)\nA. REQUESTER",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "PASSPORT"
+      ],
+      "notes": "rules-engine#126: capitalised words fit the Dutch passport shape."
+    },
+    {
+      "id": "plate-not-an-asset-tag-or-a-form-number",
+      "text": "inventarnr;typ;standort\nGR-NB-0412;Notebook;OG2\nGR-SW-01;Switch;Rack R2\nSiehe Formular HR-IT-03.",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ],
+      "notes": "rules-engine#126: a German plate number never starts with 0."
+    },
+    {
+      "id": "plate-a-real-german-plate-still-is-one",
+      "text": "Kennzeichen: B-AB 1234, Dienstwagen.",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "LICENSE_PLATE": [
+          "B-AB 1234"
+        ]
+      },
+      "notes": "rules-engine#126: guard."
+    },
+    {
+      "id": "plate-not-an-algorithm-or-a-law-citation",
+      "text": "Accepted publickey for jan port 52144 ssh2: ED25519 SHA256:q1Xb. Antrag nach § 1666 BGB.",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ],
+      "notes": "rules-engine#126."
+    },
+    {
+      "id": "national-id-not-a-specimen-or-a-date",
+      "text": "Im Formular stand zunächst das Muster „C01X00T47“. Termin najpóźniej 24.11.2026.",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "NATIONAL_ID"
+      ],
+      "notes": "rules-engine#126: the specimen of the German identity card; a date fitting the dotted BSN check."
+    },
+    {
+      "id": "dummy-values-are-not-identifiers",
+      "text": "NHS number: e.g. 999 999 9999; passport XX0000000; date 00000/00/0000; MAC aa:bb:cc:dd:ee:ff",
+      "countries": [
+        "UK"
+      ],
+      "mustNotDetect": [
+        "HEALTH_INSURANCE",
+        "PASSPORT",
+        "MAC_ADDRESS",
+        "PHONE",
+        "POSTAL_CODE"
+      ],
+      "notes": "rules-engine#126."
+    },
+    {
+      "id": "dummy-rule-leaves-a-test-bsn-alone",
+      "text": "BSN: 111222333",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "111222333"
+        ]
+      },
+      "notes": "rules-engine#126: guard; repeated digits are not a placeholder."
     }
   ]
 }

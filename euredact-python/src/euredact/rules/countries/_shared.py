@@ -73,6 +73,16 @@ DOD_CONTEXT = [
 ]
 
 
+#: An assigned value: not opened by a quote or bracket, at least eight
+#: characters, and not ended by punctuation or a closer (rules-engine#35, #126).
+_ASSIGNED = r"[^\s\"'`\[\]{}()<>„“”«»‚‘’]\S{6,}[^\s.,;:!?)'\"\]}`“”»‘’]"
+
+#: A quoted assigned value: exactly what the quotes hold (rules-engine#126).
+_QUOTED_ASSIGNED = "|".join(
+    rf"(?<=[:=]{gap}{q})[^\s{q}]{{8,}}(?={q})"
+    for q in ('"', "'", "`") for gap in (" ", ""))
+
+
 def _written_date_pattern() -> str:
     """Day, month as a word, year: "4. März 1948", "2 January 1943".
 
@@ -634,7 +644,9 @@ class SharedConfig(CountryConfig):
             # --- Secret / API Key (connection strings with embedded credentials) ---
             PatternDef(
                 entity_type=EntityType.SECRET,
-                pattern=r"(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq)://[^\s:]{1,256}:[^\s@]{1,256}@[^\s]+",
+                # The tail stops at a quote: `DB_URL = "postgresql://...@db:5432/hr"`
+                # took the closing quote in (rules-engine#126).
+                pattern=r"(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq)://[^\s:]{1,256}:[^\s@]{1,256}@[^\s\"'`]+",
                 validator=None,
                 description="Connection string with embedded credentials",
             ),
@@ -658,8 +670,21 @@ class SharedConfig(CountryConfig):
                 # placeholder guard for "[POSTAL_CODE" (rules-engine#33). A
                 # parenthesis is the other way round: "(secret: x)" opens
                 # before the colon, so its ")" would be unbalanced.
-                pattern=r"(?<=[:=] )[^\s]{7,}[^\s.,;:!?)'\"]"
-                        r"|(?<=[:=])[^\s]{7,}[^\s.,;:!?)'\"]",
+                #
+                # The value starts *after* an opening quote or bracket and ends
+                # before its closer. Starting right after the ": " took the
+                # quote in: `user = "svc_terraform"` was the span
+                # `"svc_terraform`, and `cidrs = ["10.40.8.0/24"]` was
+                # `["10.40.8.0/24"]` -- 98 of 292 SECRET spans on the IT/HR/MED
+                # benchmark began or ended on one (rules-engine#126). With no
+                # bracket ever opening the span, none may close it either, so
+                # "[AKIA...]" now masks to "[[SECRET]]" (rules-engine#33).
+                # A quoted value is what the quotes hold, closing punctuation
+                # included: `$pwd = "Hiver122!"` is the password `Hiver122!`.
+                pattern=_QUOTED_ASSIGNED
+                        + r"|(?<=[:=] )" + _ASSIGNED + r"|(?<=[:=])" + _ASSIGNED
+                        + r"|(?<=[:=] [\"'`\[{(])" + _ASSIGNED
+                        + r"|(?<=[:=][\"'`\[{(])" + _ASSIGNED,
                 validator="high_entropy",
                 description="Assigned secret value",
                 context_keywords=SECRET_CONTEXT,
