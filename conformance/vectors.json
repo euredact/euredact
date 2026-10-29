@@ -7482,6 +7482,99 @@
         ]
       },
       "notes": "rules-engine#126: guard; repeated digits are not a placeholder."
+    },
+    {
+      "id": "dob-markdown-table-under-a-birth-column",
+      "text": "P FI (rôle Z_AUD_RO), partage \\\\fs02\\Finance\\Clôture2026 (lecture), Power BI espace « Contrôle de gestion ». Aucun accès VPN : le travail se fera depuis la salle de réunion du 2e étage, à Marseille.\n\n| Auditeur | Matricule tiers | Identifiant souhaité | Date de naissance |\n|---|---|---|---|\n| Lucas Poulain | EXT-11122 | lpoulain | 20/03/1997 |\n| Yannick Girard | EXT-16169 | yannickgirard69 | 24/08/1980 |\n| Anaïs Lejeune | EXT-35151 | alejeune | 02/08/1990 |",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "20/03/1997",
+          "24/08/1980",
+          "02/08/1990"
+        ]
+      },
+      "notes": "rules-engine#130: the '|---|' rule row was taken as the header and hid 'Date de naissance'."
+    },
+    {
+      "id": "dob-psql-table-past-its-rule-line",
+      "text": "hr=# SELECT emp_login, full_name, dob, ni_number, licence_no, union_code, door_auth FROM staff LIMIT 3;\n   emp_login     | full_name        | dob        | ni_number     | licence_no          | union_code | door_auth\n  ---------------+------------------+------------+---------------+---------------------+------------+--------------------------\n   james.debono   | James Debono      | 1984-11-15 | TZ 08 03 11 B | DEBON 811154 J9 4VQ | PROSPECT   | FP-template 0x3A91 (L-index)\n   amicallef19  | Arjun Micallef  | 1969-07-08 | OP924742D     | MICAL607089A95LI    | NONE       | card only\n   gallaghera    | Aisling Gallagher| 1999-05-31 | BW 33 67 80 A | GALLA955319A99IT    | UNITE-REP  | face template FT-20417",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "1984-11-15",
+          "1969-07-08",
+          "1999-05-31"
+        ]
+      },
+      "notes": "rules-engine#130: the '---+---' rule line stopped the header search."
+    },
+    {
+      "id": "passport-under-a-passport-column",
+      "text": "Subject | Name | DOB | Passport | Ethnicity | Claimed\n104-011 | Kieran O'Meara | 03/03/1947 | KO8774872 | White Irish | flights EUR 214 + companion EUR 214, taxi EUR 38, meals EUR 22\n104-012 | Siobhan Kelly | 12/06/1961 | SK4410293 | White Irish | flights EUR 214 + companion EUR 214, taxi EUR 38, meals EUR 22\n104-013 | Declan Byrne | 22/11/1955 | DB5521874 | White Irish | flights EUR 214 + companion EUR 214, taxi EUR 38, meals EUR 22\n104-014 | Niamh Walsh | 05/04/1970 | NW3398210 | White Irish | flights EUR 214 + companion EUR 214, taxi EUR 38, meals EUR 22\n104-016 | Caitríona McKenna | 31/07/1999 | JS2754758 | White Irish | flights EUR 214 + companion EUR 214, taxi EUR 38, meals EUR 22",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "03/03/1947",
+          "12/06/1961",
+          "22/11/1955",
+          "05/04/1970",
+          "31/07/1999"
+        ],
+        "PASSPORT": [
+          "KO8774872",
+          "SK4410293",
+          "DB5521874",
+          "NW3398210",
+          "JS2754758"
+        ]
+      },
+      "notes": "rules-engine#130: a column header was context for dates only."
+    },
+    {
+      "id": "passport-a-dateless-data-row-is-no-header",
+      "text": "Name | Steuer-ID | Reisepass | Führerschein\nAyşe Thomsen | 10 248 239 571 | C3CYRF1NH | F495T9XA41Z3\nLena Schulte | 20 395 281 460 | C3YX2X5MW | N768J4ML32E4\nLea Pirker | 11 783 498 512 | U0842866 | 72047198",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "C3CYRF1NH",
+          "C3YX2X5MW",
+          "U0842866"
+        ]
+      },
+      "notes": "rules-engine#130: a data row without a date was taken as the header."
+    },
+    {
+      "id": "dob-polish-ur-abbreviation",
+      "text": "Adrian Jabłecki, ur. 11.12.1973 · nr P/400123 · pobyt 15.10–13.11.2026",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "11.12.1973"
+        ]
+      },
+      "notes": "rules-engine#130: 'ur.' is the usual abbreviation of urodzony."
+    },
+    {
+      "id": "dob-a-non-birth-column-under-a-rule-line-stays-unmasked",
+      "text": "| Name | Art | von | bis |\n|---|---|---|---|\n| Anna Weber | Urlaub | 20.07.2026 | 31.07.2026 |",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "DOB"
+      ],
+      "notes": "rules-engine#130: guard; skipping the rule row must not turn leave dates into birth dates."
     }
   ]
 }

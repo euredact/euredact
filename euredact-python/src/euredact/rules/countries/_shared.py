@@ -118,6 +118,8 @@ DOB_CONTEXT = [
     "γεννηθείς", "γεννήθηκε", "ημερομηνία γέννησης",
     # West Slavic.
     "urodzony", "urodzona", "data urodzenia",
+    # The usual abbreviation: "Adrian Jabłecki, ur. 11.12.1973" (#130).
+    "ur.",
     "narozen", "datum narození", "narodený", "dátum narodenia",
     # Hungarian, Romanian, Bulgarian.
     "született", "születési", "născut", "născută", "data nașterii",

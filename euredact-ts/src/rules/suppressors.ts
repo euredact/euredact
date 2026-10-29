@@ -1294,7 +1294,10 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
   }
   const [before, after] = getContext(text, match.start, match.end);
   const context = (before + " " + after).toLowerCase();
-  return !match.patternDef.contextKeywords.some(kw => context.includes(kw.toLowerCase()));
+  if (match.patternDef.contextKeywords.some(kw => context.includes(kw.toLowerCase()))) return false;
+  // The column names it: a passport under "Passport" rows below the header (#130).
+  const header = columnHeader(text, match.start);
+  return header === null || !match.patternDef.contextKeywords.some(kw => keywordAt(header, kw, false) >= 0);
 }
 
 /** Date types decided by a label: DOB and DATE_OF_DEATH share one date shape. */
@@ -1419,11 +1422,18 @@ function columnHeader(text: string, start: number): string | null {
       const begin = end === 0 ? 0 : text.lastIndexOf("\n", end - 1) + 1;
       const header = text.slice(begin, end);
       seen++;
+      // A rule line ("|---|---|", "----+----") is neither header nor row (#130).
+      if (RULE_LINE.test(header)) {
+        end = begin - 1;
+        continue;
+      }
       const heads = header.split(sep);
       const same = heads.length === cells.length;
       // A "label : value" field with a comma in its value is not a header
       // (#111); a commented header ("# Spalten: Name;von;bis") is (#126).
-      if (same && (!header.includes(":") || header.trimStart().startsWith("#")) && !ANY_DATE.test(header)) {
+      // Nor is a data row without a date: a header has no cell with four digits or more (#130).
+      if (same && (!header.includes(":") || header.trimStart().startsWith("#")) && !ANY_DATE.test(header)
+          && !heads.some((h) => (h.match(/\d/g) ?? []).length >= 4)) {
         return heads[column].toLowerCase();
       }
       if (seen >= 3 && !same) break;  // past the table this value sits in
@@ -1435,6 +1445,8 @@ function columnHeader(text: string, start: number): string | null {
 
 /** How many lines up a table's header is looked for. */
 const HEADER_REACH = 200;
+/** A table's rule line: only dashes, equals signs, plus signs, colons, pipes. */
+const RULE_LINE = /^[\s\-=+:|]*-[\s\-=+:|]*$/;
 
 // Suppressors that need whole-document facts take the optional scratch; the
 // rest ignore it, and a narrower function stays assignable to this type.

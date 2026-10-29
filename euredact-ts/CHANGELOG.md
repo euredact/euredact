@@ -39,6 +39,18 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **Dates of birth and passports in tables were missed.** The header search
+  took a table's rule row (`|---|`, `----+----`) or a data row without a date
+  for the header, so "Date de naissance" or "dob" did not label the dates
+  below it; and a passport under a `Passport`, `Paspoort` or `Reisepass`
+  column counted as unlabelled. Rule rows are skipped, a header has no cell
+  with four digits or more, and a column header is context for every
+  label-gated type, after the usual label search. `ur.`, the Polish
+  abbreviation of urodzony, is a birth label. On the IT/HR/MED benchmark sets
+  these were masked only by the gateway's 0.6.0 rules pass, by accident, and
+  would have leaked once it is upgraded: 10 of 12 are now found locally, with
+  47 more real values masked in all and no new false positive.
+  *(rules-engine#130)*
 - **Over-redaction in IT, HR and medical documents.** The competitive
   benchmark's three sets (650 synthetic documents) had 819 rules spans
   overlapping no gold span. 259 were the gateway's 0.6.0 rules pass, and

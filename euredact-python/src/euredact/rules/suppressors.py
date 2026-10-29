@@ -1868,7 +1868,14 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
             match.pattern_def.entity_type)
     before, after = _get_context(text, match.start, match.end)
     context = (before + " " + after).lower()
-    return not any(kw.lower() in context for kw in match.pattern_def.context_keywords)
+    if any(kw.lower() in context for kw in match.pattern_def.context_keywords):
+        return False
+    # The column names it: a passport under "Passport", "Paspoort" or
+    # "Reisepass", rows below the header and out of the window (#130).
+    header = _column_header(text, match.start)
+    return header is None or not any(
+        _keyword_at(header, kw, last=False) >= 0
+        for kw in match.pattern_def.context_keywords)
 
 
 #: Date types decided by a label. DOB and DATE_OF_DEATH share one date shape,
@@ -2038,14 +2045,23 @@ def _column_header(text: str, start: int) -> str | None:
             begin = text.rfind("\n", 0, end) + 1
             header = text[begin:end]
             seen += 1
+            # A rule line ("|---|---|", "----+----") separates the header from
+            # the rows; it is neither, and the walk goes on past it. Taken as
+            # the header it hid "Date de naissance" over its dates (#130).
+            if _RULE_LINE.match(header):
+                end = begin - 1
+                continue
             heads = header.split(sep)
             same = len(heads) == len(cells)
             # "Lieu de naissance : Esch-sur-Alzette, Luxembourg" is a field
             # with a comma in its value, not a header: it labelled the
             # passport's issue date two lines down a date of birth (#111). A
             # commented header ("# Spalten: Name;von;bis") is a header (#126).
+            # Nor is a data row that happens to carry no date: a header has no
+            # cell with four digits or more ("10 248 239 571") (#130).
             if (same and (":" not in header or header.lstrip().startswith("#"))
-                    and not _ANY_DATE.search(header)):
+                    and not _ANY_DATE.search(header)
+                    and not any(sum(c.isdigit() for c in h) >= 4 for h in heads)):
                 return heads[column].lower()
             if seen >= 3 and not same:
                 break           # past the table this value sits in
@@ -2055,6 +2071,9 @@ def _column_header(text: str, start: int) -> str | None:
 
 #: How many lines up a table's header is looked for.
 _HEADER_REACH = 200
+
+#: A table's rule line: only dashes, equals signs, plus signs, colons, pipes.
+_RULE_LINE = re.compile(r"^[\s\-=+:|]*-[\s\-=+:|]*$")
 
 
 # ── Dispatch table: entity type → applicable suppressors ────────────────

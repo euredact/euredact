@@ -165,6 +165,7 @@ const DOB_CONTEXT = [
   "γεννηθείς", "γεννήθηκε", "ημερομηνία γέννησης",
   // West Slavic.
   "urodzony", "urodzona", "data urodzenia",
+  "ur.",
   "narozen", "datum narození", "narodený", "dátum narodenia",
   // Hungarian, Romanian, Bulgarian.
   "született", "születési", "născut", "născută", "data nașterii",
