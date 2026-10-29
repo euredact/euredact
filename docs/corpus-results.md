@@ -1,4 +1,4 @@
-# Corpus results — euredact 0.7.1 (`0e0e36f`)
+# Corpus results — euredact 0.7.1 (`b43707d`)
 
 Generated 2026-10-29 by `make eval` from `corpus-results.json`, which carries the same figures. Per entity type, under the names the API returns. No aggregate figure is given: each row stands with the conditions below (rules-engine#109).
 
