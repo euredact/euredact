@@ -619,6 +619,52 @@ def _sort_code(rng):
     return text, [pii(code, "IBAN", "UK")], []
 
 
+_PROSE_FR = ("Merci de créer des accès temporaires en lecture seule pour les auditeurs "
+             "externes ci-dessous. Périmètre : SAP FI (rôle Z_AUD_RO), partage "
+             "\\\\fs02\\Finance (lecture), Power BI espace « Contrôle de gestion ». "
+             "Aucun accès VPN : le travail se fera depuis la salle de réunion.\n\n")
+
+
+def _markdown_birth_table(rng):
+    """Dates under a "Date de naissance" column, below a |---| rule row (#130)."""
+    dates = [_date(rng, (1950, 2000)).replace(".", "/") for _ in range(3)]
+    rows = "\n".join(f"| {rng.choice(_LAST)} | EXT-{rng.randrange(10000, 99999)} | "
+                     f"{rng.choice(_LAST).lower()} | {d} |" for d in dates)
+    text = (_PROSE_FR + "| Auditeur | Matricule tiers | Identifiant souhaité | Date de naissance |\n"
+            "|---|---|---|---|\n" + rows)
+    return text, [pii(d, "DOB", "FR") for d in dict.fromkeys(dates)], []
+
+
+def _psql_birth_table(rng):
+    """Dates under a "dob" column, below a ----+---- rule line (#130)."""
+    dates = [f"{rng.randrange(1950, 2000)}-{rng.randrange(1, 13):02d}-{rng.randrange(1, 29):02d}"
+             for _ in range(3)]
+    rows = "\n".join(f"   {rng.choice(_LAST).lower():<12}| {rng.choice(_LAST):<16}| {d} | NONE       | card only"
+                     for d in dates)
+    text = ("hr=# SELECT emp_login, full_name, dob, union_code, door_auth FROM staff LIMIT 3;\n"
+            "   emp_login   | full_name       | dob        | union_code | door_auth\n"
+            "  -------------+-----------------+------------+------------+-----------\n" + rows)
+    return text, [pii(d, "DOB", "UK") for d in dict.fromkeys(dates)], []
+
+
+def _passport_column(rng):
+    """Passport numbers under a "Passport" column, rows below the header (#130)."""
+    passports = [f"{rng.choice('ABCDEFGHJKLMNPRSTUVWXYZ')}{rng.choice('ABCDEFGHJKLMNPRSTUVWXYZ')}"
+                 f"{rng.randrange(1000000, 9999999)}" for _ in range(4)]
+    rows = "\n".join(f"104-0{10 + k} | {rng.choice(_LAST)} | {_date(rng, (1940, 2000)).replace('.', '/')} | "
+                     f"{pn} | White Irish | flights EUR {rng.randrange(100, 300)}, taxi EUR 38, meals EUR 22"
+                     for k, pn in enumerate(passports))
+    text = "Subject | Name | DOB | Passport | Ethnicity | Claimed\n" + rows
+    return text, [pii(pn, "PASSPORT", "UK") for pn in passports], []
+
+
+def _polish_ur(rng):
+    """"ur." is the usual abbreviation of urodzony (#130)."""
+    born = _date(rng, (1950, 2000))
+    text = f"{rng.choice(_LAST)} Jabłecki, ur. {born} · nr P/{rng.randrange(100000, 999999)} · pobyt 15.10–13.11.2026"
+    return text, [pii(born, "DOB", "PL")], []
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -718,6 +764,11 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#126: specimen and dotted date", _specimen_and_date),
     ("rules-engine#126: dummy values", _dummy_values),
     ("rules-engine#126: UK sort code", _sort_code),
+    # #130: values in tables only the gateway's 0.6.0 pass caught.
+    ("rules-engine#130: markdown table, birth column", _markdown_birth_table),
+    ("rules-engine#130: psql table, dob column", _psql_birth_table),
+    ("rules-engine#130: passport column", _passport_column),
+    ("rules-engine#130: Polish ur.", _polish_ur),
     # #103: residence card and visa sticker.
     ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
     ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),
