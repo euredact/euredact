@@ -23,7 +23,7 @@ interface Case {
   countries: string[] | null;
   mustDetect?: Record<string, string[]>;
   mustNotDetect?: string[];
-  options?: Pick<RedactOptions, "allowlist" | "allowlistDomains">;
+  options?: Pick<RedactOptions, "allowlist" | "allowlistDomains" | "excludeTypes">;
   expectRedactedText?: string;
 }
 

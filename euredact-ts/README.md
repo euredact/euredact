@@ -82,7 +82,8 @@ console.log(result.detections);
 | keep relationships visible across a whole session | `{ referentialIntegrity: true }` |
 | never redact my own company name or addresses | `{ allowlist: [...] }`, or `new EuRedact({ allowlist })` |
 | never redact anything at my own domain | `{ allowlistDomains: ["acme.be"] }` |
-| audit what the allowlist kept in the document | `result.exempted` |
+| leave whole types in the text (job titles, amounts) | `{ excludeTypes: ["JOB_TITLE", "FINANCIAL_AMOUNT"] }`, or `new EuRedact({ excludeTypes })` — see [Excluding entity types](#excluding-entity-types) |
+| audit what the allowlist or `excludeTypes` kept in the document | `result.exempted` |
 | catch person names, employers, job titles, diagnoses | `redactAsync(text, { mode: "cloud" })` — see [Cloud tier](#cloud-tier) |
 | include dates of birth | `{ detectDates: true }` |
 | redact a document too large for one call | `context` + `chunkOffset` — see [Chunked documents](#chunked-documents) |
@@ -112,6 +113,7 @@ interface RedactOptions {
   tokenize?: boolean;               // reversible tokens, EMAIL_K7Q2
   allowlist?: string[] | null;      // values never redacted
   allowlistDomains?: string[] | null; // domains never redacted (EMAIL/URL)
+  excludeTypes?: string[] | null;   // entity types neither reported nor masked
   detectDates?: boolean;            // include DOB / date of death
   cache?: boolean;                  // reuse results for identical input
   idempotencyKey?: string;          // mode: "cloud" only; see the table below
@@ -136,6 +138,7 @@ interface RedactOptions {
 | `tokenize` | `false` | Reversible token per value (`EMAIL_K7Q2`), with the mapping in `result.tokens` for [`restore()`](#restoretext-tokens). Unique to the **call**. Cannot be combined with `referentialIntegrity`. See [Reversible tokenization](#reversible-tokenization). |
 | `allowlist` | `null` | Values never to redact, whole-span and case-insensitive, merged with the instance's list. Structured identifiers (IBAN, phone, VAT, …) also match across spacing and hyphenation. Applies to cloud-tier types too. See [Allowlist](#allowlist). |
 | `allowlistDomains` | `null` | Domains whose addresses are never redacted, e.g. `["acme.be"]`. Applies to `EMAIL` and `URL` only, and covers subdomains. See [Allowlist](#allowlist). |
+| `excludeTypes` | `null` | Entity types neither reported nor masked, e.g. `["JOB_TITLE"]`; merged with the instance's list. Unknown names throw. See [Excluding entity types](#excluding-entity-types). |
 
 **Long documents and tiers**
 
@@ -229,6 +232,8 @@ The `EuRedact` class exposes `redact()`, `redactAsync()`, `redactBatch()`,
 new EuRedact({
   maxInputLength?: number,   // default 10_485_760 (~10 MB)
   allowlist?: string[] | null,
+  allowlistDomains?: string[] | null,
+  excludeTypes?: string[] | null,
 })
 ```
 
@@ -237,6 +242,7 @@ new EuRedact({
 | `maxInputLength` | `10_485_760` | Longest document `redact()` accepts, in characters. Above it, it throws — split the input or raise the ceiling. |
 | `allowlist` | `null` | Values never to redact, for every call on this instance. Merged with the per-call `allowlist`. See [Allowlist](#allowlist). |
 | `allowlistDomains` | `null` | Domains never to redact, for every call on this instance. |
+| `excludeTypes` | `null` | Entity types never reported or masked, for every call on this instance. See [Excluding entity types](#excluding-entity-types). |
 
 The result cache, referential-integrity labels and custom patterns are all per
 instance, which is what makes one instance per tenant the right default.
@@ -259,7 +265,7 @@ interface RedactResult {
   detectionMode: string;                      // "declared" if countries was passed,
                                               // "inferred" otherwise
   tokens: Record<string, string>; // token -> original value; only with tokenize: true
-  exempted: Exemption[];          // spans the allowlist kept, with the rule that matched
+  exempted: Exemption[];          // spans the allowlist or excludeTypes kept, with the rule
   cloud?: CloudInfo;              // mode: "cloud" only: job id, model, cost, unplaced
                                   // findings — see "What the service said"
 }
@@ -1409,8 +1415,8 @@ sdk.redact("Mail jan@acme.be or piet@acme.be", { countries: ["NL"] }).redactedTe
 label boundary, so `acme.be` does **not** exempt `evilacme.be`. Entries may be
 written `acme.be`, `@acme.be` or `.acme.be`.
 
-There are deliberately **no wildcards**. The allowlist is the only option that
-turns redaction *off*, so an over-broad entry fails toward under-redaction and
+There are deliberately **no wildcards**. The allowlist and `excludeTypes` are
+the only options that turn redaction *off*, so an over-broad entry fails toward under-redaction and
 does so silently.
 
 ### What was exempted
@@ -1422,9 +1428,50 @@ for (const e of r.exempted) console.log(e.entityType, e.text, e.rule, e.ruleKind
 ```
 
 `Exemption` carries `entityType`, `start`, `end`, `text`, the `rule` that
-matched as you wrote it, and `ruleKind` (`"value"` or `"domain"`). An exempted
+matched as you wrote it, and `ruleKind` (`"value"`, `"domain"` or `"type"`). An exempted
 span is absent from `detections`, so `exempted` is the only record that it was
 found at all.
+
+## Excluding entity types
+
+A deployment whose taxonomy is narrower than euRedact's can switch whole types
+off instead of filtering every result itself. Excluded types are neither in
+`detections` nor masked:
+
+```ts
+const r = redact("Mail anna@acme.be or call +32 470 12 34 56.", {
+  countries: ["BE"], excludeTypes: ["PHONE"],
+});
+r.redactedText;
+// 'Mail [EMAIL] or call +32 470 12 34 56.'
+for (const e of r.exempted) console.log(e.entityType, e.text, e.rule, e.ruleKind);
+// PHONE +32 470 12 34 56 PHONE type
+```
+
+Set it once for a deployment with `new EuRedact({ excludeTypes: [...] })`; a per-call
+list is merged with it.
+
+- **Nothing is excluded by default.** Every type is detected and redacted
+  unless you name it.
+- **Names are checked.** They are case-insensitive, and legacy names resolve
+  (`IBAN` is `BANK_ACCOUNT`, `CREDENTIAL` is `SECRET`). A registered custom
+  pattern's name works too. An unknown name throws, so a typo
+  cannot silently switch nothing off.
+- **It applies to each span's final type.** In
+  `NHS Number: 5556953627` the digits also pass the Austrian SVNr check.
+  Excluding `HEALTH_INSURANCE` leaves them in the text; it does not let them
+  be masked as an `SSN` instead.
+- **Every excluded detection is recorded** in `result.exempted`, with
+  `ruleKind: "type"` and the type's name as `rule`, so an audit can see what
+  was deliberately left in.
+- **In `mode: "cloud"`** an excluded rules type is still masked in the text
+  sent to the service. The option decides what comes back, not what may leave
+  your machine. Model types (`JOB_TITLE`, `FINANCIAL_AMOUNT`, …) are filtered
+  from the merged result.
+- **There is no include-list.** A list of types to keep would leave every type
+  a later release adds unmasked for you, without notice.
+- **A type is one switch.** `INTERNAL_ID` covers employee and customer numbers
+  as well as ticket and case numbers; excluding it leaves all of them in.
 
 ## Architecture
 

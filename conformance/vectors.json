@@ -7,7 +7,7 @@
     "countries": "list of ISO 3166-1 alpha-2 codes, or null for no country hint",
     "mustDetect": "map of entity type -> exact list of detected texts for that type, in document order",
     "mustNotDetect": "list of entity types that must produce no detection",
-    "options": "optional per-call options, camelCase as in the TypeScript RedactOptions; today `allowlist` (values never to redact) and `allowlistDomains` (domains whose addresses are never redacted)",
+    "options": "optional per-call options, camelCase as in the TypeScript RedactOptions; today `allowlist` (values never to redact), `allowlistDomains` (domains whose addresses are never redacted) and `excludeTypes` (entity types neither reported nor masked)",
     "expectRedactedText": "optional exact redacted output; the default bracketed labels, with no referential or token option"
   },
   "cases": [
@@ -2167,6 +2167,87 @@
         "EMAIL"
       ],
       "expectRedactedText": "Mail jan@acme.be, IBAN [BANK_ACCOUNT]."
+    },
+    {
+      "id": "exclude-types-leaves-an-excluded-type-in-the-text",
+      "text": "Contact anna.kowalska@example.com or +32 470 12 34 56.",
+      "countries": [
+        "BE"
+      ],
+      "options": {
+        "excludeTypes": [
+          "EMAIL"
+        ]
+      },
+      "mustDetect": {
+        "PHONE": [
+          "+32 470 12 34 56"
+        ]
+      },
+      "mustNotDetect": [
+        "EMAIL"
+      ],
+      "expectRedactedText": "Contact anna.kowalska@example.com or [PHONE].",
+      "notes": "rules-engine#125: an excluded type is neither in detections nor masked; the rest is unchanged."
+    },
+    {
+      "id": "exclude-types-resolves-an-alias-in-any-case",
+      "text": "IBAN NL91 ABNA 0417 1643 00, mail jan@example.nl",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "excludeTypes": [
+          "iban"
+        ]
+      },
+      "mustDetect": {
+        "EMAIL": [
+          "jan@example.nl"
+        ]
+      },
+      "mustNotDetect": [
+        "BANK_ACCOUNT"
+      ],
+      "expectRedactedText": "IBAN NL91 ABNA 0417 1643 00, mail [EMAIL]",
+      "notes": "rules-engine#125: the legacy name IBAN resolves to BANK_ACCOUNT, case-insensitively."
+    },
+    {
+      "id": "exclude-types-does-not-let-another-type-claim-the-span",
+      "text": "NHS Number: 5556953627.",
+      "countries": null,
+      "options": {
+        "excludeTypes": [
+          "HEALTH_INSURANCE"
+        ]
+      },
+      "mustNotDetect": [
+        "HEALTH_INSURANCE",
+        "SSN",
+        "NATIONAL_ID"
+      ],
+      "expectRedactedText": "NHS Number: 5556953627.",
+      "notes": "rules-engine#125: the filter applies to the final type of each span. The digits also pass the Austrian SVNr check; filtering before ranking would have re-masked them as SSN."
+    },
+    {
+      "id": "exclude-types-empty-list-changes-nothing",
+      "text": "Contact anna.kowalska@example.com or +32 470 12 34 56.",
+      "countries": [
+        "BE"
+      ],
+      "options": {
+        "excludeTypes": []
+      },
+      "mustDetect": {
+        "EMAIL": [
+          "anna.kowalska@example.com"
+        ],
+        "PHONE": [
+          "+32 470 12 34 56"
+        ]
+      },
+      "expectRedactedText": "Contact [EMAIL] or [PHONE].",
+      "notes": "rules-engine#125: the default is unchanged; every type is detected and redacted."
     },
     {
       "id": "passport-foreign-shape-german-label",
