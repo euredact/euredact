@@ -1,12 +1,12 @@
 {
  "engine": {
   "package": "euredact",
-  "version": "0.7.0",
-  "commit": "e3b93cd",
-  "describe": "v0.6.0-79-ge3b93cd",
+  "version": "0.7.1",
+  "commit": "0e0e36f",
+  "describe": "v0.7.0-8-g0e0e36f",
   "released": true
  },
- "generated": "2026-10-26",
+ "generated": "2026-10-29",
  "corpus": {
   "files": [
    {
@@ -653,18 +653,18 @@
    },
    "SECRET": {
     "support": 5798,
-    "hits": 5213,
+    "hits": 5225,
     "mistyped": 77,
-    "partial": 187,
-    "misses": 182,
+    "partial": 173,
+    "misses": 184,
     "unlocatable": 139,
     "categories": [
      "SECRET"
     ],
-    "detections": 5269,
-    "tp": 5056,
+    "detections": 5267,
+    "tp": 5054,
     "fp": 213,
-    "recall": 89.91,
+    "recall": 90.12,
     "precision": 95.96,
     "also_accepts": []
    },
@@ -1079,18 +1079,18 @@
    },
    "SECRET": {
     "support": 5798,
-    "hits": 5213,
+    "hits": 5225,
     "mistyped": 77,
-    "partial": 187,
-    "misses": 182,
+    "partial": 173,
+    "misses": 184,
     "unlocatable": 139,
     "categories": [
      "SECRET"
     ],
-    "detections": 5269,
-    "tp": 5056,
+    "detections": 5267,
+    "tp": 5054,
     "fp": 213,
-    "recall": 89.91,
+    "recall": 90.12,
     "precision": 95.96,
     "also_accepts": []
    },
@@ -1216,7 +1216,7 @@
   ]
  },
  "regressions": {
-  "records": 372,
+  "records": 534,
   "failures": 0
  }
 }

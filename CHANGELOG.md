@@ -27,6 +27,8 @@ which both test suites run.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-29
+
 ### Added
 
 - `exclude_types` / `excludeTypes`: entity types neither reported nor masked, per call or for every call on an `EuRedact` instance. Nothing is excluded by default; names are case-insensitive, legacy names resolve, and an unknown name raises. Each excluded detection is recorded in `result.exempted` with `rule_kind` `"type"`. In cloud mode an excluded rules type is still masked in the text sent to the service. *(rules-engine#125)*
@@ -419,7 +421,8 @@ which both test suites run.
 
 - First release. *(Python only)* 31 countries, 20+ PII entity types, checksum validation, two-pass detection, context-aware detection, batch processing, true async, referential integrity, Aho-Corasick acceleration, and zero required dependencies.
 
-[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.0...main
+[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.1...main
+[0.7.1]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.0...v0.7.1
 [0.7.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.6.0...v0.7.0
 [0.6.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.5.1...v0.6.0
 [0.5.1]: https://git.euredact.dev/euredact/rules-engine/compare/v0.5.0...v0.5.1
