@@ -422,6 +422,203 @@ def _svnr(rng):
     return f"{v[:4]} {v[4:]}"
 
 
+def _leave_table(rng):
+    """Dates under "von" and "bis" are leave dates, not birth dates (#126)."""
+    rows, absent, found = [], [], []
+    for _ in range(3):
+        a, b = _date(rng, (2025, 2027)), _date(rng, (2025, 2027))
+        e = email(rng)
+        rows.append(f"{rng.choice(_LAST)};{e};Urlaub;{a};{b}")
+        absent += [a, b]
+        found.append(pii(e, "EMAIL", "DE"))
+    text = "Name;E-Mail;Art;von;bis\n" + "\n".join(rows)
+    return text, found, list(dict.fromkeys(absent))
+
+
+def _syslog_ports(rng):
+    """A process id and a port are not postcodes; the host and the address
+    line are what stays (#126)."""
+    pid, port = str(rng.randrange(10000, 99999)), str(rng.randrange(20000, 65000))
+    ip = f"192.168.{rng.randrange(1, 254)}.{rng.randrange(1, 254)}"
+    pc = str(rng.randrange(10000, 99999))
+    text = (f"Oct 23 06:41:12 bastion01 sshd[{pid}]: Accepted publickey for jan "
+            f"from {ip} port {port} ssh2\nAdresse: Hauptstraße 5, {pc} Berlin")
+    return text, [pii(ip, "IP_ADDRESS", "DE"), pii(pc, "POSTAL_CODE", "DE")], [f"[{pid}]", f"port {port}"]
+
+
+def _compose_env(rng):
+    """A ${VAR} reference is where a secret is kept; the quoted value is the
+    secret, without its quotes (#126)."""
+    secret = f"Zomer{rng.randrange(1000, 9999)}${rng.choice('xyzq')}"
+    text = ("environment:\n  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}\n"
+            f"  SMTP_PASSWORD: \"{secret}\"")
+    return text, [pii(secret, "SECRET", "NL")], ["${POSTGRES_PASSWORD:-changeme}"]
+
+
+def _terraform_cidrs(rng):
+    """A network address with its prefix names no host; a host address does (#126)."""
+    a = rng.randrange(10, 99)
+    host = f"10.{a}.1.{rng.randrange(2, 254)}"
+    text = (f'vpc_cidr = "10.{a}.0.0/16"\nprivate_subnets = ["10.{a}.10.0/24"]\n'
+            f'bastion_ip = "{host}"')
+    return text, [pii(host, "IP_ADDRESS", "UK")], [f"10.{a}.0.0", f"10.{a}.10.0"]
+
+
+def _asset_tags(rng):
+    """An asset tag numbered from 0 is not a German plate (#126). The owner's
+    address in the same row stays masked."""
+    tags = [f"GR-{t}-0{rng.randrange(1, 999)}" for t in ("NB", "SW", "AP")]
+    e = email(rng)
+    text = ("inventarnr;typ;besitzer\n" + f"{tags[0]};Notebook;{e}\n"
+            + f"{tags[1]};Switch;IT\n{tags[2]};Access Point;IT")
+    return text, [pii(e, "EMAIL", "DE")], tags
+
+
+def _signature_date(rng):
+    """"née le" inside "signée le" labels no birth date; a real one still does (#126)."""
+    signed = _date(rng, (2025, 2027)).replace(".", "/")
+    born = _date(rng, (1940, 1990)).replace(".", "/")
+    text = f"Patiente née le {born} à Lyon. Conclusion signée le {signed}."
+    return text, [pii(born, "DOB", "FR")], [signed]
+
+
+def _newborn_screening(rng):
+    """"born" inside "Newborn" is no birth label (#126)."""
+    day = f"{rng.randrange(1, 28)} November 2026"
+    e = email(rng)
+    text = f"Antenatal and Newborn Screening, London\n{day}\nQuestions: {e}"
+    return text, [pii(e, "EMAIL", "UK")], [day]
+
+
+def _commented_header(rng):
+    """A "# Spalten:" header names the columns; its dates are leave dates (#126)."""
+    a, b = _date(rng, (2025, 2027)), _date(rng, (2025, 2027))
+    e = email(rng)
+    text = f"# Spalten: Name;E-Mail;Art;von;bis\n{rng.choice(_LAST)};{e};AU;{a};{b}"
+    return text, [pii(e, "EMAIL", "DE")], list(dict.fromkeys([a, b]))
+
+
+def _quoted_password(rng):
+    """A quoted secret is what the quotes hold, closing "!" included (#126)."""
+    pw = f"Hiver{rng.randrange(100, 999)}!"
+    text = f"Contrôle : mot de passe en clair ($pwd = \"{pw}\") dans le script."
+    return text, [pii(pw, "SECRET", "FR")], []
+
+
+def _names_not_secrets(rng):
+    """Identifiers, image tags and compounds after a "=" are names, not
+    secrets; a real token beside them still is (#126)."""
+    token = "ghp_" + "".join(rng.choice("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789") for _ in range(36))
+    text = ("secret_name: AWS_SECRET_ACCESS_KEY\ncredentials_user = svc_terraform\n"
+            "image: postgres:16-alpine\nPasswort-Richtlinie: Multi-Faktor-Authentifizierung\n"
+            f'GH_TOKEN = "{token}"')
+    return text, [pii(token, "SECRET", "DE")], [
+        "AWS_SECRET_ACCESS_KEY", "svc_terraform", "postgres:16-alpine",
+        "Multi-Faktor-Authentifizierung"]
+
+
+def _connection_string(rng):
+    """A connection string stops at its closing quote (#126)."""
+    pw = "".join(rng.choice("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789") for _ in range(10))
+    url = f"postgresql://etl:{pw}@db5.internal:5432/hr"
+    text = f'DB_URL = "{url}"'
+    return text, [pii(url, "SECRET", "UK")], []
+
+
+def _placeholder_inside(rng):
+    """On text masked once, no span runs across a [TYPE] placeholder (#126)."""
+    e = email(rng)
+    text = f"api_key = abc[EMAIL]def{rng.randrange(1, 9)}\nContact: {e}"
+    return text, [pii(e, "EMAIL", "UK")], ["abc[EMAIL]"]
+
+
+def _units_and_builds(rng):
+    """A build, a duration, a lease and a count are not postcodes (#126)."""
+    build, ms, lease, rows = (str(rng.randrange(1000, 9999)) for _ in range(4))
+    pc = str(rng.randrange(10000, 99999))
+    text = (f"Firmware 7.4.5 build {build}, Timeout nach {ms} ms, Lease {lease} seconds, "
+            f"{rows} Datensätze. Adresse: Hauptstraße 5, {pc} Berlin")
+    return text, [pii(pc, "POSTAL_CODE", "DE")], [f"build {build}", f"{ms} ms", f"{lease} seconds", f"{rows} Datensätze"]
+
+
+def _ports_and_ids(rng):
+    """Ports and id fields are not postcodes (#126)."""
+    port, app, pid_, db = "8080", str(rng.randrange(3000, 3999)), str(rng.randrange(1000, 9999)), "5432"
+    pc = str(rng.randrange(10000, 99999))
+    text = (f'ports: ["{port}:{port}"]\nAPP_URL=http://localhost:{app}\n'
+            f'"parent_id": {pid_}, DB_PORT: "{db}"\nAdresse: Hauptstraße 5, {pc} Berlin')
+    return text, [pii(pc, "POSTAL_CODE", "DE")], [f'"{port}:{port}"', f"localhost:{app}", f'"parent_id": {pid_}', f'"{db}"']
+
+
+def _year_range_and_hour(rng):
+    """A year opening or closing a range, and the hour after a date, are not
+    postcodes (#126)."""
+    pc = str(rng.randrange(10000, 99999))
+    text = ("Lebenslauf: 1998–2011 Fernverkehr, 2012–2026 Baustellen. "
+            f"Erstbefund 03.10.2026 23:50. Adresse: Hauptstraße 5, {pc} Berlin")
+    return text, [pii(pc, "POSTAL_CODE", "DE")], ["1998–2011", "2012–2026", "2026 23"]
+
+
+def _facture_reference(rng):
+    """"Facture 2026-014" has the Portuguese postcode shape and is a reference (#126)."""
+    ref = f"2026-0{rng.randrange(10, 99)}"
+    text = f"Objet : Facture {ref} – mission API\nAdresse : Rua Augusta 10, 1100-053 Lisboa"
+    return text, [pii("1100-053", "POSTAL_CODE", "PT")], [ref]
+
+
+def _lab_ranges(rng):
+    """A lab reference range is not a Polish postcode (#126)."""
+    pc = str(rng.randrange(10000, 99999))
+    text = ("Ferritine 1 180 µg/L (N : 30-400)\nOBX|4|NM|MCV^Gemiddeld celvolume^L||84|fl|80-100|N\n"
+            f"Adresse : 12 rue de la Paix, {pc} Paris")
+    return text, [pii(pc, "POSTAL_CODE", "FR")], ["30-400", "80-100"]
+
+
+def _ip_not_a_host(rng):
+    """A documentation address, a version and an OID are not hosts; a host is (#126)."""
+    host = f"10.{rng.randrange(10, 99)}.1.{rng.randrange(2, 254)}"
+    text = (f"documentation 192.0.2.{rng.randrange(1, 254)}, HANA-Revision 2.00.079.01, "
+            f"urn:oid:1.2.250.1.71.4.2.1, host {host}")
+    return text, [pii(host, "IP_ADDRESS", "DE")], ["192.0.2.", "2.00.079.01", "1.2.250.1.71.4.2.1"]
+
+
+def _words_not_passports(rng):
+    """A word without a digit is not a passport (#126)."""
+    e = email(rng)
+    text = (f"Kopie paspoort ontvangen.\nDEEL C — SCREENING (in te vullen door HR)\n"
+            f"Paszport sprawdzony. Wynik: POZYTYWNY\nContact: {e}")
+    return text, [pii(e, "EMAIL", "NL")], ["SCREENING", "POZYTYWNY"]
+
+
+def _not_plates(rng):
+    """Algorithm names and a law citation are not plates (#126)."""
+    e = email(rng)
+    text = (f"Accepted publickey for jan port {rng.randrange(20000, 65000)} ssh2: ED25519 "
+            f"SHA256:q1Xb. Antrag nach § 1666 BGB. Kontakt: {e}")
+    return text, [pii(e, "EMAIL", "DE")], ["ED25519", "SHA256", "1666 BGB"]
+
+
+def _specimen_and_date(rng):
+    """A form's specimen and a dotted date are not national ids (#126)."""
+    e = email(rng)
+    text = f"Im Formular stand zunächst das Muster „C01X00T47“. Termin najpóźniej 24.11.2026. {e}"
+    return text, [pii(e, "EMAIL", "DE")], ["C01X00T47", "24.11.2026"]
+
+
+def _dummy_values(rng):
+    """Placeholder values are nothing; the test BSN beside them is still one (#126)."""
+    text = ("NHS number: e.g. 999 999 9999; passport XX0000000; MAC aa:bb:cc:dd:ee:ff\n"
+            "BSN: 111222333")
+    return text, [pii("111222333", "NATIONAL_ID", "NL")], ["999 999 9999", "XX0000000", "aa:bb:cc:dd:ee:ff"]
+
+
+def _sort_code(rng):
+    """A UK sort code behind its label is a bank account (#126)."""
+    code = f"{rng.randrange(10, 99)}-{rng.randrange(10, 99)}-{rng.randrange(10, 99)}"
+    text = f"Please pay to sort code {code}, reference INV-{rng.randrange(1000, 9999)}."
+    return text, [pii(code, "IBAN", "UK")], []
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -497,6 +694,30 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#111: German LANR", _provider("Lebenslange Arztnummer: ", 9, "DE")),
     ("rules-engine#111: German BSNR", _provider("BSNR ", 9, "DE")),
     ("rules-engine#111: UK GMC", _provider("GMC number ", 7, "UK")),
+    # #126: the IT/HR/MED benchmark's over-redaction.
+    ("rules-engine#126: leave table", _leave_table),
+    ("rules-engine#126: syslog with a process id and a port", _syslog_ports),
+    ("rules-engine#126: compose environment", _compose_env),
+    ("rules-engine#126: terraform CIDRs and a host", _terraform_cidrs),
+    ("rules-engine#126: asset tags", _asset_tags),
+    ("rules-engine#126: signature date", _signature_date),
+    ("rules-engine#126: newborn screening date", _newborn_screening),
+    ("rules-engine#126: commented table header", _commented_header),
+    ("rules-engine#126: quoted password", _quoted_password),
+    ("rules-engine#126: names that are not secrets", _names_not_secrets),
+    ("rules-engine#126: connection string in quotes", _connection_string),
+    ("rules-engine#126: span across a placeholder", _placeholder_inside),
+    ("rules-engine#126: builds, durations and counts", _units_and_builds),
+    ("rules-engine#126: ports and id fields", _ports_and_ids),
+    ("rules-engine#126: year ranges and an hour", _year_range_and_hour),
+    ("rules-engine#126: invoice reference", _facture_reference),
+    ("rules-engine#126: lab reference ranges", _lab_ranges),
+    ("rules-engine#126: IPs that name no host", _ip_not_a_host),
+    ("rules-engine#126: words that are not passports", _words_not_passports),
+    ("rules-engine#126: algorithms and a law citation", _not_plates),
+    ("rules-engine#126: specimen and dotted date", _specimen_and_date),
+    ("rules-engine#126: dummy values", _dummy_values),
+    ("rules-engine#126: UK sort code", _sort_code),
     # #103: residence card and visa sticker.
     ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
     ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),

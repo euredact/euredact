@@ -256,6 +256,28 @@ function suppressSecretOverStructured(text: string, match: RawMatch): boolean {
  * natural word. A random all-letter token would be mixed case and is left alone
  * — losing a real secret is the expensive direction.
  */
+/**
+ * Values an assigned-secret rule finds after a "=" or ":" that are names, not
+ * secrets (rules-engine#126): `${VAR}` references, identifiers, hyphenated
+ * compounds, image tags, product versions, code calls. Not paths, host names
+ * or reference numbers: those carry personal data ("mac-mhartmann88").
+ * Kept in sync with the Python SDK's _SECRET_NAME_SHAPES.
+ */
+const SECRET_NAME_SHAPES = new RegExp([
+  String.raw`^\$\{[A-Za-z_][A-Za-z0-9_]*(?::?[-=?+][^}]*)?\}?$`,
+  String.raw`^[a-z]{2,}(?:_[a-z]{2,})+$`, String.raw`^[A-Z]{2,}(?:_[A-Z]{2,})+$`,
+  String.raw`^(?:[A-Z]+[a-z]{2,}){3,}(?:V?\d{1,2})?$`,
+  String.raw`^[a-z][a-z0-9._/-]*:(?:\d+(?:\.\d+)*(?:-[a-z0-9]+)*|latest|stable|alpine|slim)$`,
+  String.raw`^[A-Za-z][\w.-]*\/\d+(?:\.\d+)+$`,
+  String.raw`^[\w.]+\(["'\x60]`,
+].join("|"));
+/** A hyphenated compound of words and acronyms; two capitalised words alone
+ *  ("Ann-Sophie", "Caron-Cordier") are names and are left alone. */
+const COMPOUND_PART = String.raw`(?:[A-ZÀ-Þ]{2,6}\d{0,3}|[A-Za-zÀ-ÿ][a-zß-ÿ]{2,})`;
+const COMPOUND = new RegExp(String.raw`^` + COMPOUND_PART + String.raw`(?:-` + COMPOUND_PART + String.raw`)+$`);
+const NAME_PAIR = /^[A-ZÀ-Þ][a-zß-ÿ]{2,}-[A-ZÀ-Þ][a-zß-ÿ]{2,}$/;
+const CONNECTION_WITH_REFERENCE = /^[a-z]+:\/\/[^\s:@]+:\$\{[^}]*\}@/;
+
 function suppressSecretNotASecret(_text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.SECRET) return false;
   const bare = coreToken(match.text);
@@ -264,6 +286,8 @@ function suppressSecretNotASecret(_text: string, match: RawMatch): boolean {
   if (URL_LIKE.test(bare) && !URL_WITH_CREDENTIALS.test(bare)) return true;
   if (LDAP_DN.test(bare)) return true;
   if (HYPHENATED_WORDS.test(bare)) return true;
+  if (SECRET_NAME_SHAPES.test(bare) || CONNECTION_WITH_REFERENCE.test(bare)) return true;
+  if (COMPOUND.test(bare) && !NAME_PAIR.test(bare)) return true;
   const alpha = /^[A-Za-zÀ-ÿ]+$/.test(bare);
   const oneWord =
     bare === bare.toLowerCase() ||
@@ -408,7 +432,18 @@ const PLACEHOLDER = /^(?:\[([A-Z][A-Z0-9_]*)\]?|([A-Z][A-Z0-9_]*?)_(?:\d+|[A-HJ-
 
 const KNOWN_TYPE_NAMES: ReadonlySet<string> = new Set(Object.values(EntityType));
 
-function suppressRedactionPlaceholder(_text: string, match: RawMatch): boolean {
+function suppressRedactionPlaceholder(text: string, match: RawMatch): boolean {
+  // The name between the brackets: an assigned value now starts after an
+  // opening bracket, so "credentials: [POSTAL_CODE]" offers "POSTAL_CODE" alone
+  // (rules-engine#33, #126).
+  if (text[match.start - 1] === "[" && text[match.end] === "]" && KNOWN_TYPE_NAMES.has(match.text)) return true;
+  // A placeholder inside the span: on text masked once, a value running across
+  // "[IP_ADDRESS]" is two things joined (rules-engine#126).
+  // One character either side: a span may start just inside the bracket.
+  const around = text.slice(Math.max(0, match.start - 1), match.end + 1);
+  for (const m of around.matchAll(/\[([A-Z][A-Z0-9_]*)\]/g)) {
+    if (KNOWN_TYPE_NAMES.has(m[1])) return true;
+  }
   const found = PLACEHOLDER.exec(match.text);
   if (found === null) return false;
   const name = found[1] ?? found[2];
@@ -566,6 +601,36 @@ const COUNT_LABEL_BEFORE =
 const NOT_POSTAL_BEFORE =
   /(?<![A-Za-z0-9_])(?:(?:ISO(?:\/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*|[A-Za-z]*[a-z][A-Z][A-Za-z]*\s+)$/;
 
+/**
+ * What else a number is, by what touches it (rules-engine#126): a build,
+ * version, event, lease, policy or ticket number; a port; an invoice, reference
+ * or study-subject number; a process id; a JSON id or port field; an HTTP
+ * response size; the hour after a date; a lab reference range; or a quantity
+ * with its unit after it. Kept in sync with the Python SDK.
+ */
+const TECH_WORD_BEFORE =
+  /(?<![A-Za-z0-9_])(?:build|version|policy\s+id|ticket(?:\s+[A-Za-z]{2,10})?|event|lease|pid|job|port|rfc|facture|invoice|r[ée]f[ée]rence|n[°º]|tn|sae|uczestnik|subject|narratief|participant)\.?\s*[:#=]?\s*["(«[]?\s*$/i;
+const TECH_SHAPE_BEFORE = new RegExp("(?:" + [
+  String.raw`"[A-Za-z_]*(?:id|port)"\s*:\s*"?`,          // "parent_id": 4400
+  String.raw`(?<![A-Za-z0-9])[A-Z_]*PORT\s*[:=]\s*"?`,   // DB_PORT: "5432"
+  String.raw`(?:localhost|[a-z0-9\-]+\.[a-z0-9.\-]+):`,   // localhost:3000
+  String.raw`(?<![\d.])\d{2,5}:`,                        // "8080:8080"
+  String.raw`HTTP\/\d(?:\.\d)?"?\s+\d{3}\s+`,          // HTTP/1.1" 200 2048
+  String.raw`\d+\.\d+(?:\.\d+)+\s*\(`,                  // build 2.4.0 (4012)
+  String.raw`(?<!\d)\d{1,2}[./]\d{1,2}[./]`,              // 03.10.2026 23:50
+  String.raw`\((?:N|norm(?:al)?|ref)\s*:?\s*`,           // (N : 30-400)
+  String.raw`\|`,
+].join("|") + ")$", "i");
+const POSTAL_UNIT_AFTER =
+  /^(?:\s?(?:ms|s|sec|secs|seconds?|secondes?|sekunden|sek|min|bits?|bytes?|kb|mb|gb|tb|kbps|mbps|px|%|records|rows|entries|datensätze|einträge|micrograms|µg|ug|mg|mmol|fl)(?![A-Za-zÀ-ÿ])|\s*→\s*\d+\s*(?:bits?|bytes?)(?![A-Za-z])|:\d|\|)/i;
+const PID_BEFORE = /[A-Za-z0-9_\-]\[$/;
+/** A standard's name as the letters of a lettered postcode: "RFC 5737". Not
+ *  BS or EN: those are Bristol and Enfield. */
+const STANDARD_LETTERS = /^(?:RFC|ISO|IEC|DIN)\s?\d/;
+/** A year closing a range: "1998–2011". En and em dashes only. */
+const YEAR_RANGE_BEFORE = /(?:19|20)\d\d\s?[–—]\s?$/;
+const YEAR_RANGE_AFTER = /^\s?[–—]\s?(?:19|20)\d\d(?!\d)/;
+
 /** A thousands group of an amount: the "750" of "£28,750,000". */
 const GROUP_BEFORE = /\d[,.]$/;
 const GROUP_AFTER = /^[,.]\d{3}(?!\d)/;
@@ -577,9 +642,86 @@ function suppressPostalAfterDisqualifyingWord(text: string, match: RawMatch): bo
   if (EXTENSION_BEFORE.test(before) || COUNT_LABEL_BEFORE.test(before)
     || NOT_POSTAL_BEFORE.test(before)) return true;
   if (GROUP_BEFORE.test(before) && GROUP_AFTER.test(text.slice(match.end, match.end + 5))) return true;
+  const after = text.slice(match.end, match.end + 24);
+  if (TECH_WORD_BEFORE.test(before) || TECH_SHAPE_BEFORE.test(before) || POSTAL_UNIT_AFTER.test(after)
+    || STANDARD_LETTERS.test(match.text)) return true;
+  if (PID_BEFORE.test(before) && after.startsWith("]")) return true;
+  if (DATE_YEAR.test(match.text.trim()) && (YEAR_RANGE_BEFORE.test(before) || YEAR_RANGE_AFTER.test(after))) return true;
   return RECENT_YEAR.test(match.text.trim())
     && (YEAR_WORD_BEFORE.test(before) || YEAR_VERB_BEFORE.test(before))
     && !TOWN_AFTER.test(text.slice(match.end, match.end + 3));
+}
+
+/** A group with a leading zero: "2.00.079.01" is a version, not an address. */
+const IP_LEADING_ZERO = /(?:^|\.)0\d/;
+const CIDR_PREFIX_AFTER = /^\/(\d{1,2})(?!\d)/;
+/** RFC 5737's documentation ranges: reserved, never routed, used in examples. */
+const DOCUMENTATION_NETS = ["192.0.2.", "198.51.100.", "203.0.113."];
+
+/**
+ * An IPv4 shape that names no host (rules-engine#126): a network address
+ * ("10.40.0.0/16"), a documentation address, or a version with leading zeros.
+ * An interface address with its prefix ("192.168.1.23/24") stays.
+ */
+function suppressIpNotAHost(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType !== EntityType.IP_ADDRESS) return false;
+  const ip = match.text;
+  if (IP_LEADING_ZERO.test(ip) || DOCUMENTATION_NETS.some((n) => ip.startsWith(n))) return true;
+  // Part of a longer dotted run: "urn:oid:1.2.250.1.71.4.2.1" is an OID.
+  if (/\d\.$/.test(text.slice(Math.max(0, match.start - 2), match.start))
+    || /^\.\d/.test(text.slice(match.end, match.end + 2))) return true;
+  const prefix = CIDR_PREFIX_AFTER.exec(text.slice(match.end, match.end + 4));
+  if (prefix !== null && Number(prefix[1]) < 32) {
+    const value = ip.split(".").reduce((acc, o) => acc * 256 + Number(o), 0);
+    return value % 2 ** (32 - Number(prefix[1])) === 0;
+  }
+  return false;
+}
+
+/**
+ * The specimen of a form: "das Muster „C01X00T47“". Only "Muster": "z. B." and
+ * "e.g." introduce real values in prose as often as samples (rules-engine#126).
+ */
+const EXAMPLE_BEFORE = /(?<![A-Za-z])muster\s*[:,]?\s*[„"«']?$/i;
+/** A dummy value in placeholder glyphs ("XX0000000", "999 999 9999") or MAC
+ *  groups of one repeated letter. Not "111222333", the standard test BSN. */
+const DUMMY_VALUE = /^(?=(?:[\s:\-./]*[X09]){5})(?:[X\s:\-./]*[X][X0\s:\-./]*|[X9\s:\-./]*X[X9\s:\-./]*|[0\s:\-./]+|[9\s:\-./]+)$|^(?:([a-fA-F])\1[:\-]){2,}([a-fA-F])\2$/;
+/** Algorithm names in a key or signature line: "ED25519", "SHA256". */
+const ALGORITHM = /^(?:ED25519|ED448|SHA-?(?:1|224|256|384|512)|MD5|AES-?\d{3}|RSA-?\d{3,4}|[HRE]S(?:256|384|512))$/i;
+/** A date exactly, which no national number is written as. */
+const EXACT_DOTTED_DATE = /^(?:0[1-9]|[12]\d|3[01])\.(?:0[1-9]|1[0-2])\.(?:19|20)\d\d$/;
+/** The identifier types an example marker or a dummy value rules out. */
+const EXAMPLE_TYPES = new Set<string>([
+  EntityType.NATIONAL_ID, EntityType.PASSPORT, EntityType.LICENSE_PLATE,
+  EntityType.HEALTH_INSURANCE, EntityType.MAC_ADDRESS,
+  EntityType.DRIVERS_LICENSE, EntityType.SSN, EntityType.TAX_ID,
+]);
+
+/** A placeholder in the shape of a value, for any type (#126). */
+function suppressDummyValue(_text: string, match: RawMatch): boolean {
+  return DUMMY_VALUE.test(match.text.trim());
+}
+
+/** An identifier given as a form's specimen, not anyone's (#126). */
+function suppressExampleValue(text: string, match: RawMatch): boolean {
+  if (!EXAMPLE_TYPES.has(match.patternDef.entityType)) return false;
+  return EXAMPLE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start));
+}
+
+/**
+ * Shapes that fit an identifier pattern and are something else (#126): a
+ * passport without a digit, an algorithm or a law citation read as a plate,
+ * a date read as a dotted national number.
+ */
+function suppressNotAnIdentifier(text: string, match: RawMatch): boolean {
+  const type = match.patternDef.entityType;
+  const value = match.text.trim();
+  if (type === EntityType.PASSPORT) return !/\d/.test(value);
+  if (type === EntityType.LICENSE_PLATE) {
+    return ALGORITHM.test(value) || /§\s*$/.test(text.slice(Math.max(0, match.start - 4), match.start));
+  }
+  if (type === EntityType.NATIONAL_ID) return EXACT_DOTTED_DATE.test(value);
+  return false;
 }
 
 function suppressPhoneServiceNumber(_text: string, match: RawMatch): boolean {
@@ -693,7 +835,11 @@ function suppressDePlateUnknownDistrict(text: string, match: RawMatch): boolean 
 
   const parts = match.text.trim().split(/[\s\-]+/);
   if (parts.length === 0 || !parts[0]) return false;
-  if (DE_DISTRICT_CODES.has(parts[0].toUpperCase())) return false;
+  // A German plate number never starts with 0: without a plate cue,
+  // "GR-NB-0412" is an asset tag and "HR-IT-03" a form (rules-engine#126).
+  const digits = /\d+/.exec(match.text);
+  const leadingZero = digits !== null && digits[0].startsWith("0");
+  if (DE_DISTRICT_CODES.has(parts[0].toUpperCase()) && !leadingZero) return false;
 
   const [before, after] = getContext(text, match.start, match.end);
   if (PLATE_CUE_NEAR.test(before + after)) return false;
@@ -1137,8 +1283,11 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
   if (!match.patternDef.requiresContext || match.patternDef.contextKeywords.length === 0) return false;
   // A value filling an entire field of a delimited row is introduced by its
   // column, not by a word, so that is context — but only for narrow shapes.
+  // A date's column decides when the table names it: under "début" or
+  // "last_day" a date is not a birth date (rules-engine#126).
   if (DELIMITED_FIELD_TYPES.has(match.patternDef.entityType) &&
-      fillsADelimitedField(text, match.start, match.end)) return false;
+      fillsADelimitedField(text, match.start, match.end) &&
+      !(DATE_LABEL_TYPES.has(match.patternDef.entityType) && columnHeader(text, match.start) !== null)) return false;
   if (DATE_LABEL_TYPES.has(match.patternDef.entityType)) {
     return !labelsThisDate(text, match.start, match.end, match.patternDef.contextKeywords,
                            match.patternDef.entityType);
@@ -1187,10 +1336,16 @@ function nothingButAListBetween(gap: string): boolean {
  */
 function keywordAt(haystack: string, keyword: string, last: boolean): number {
   const kw = keyword.toLowerCase();
-  if (keyword !== keyword.toUpperCase() || keyword === kw) {
-    return last ? haystack.lastIndexOf(kw) : haystack.indexOf(kw);
-  }
   const isLetter = (c: string): boolean => c !== "" && c.toLowerCase() !== c.toUpperCase();
+  if (keyword !== keyword.toUpperCase() || keyword === kw) {
+    // It must start a word, though it may run on into a longer one: "née le"
+    // in "signée le" and "born" in "Newborn" are other words (rules-engine#126).
+    let i = last ? haystack.lastIndexOf(kw) : haystack.indexOf(kw);
+    while (i > 0 && isLetter(haystack[i - 1])) {
+      i = last ? (i === 0 ? -1 : haystack.lastIndexOf(kw, i - 1)) : haystack.indexOf(kw, i + 1);
+    }
+    return i;
+  }
   const hits: number[] = [];
   for (let i = haystack.indexOf(kw); i !== -1; i = haystack.indexOf(kw, i + 1)) {
     let next = i + kw.length;
@@ -1252,26 +1407,34 @@ function columnHeader(text: string, start: number): string | null {
   const lineStart = text.lastIndexOf("\n", start - 1) + 1;
   const lineEndAt = text.indexOf("\n", start);
   const line = text.slice(lineStart, lineEndAt >= 0 ? lineEndAt : text.length);
-  // The three lines above, by lastIndexOf: splitting the whole prefix was
-  // quadratic in the document, once per date candidate.
-  let aboveStart = lineStart - 1;
-  for (let k = 0; k < 3 && aboveStart >= 0; k++) {
-    aboveStart = aboveStart === 0 ? -1 : text.lastIndexOf("\n", aboveStart - 1);
-  }
-  const above = lineStart ? text.slice(aboveStart + 1, Math.max(0, lineStart - 1)).split("\n") : [];
   for (const sep of COLUMN_SEPARATORS) {
     if (!line.includes(sep)) continue;
     const cells = line.split(sep);
     const column = text.slice(lineStart, start).split(sep).length - 1;
-    for (const header of [...above].reverse()) {
-      // A "label : value" field with a comma in its value is not a header (#111).
-      if (header.includes(":")) continue;
+    // Lines above, one lastIndexOf at a time: one of the three lines above, or
+    // further up through rows of the same table (rules-engine#126).
+    let end = lineStart - 1;
+    let seen = 0;
+    while (end >= 0 && seen < HEADER_REACH) {
+      const begin = end === 0 ? 0 : text.lastIndexOf("\n", end - 1) + 1;
+      const header = text.slice(begin, end);
+      seen++;
       const heads = header.split(sep);
-      if (heads.length === cells.length && !ANY_DATE.test(header)) return heads[column].toLowerCase();
+      const same = heads.length === cells.length;
+      // A "label : value" field with a comma in its value is not a header
+      // (#111); a commented header ("# Spalten: Name;von;bis") is (#126).
+      if (same && (!header.includes(":") || header.trimStart().startsWith("#")) && !ANY_DATE.test(header)) {
+        return heads[column].toLowerCase();
+      }
+      if (seen >= 3 && !same) break;  // past the table this value sits in
+      end = begin - 1;
     }
   }
   return null;
 }
+
+/** How many lines up a table's header is looked for. */
+const HEADER_REACH = 200;
 
 // Suppressors that need whole-document facts take the optional scratch; the
 // rest ignore it, and a narrower function stays assignable to this type.
@@ -1310,11 +1473,16 @@ const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.CHAMBER_OF_COMMERCE]: [suppressReference],
   [EntityType.MAC_ADDRESS]: [suppressMacInReference],
   [EntityType.CREDIT_CARD]: [suppressCardInsideDigitRun],
+  [EntityType.IP_ADDRESS]: [suppressIpNotAHost],
 };
+for (const type of EXAMPLE_TYPES) {
+  TYPE_SUPPRESSORS[type] = [...(TYPE_SUPPRESSORS[type] ?? []), suppressExampleValue, suppressNotAnIdentifier];
+}
 
 export function shouldSuppress(text: string, match: RawMatch, scratch?: SuppressionScratch): boolean {
   if (suppressSequential(text, match)) return true;
   if (suppressRedactionPlaceholder(text, match)) return true;
+  if (suppressDummyValue(text, match)) return true;
   const typeSups = TYPE_SUPPRESSORS[match.patternDef.entityType];
   if (typeSups) {
     for (const s of typeSups) {

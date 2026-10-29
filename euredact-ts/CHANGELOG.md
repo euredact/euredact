@@ -37,6 +37,59 @@ narrative lives. Sections here use that vocabulary
   `FINANCIAL_AMOUNT` raised precision from 0.789 to 0.856 at unchanged recall.
   *(rules-engine#125)*
 
+### Fixed
+
+- **Over-redaction in IT, HR and medical documents.** The competitive
+  benchmark's three sets (650 synthetic documents) had 819 rules spans
+  overlapping no gold span. 259 were the gateway's 0.6.0 rules pass, and
+  0.7.0 already removes 217 of them. Of the rest, on the SDK side:
+  - **Dates (`DOB`):** a date filling a delimited field was a birth date
+    whatever its column said. The column decides when the table names it,
+    and the header is found anywhere above in the same table, a commented
+    `# Spalten: ...` header included. A birth keyword must start a word:
+    "née le" in "signée le" and "born" in "Newborn" are other words.
+  - **`SECRET`:** an assigned value starts after an opening quote or bracket
+    and ends before its closer (98 of 292 spans began or ended on one); a
+    quoted value is what the quotes hold, so `"Hiver122!"` keeps its `!`.
+    `${VAR}` references, `snake_case` / `CONSTANT_CASE` / CamelCase
+    identifiers, hyphenated compounds (`Conditional-Access-Richtlinie`,
+    `IT-Security`; two capitalised words such as `Ann-Sophie` stay), image
+    tags and product versions are not secrets. No span may contain a
+    `[TYPE]` placeholder, which on masked text reported one value twice.
+    Connection strings stop at a closing quote.
+  - **`POSTAL_CODE`:** not a number with a unit after it (`3000 ms`,
+    `28800 seconds`, `2048 → 3072 Bit`, `412 Datensätze`), a process id
+    (`sshd[21877]`), a port (`port 52144`, `localhost:3000`, `"8080:8080"`,
+    `DB_PORT: "5432"`), a JSON id field, an HTTP response size, a number after
+    build, version, event, lease, policy ID, ticket, RFC, Facture, référence,
+    n° or a study-subject marker, the hour after a date, a year opening or
+    closing a range (`1998–2011`), or a lab range (`|30-400|`, `(N : 30-400)`).
+  - **`IP_ADDRESS`:** not a network address with its prefix (`10.40.0.0/16`;
+    `192.168.1.23/24` is a host and stays), an RFC 5737 documentation address,
+    a version with leading zeros (`2.00.079.01`), or part of a longer dotted
+    run (`urn:oid:1.2.250.1…`).
+  - **Plates, passports, national ids:** a German plate number never starts
+    with 0 (`GR-NB-0412`, `HR-IT-03`, unless a plate label is near);
+    Portuguese plates match their four real formats anywhere, and any
+    three pairs only behind a plate label ("Matrícula 29-99-23"); `ED25519`,
+    `SHA256` and `§ 1666 BGB` are not plates; a passport needs a digit
+    (`SCREENING`); a dotted date (`24.11.2026`) and a form's specimen
+    („Muster“ `C01X00T47`) are not national ids; placeholder values
+    (`XX0000000`, `999 999 9999`, `aa:bb:cc:dd:ee:ff`) are nothing.
+  - **UK sort codes** behind their label are `BANK_ACCOUNT` on a pattern of
+    their own; they used to be found only through the Portuguese plate shape.
+
+  On the three sets, with the gateway on this release too: 602 → 387 rules
+  spans overlapping no gold, 331 → 116 excluding the role mailboxes,
+  switchboard numbers and request ids that stay masked by decision. 11 gold
+  values lose their only cover, every one a mistyped `SECRET` span that
+  covered a username, a name, a JSON body or a hyphenated description by
+  accident; 2 are newly covered. Not changed: model numbers
+  (`Dell Latitude 5450`), paths and host names (they carry names:
+  `uk/personal/fenwick_chloe`, `mac-mhartmann88`). On the 152,300-document
+  corpus only `SECRET` moves: recall 89.91% → 90.12% (14 fewer partial
+  spans, 2 more misses), precision unchanged. *(rules-engine#126)*
+
 ## 0.7.0 (2026-10-26)
 
 ### Added

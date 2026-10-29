@@ -63,11 +63,27 @@ class PTConfig(CountryConfig):
                 description="Portuguese international phone — +351",
             ),
             # --- License Plate (AA-XX-XX, mixed) ---
+            # The four formats Portugal has issued: 00-00-AA, 00-AA-00,
+            # AA-00-00 and AA-00-AA. Any three pairs read "GR-SW-01" (an asset
+            # tag) and "HR-IT-03" (a form) as plates (rules-engine#126).
+            PatternDef(
+                entity_type=EntityType.LICENSE_PLATE,
+                pattern=r"\b(?:\d{2}-\d{2}-[A-Z]{2}|\d{2}-[A-Z]{2}-\d{2}"
+                        r"|[A-Z]{2}-\d{2}-\d{2}|[A-Z]{2}-\d{2}-[A-Z]{2})\b",
+                validator=None,
+                description="Portuguese license plate — AA-XX-XX",
+            ),
+            # Any three pairs, behind a plate label: "Matrícula 29-99-23" is
+            # labelled a plate in the corpus, whatever the format.
             PatternDef(
                 entity_type=EntityType.LICENSE_PLATE,
                 pattern=r"\b[A-Z0-9]{2}-[A-Z0-9]{2}-[A-Z0-9]{2}\b",
                 validator=None,
-                description="Portuguese license plate — AA-XX-XX",
+                description="Portuguese license plate — AA-XX-XX, behind its label",
+                context_keywords=["matrícula", "matricula", "placa", "license plate",
+                                  "number plate", "plate", "Kennzeichen", "kenteken",
+                                  "immatriculation", "targa"],
+                requires_context=True,
             ),
             # --- Postal Code (XXXX-XXX) ---
             PatternDef(

@@ -2,6 +2,13 @@ import { EntityType, type CountryConfig, type PatternDef } from "../../types.js"
 import { IBAN_LENGTHS } from "../validators.js";
 import { MONTH_NAMES } from "../suppressors.js";
 
+/** An assigned value: not opened by a quote or bracket, eight characters or
+ *  more, not ended by punctuation or a closer (rules-engine#35, #126). */
+const ASSIGNED = String.raw`[^\s"'\x60\[\]{}()<>„“”«»‚‘’]\S{6,}[^\s.,;:!?)'"\]}\x60“”»‘’]`;
+/** A quoted assigned value: exactly what the quotes hold (rules-engine#126). */
+const QUOTED_ASSIGNED = ['"', "'", "\x60"].flatMap((q) => [" ", ""].map((gap) =>
+  String.raw`(?<=[:=]` + gap + q + String.raw`)[^\s` + q + String.raw`]{8,}(?=` + q + ")")).join("|");
+
 /** Day, month as a word, year ("4. März 1948"), behind a date label (rules-engine#115). */
 function writtenDatePattern(): string {
   const names = new Set(MONTH_NAMES.split("|").filter(Boolean));
@@ -283,14 +290,20 @@ const SHARED: CountryConfig = {
     // AWS Secret Access Key (40 chars, base64 with +/ after an AKIA line)
     p(EntityType.SECRET, String.raw`(?<=aws_secret_access_key\s{0,4}[:=]\s{0,4})[A-Za-z0-9+/]{40}`, null, "AWS Secret Access Key"),
     // --- Secret / API Key (connection strings with embedded credentials) ---
-    p(EntityType.SECRET, String.raw`(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq):\/\/[^\s:]{1,256}:[^\s@]{1,256}@[^\s]+`, null, "Connection string with credentials"),
+    // The tail stops at a quote (rules-engine#126).
+    p(EntityType.SECRET, String.raw`(?:mongodb|mysql|postgres(?:ql)?|redis|amqp|rabbitmq):\/\/[^\s:]{1,256}:[^\s@]{1,256}@[^\s"'\x60]+`, null, "Connection string with credentials"),
     // --- Secret / API Key (assignment-based: KEY=value or KEY: value) ---
     // The final character may not be sentence punctuation. `\S` does not stop
     // at a full stop, so "Reisepass: CA1234567." was claimed as the
     // ten-character span "CA1234567." -- a passport number plus the sentence's
     // period, masked as a credential because a "credentials" word sat within
     // the context window (rules-engine#35).
-    p(EntityType.SECRET, String.raw`(?<=[:=] )\S{7,}[^\s.,;:!?)'"]|(?<=[:=])\S{7,}[^\s.,;:!?)'"]`, "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
+    // The value starts after an opening quote or bracket and ends before its
+    // closer: `user = "svc_terraform"` was the span `"svc_terraform`
+    // (rules-engine#126).
+    // A quoted value is what the quotes hold, closing punctuation included.
+    p(EntityType.SECRET, QUOTED_ASSIGNED + "|" + [String.raw`(?<=[:=] )`, String.raw`(?<=[:=])`, String.raw`(?<=[:=] ["'\x60\[{(])`, String.raw`(?<=[:=]["'\x60\[{(])`]
+      .map((lb) => lb + ASSIGNED).join("|"), "high_entropy", "Assigned secret value", SECRET_CONTEXT, true),
     // --- Secret / API Key (entropy-based fallback for longer tokens) ---
     // Only the *trailing* \b is replaced. It could not match when the token run
     // ended on "-", "+" or "/", so the engine backtracked across two
@@ -584,7 +597,11 @@ const PT: CountryConfig = {
     p(EntityType.PHONE, String.raw`\b[29]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b`),
     p(EntityType.PHONE, String.raw`\b[29]\d{8}\b`),
     p(EntityType.PHONE, String.raw`\+351\s?[29]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}`),
-    p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z0-9]{2}-[A-Z0-9]{2}-[A-Z0-9]{2}\b`),
+    // The four formats Portugal has issued (rules-engine#126).
+    p(EntityType.LICENSE_PLATE, String.raw`\b(?:\d{2}-\d{2}-[A-Z]{2}|\d{2}-[A-Z]{2}-\d{2}|[A-Z]{2}-\d{2}-\d{2}|[A-Z]{2}-\d{2}-[A-Z]{2})\b`),
+    // Any three pairs, behind a plate label (rules-engine#126).
+    p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z0-9]{2}-[A-Z0-9]{2}-[A-Z0-9]{2}\b`, null, "Portuguese license plate — AA-XX-XX, behind its label",
+      ["matrícula", "matricula", "placa", "license plate", "number plate", "plate", "Kennzeichen", "kenteken", "immatriculation", "targa"], true),
     p(EntityType.POSTAL_CODE, String.raw`\b\d{4}-\d{3}\b`),
   ],
 };
@@ -663,6 +680,8 @@ const UK: CountryConfig = {
   code: "UK",
   name: "United Kingdom",
   patterns: [
+    // A sort code behind its label; no longer found through the Portuguese plate shape (rules-engine#126).
+    p(EntityType.BANK_ACCOUNT, String.raw`\b\d{2}-\d{2}-\d{2}\b`, null, "UK sort code — NN-NN-NN, behind its label", ["sort code", "sortcode", "sort-code"], true),
     // Healthcare-provider numbers, behind their label: no shape of their own, so without a pattern nothing claimed them, or a phone or a foreign checksum did (canon HEALTHCARE_PROVIDER; rules-engine#111).
     p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{7}\b`, null, "UK GMC number — 7 digits", ["GMC number", "GMC no", "GMC reference", "GMC reg", "GMC:", "GMC-Nr", "General Medical Council"], true),
     // UK NINO: a social-security number, so SSN, as the canon defaults it (rules-engine#47).
