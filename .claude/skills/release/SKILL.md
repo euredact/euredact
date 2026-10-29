@@ -90,6 +90,15 @@ previous version. The workflow then builds the old version and npm rejects it
 with `You cannot publish over the previously published versions` — an error
 that reads as a workflow problem but is a tag-ordering problem.
 
+The publish workflow runs on GitHub, which receives `main` through Forgejo's
+push mirror. Before tagging, check that GitHub's `main` is the release commit
+(`git ls-remote https://github.com/euredact/euredact.git refs/heads/main`). If
+it lags, look at the push mirror's last error in Forgejo (Settings →
+Repository → Mirror settings) before anything else. For 0.7.1 it was GitHub
+push protection (`GH013`) rejecting a checksum-valid GitHub token in a test
+vector, and every push since had failed; the fix was a history rewrite
+(rules-engine#132). `make check` now refuses such a token.
+
 ## 5. Create a GitHub Release, set as latest
 
 `publish.yml` triggers on `release: [published]` — **a tag push alone publishes
