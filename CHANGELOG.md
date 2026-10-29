@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Added
+
+- `exclude_types` / `excludeTypes`: entity types neither reported nor masked, per call or for every call on an `EuRedact` instance. Nothing is excluded by default; names are case-insensitive, legacy names resolve, and an unknown name raises. Each excluded detection is recorded in `result.exempted` with `rule_kind` `"type"`. In cloud mode an excluded rules type is still masked in the text sent to the service. *(rules-engine#125)*
+
 ## [0.7.0] - 2026-10-26
 
 ### Added

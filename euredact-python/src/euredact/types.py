@@ -168,7 +168,7 @@ class Detection:
 
 @dataclass(frozen=True)
 class Exemption:
-    """A detection the allowlist kept out of the redacted output.
+    """A detection the allowlist or ``exclude_types`` kept out of the output.
 
     An exemption is a deliberate decision to leave a direct identifier in a
     document that otherwise claims to be redacted, so it is reported rather
@@ -180,9 +180,11 @@ class Exemption:
     start: int
     end: int
     text: str
-    #: The allowlist entry that matched, as the caller wrote it.
+    #: The allowlist entry that matched, as the caller wrote it; for an
+    #: excluded type, the type's canonical name.
     rule: str
-    #: ``"value"`` for the literal allowlist, ``"domain"`` for allowlist_domains.
+    #: ``"value"`` for the literal allowlist, ``"domain"`` for allowlist_domains,
+    #: ``"type"`` for exclude_types (rules-engine#125).
     rule_kind: str = "value"
 
 

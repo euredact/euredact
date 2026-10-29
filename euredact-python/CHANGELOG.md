@@ -11,6 +11,32 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Added
+
+- **`exclude_types`: switch whole entity types off.** A deployment whose
+  taxonomy is narrower than euRedact's (no job titles, no amounts) had to
+  filter `detections` and rebuild `redacted_text` itself. `redact()` and every
+  other entry point, and `EuRedact(...)` for a whole deployment, now take
+  `exclude_types=[...]`: those types are neither reported nor masked, and each
+  such detection is recorded in `result.exempted` (`rule_kind="type"`).
+  - **Default unchanged:** nothing is excluded unless named.
+  - **Checked names:** case-insensitive; legacy names resolve (`IBAN`,
+    `CREDENTIAL`); registered custom pattern names count; anything else raises
+    `ValueError`, so a typo cannot silently switch nothing off.
+  - **Final types only:** the filter applies after ranking, so excluding a type
+    never lets another claim the same span (`NHS Number: 5556953627` is left in
+    the text, not re-masked as an Austrian `SSN`).
+  - **Cloud mode:** an excluded rules type is still masked in the text sent to
+    the service; the option decides what comes back, not what may leave.
+  - **No include-list:** a list of types to keep would leave every type a later
+    release adds unmasked, without notice.
+
+  Measured in the IT-250 benchmark that reported it, excluding `JOB_TITLE` and
+  `FINANCIAL_AMOUNT` raised precision from 0.789 to 0.856 at unchanged recall.
+  *(rules-engine#125)*
+
 ## 0.7.0 (2026-10-26)
 
 ### Added

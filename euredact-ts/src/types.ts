@@ -164,7 +164,7 @@ export interface Detection {
 }
 
 /**
- * A detection the allowlist kept out of the redacted output.
+ * A detection the allowlist or `excludeTypes` kept out of the redacted output.
  *
  * An exemption is a deliberate decision to leave a direct identifier in a
  * document that otherwise claims to be redacted, so it is reported rather than
@@ -176,10 +176,12 @@ export interface Exemption {
   start: number;
   end: number;
   text: string;
-  /** The allowlist entry that matched, as the caller wrote it. */
+  /** The allowlist entry that matched, as the caller wrote it; for an
+   *  excluded type, the type's canonical name. */
   rule: string;
-  /** `"value"` for the literal allowlist, `"domain"` for allowlistDomains. */
-  ruleKind: "value" | "domain";
+  /** `"value"` for the literal allowlist, `"domain"` for allowlistDomains,
+   *  `"type"` for excludeTypes (rules-engine#125). */
+  ruleKind: "value" | "domain" | "type";
 }
 
 /**

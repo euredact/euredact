@@ -36,7 +36,8 @@ def conformance_sdk():
 
 # Vector options are spelled as in the TypeScript RedactOptions; this maps
 # them onto the Python keyword names.
-_OPTION_NAMES = {"allowlist": "allowlist", "allowlistDomains": "allowlist_domains"}
+_OPTION_NAMES = {"allowlist": "allowlist", "allowlistDomains": "allowlist_domains",
+                 "excludeTypes": "exclude_types"}
 
 
 def _redact(sdk, case):

@@ -5,7 +5,7 @@ import { normalize, mapOffsetToOriginal } from "./normalizer.js";
 import { RuleEngine } from "./rules/engine.js";
 import { DocumentContext } from "./rules/context.js";
 import { weightsToRanking } from "./rules/evidence.js";
-import { EntityType, type Detection, type Exemption, type RedactResult } from "./types.js";
+import { EntityType, canonicalType, type Detection, type Exemption, type RedactResult } from "./types.js";
 
 const DATE_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
 
@@ -397,6 +397,75 @@ function applyAllowlist(
   return [kept, exempted];
 }
 
+const KNOWN_TYPES = new Set<string>(Object.values(EntityType) as string[]);
+
+/**
+ * The entity types a caller asked to leave in the text, by canonical name.
+ *
+ * Names are matched case-insensitively and legacy names resolve (`IBAN` is
+ * `BANK_ACCOUNT`, `CREDENTIAL` is `SECRET`). A custom pattern's name counts
+ * once it is registered. Anything else throws: a typo in a type meant to be
+ * switched off would otherwise switch nothing off (rules-engine#125).
+ */
+export function normalizeExcludeTypes(
+  values: unknown, customNames: ReadonlySet<string> = new Set(), param = "excludeTypes",
+): Set<string> {
+  const out = new Set<string>();
+  if (values === null || values === undefined) return out;
+  checkAllowlistArg(values, param);
+  for (const v of values as unknown[]) {
+    if (typeof v !== "string") {
+      throw new TypeError(`${param} entries must be type names, not ${typeof v}`);
+    }
+    if (customNames.has(v)) { out.add(v); continue; }
+    const name = canonicalType(v);
+    if (!KNOWN_TYPES.has(name)) {
+      throw new Error(
+        `unknown entity type ${JSON.stringify(v)} in ${param}. Known types: ` +
+        [...KNOWN_TYPES].sort().join(", ") +
+        (customNames.size ? `; custom patterns: ${[...customNames].sort().join(", ")}` : ""),
+      );
+    }
+    out.add(name);
+  }
+  return out;
+}
+
+/**
+ * Split off the detections of the types the caller excluded. Applied to each
+ * span's final type, after ranking: dropping an excluded type's candidates
+ * earlier would let the next-best type claim the same span.
+ */
+function applyTypeExclusion(
+  text: string, detections: Detection[], excluded: ReadonlySet<string>,
+): [Detection[], Exemption[]] {
+  if (excluded.size === 0) return [detections, []];
+  const kept: Detection[] = [];
+  const exempted: Exemption[] = [];
+  for (const d of detections) {
+    const name = String(d.entityType);
+    if (excluded.has(name)) {
+      exempted.push({
+        entityType: d.entityType, start: d.start, end: d.end,
+        text: text.slice(d.start, d.end), rule: name, ruleKind: "type",
+      });
+    } else kept.push(d);
+  }
+  return [kept, exempted];
+}
+
+/** Allowlist first, then excluded types; every exemption in text order. */
+function exempt(
+  text: string, detections: Detection[], allowed: Map<string, string>,
+  domains: Map<string, string>, excluded: ReadonlySet<string>,
+): [Detection[], Exemption[]] {
+  const [afterValues, byValue] = applyAllowlist(text, detections, allowed, domains);
+  const [kept, byType] = applyTypeExclusion(text, afterValues, excluded);
+  const exempted = [...byValue, ...byType];
+  if (byValue.length && byType.length) exempted.sort((a, b) => a.start - b.start || b.end - a.end);
+  return [kept, exempted];
+}
+
 /** Two label schemes for the same spans cannot both apply. */
 function checkLabelOptions(options: RedactOptions): void {
   if (options.tokenize && options.referentialIntegrity) {
@@ -492,6 +561,15 @@ export interface RedactOptions {
    * EMAIL and URL only, and covers subdomains. Merged with the instance list.
    */
   allowlistDomains?: string[] | null;
+  /**
+   * Entity types to leave in the text: neither in `detections` nor masked, and
+   * each such detection reported in `RedactResult.exempted` (`ruleKind:
+   * "type"`). Names are case-insensitive and legacy names resolve; unknown
+   * names throw. Merged with the instance's list. Default: nothing excluded.
+   * In `mode: "cloud"` an excluded rules type is still masked in the text sent
+   * to the service — this decides what comes back, not what may leave.
+   */
+  excludeTypes?: string[] | null;
   detectDates?: boolean;
   cache?: boolean;
   /**
@@ -541,25 +619,33 @@ export class EuRedact {
   private maxInputLength: number;
   private allowlist: Map<string, string>;
   private allowlistDomains: Map<string, string>;
+  private customNames = new Set<string>();
+  private excludeTypes: Set<string>;
 
   /**
    * @param options.maxInputLength Longest document `redact` accepts, in characters.
    * @param options.allowlist Values never to redact, for every call on this
    *   instance — an organisation's own name, its own addresses. Merged with
    *   the per-call `allowlist`. Matched whole, case-insensitively.
+   * @param options.excludeTypes Entity types never reported or masked, for
+   *   every call on this instance, e.g. `["JOB_TITLE", "FINANCIAL_AMOUNT"]`.
+   *   Merged with the per-call value. Unknown names throw.
    */
   constructor(options?: {
     maxInputLength?: number;
     allowlist?: string[] | null;
     allowlistDomains?: string[] | null;
+    excludeTypes?: string[] | null;
   }) {
     this.maxInputLength = options?.maxInputLength ?? DEFAULT_MAX_INPUT_LENGTH;
     this.allowlist = normalizeAllowlist(options?.allowlist);
     this.allowlistDomains = normalizeDomains(options?.allowlistDomains);
+    this.excludeTypes = normalizeExcludeTypes(options?.excludeTypes);
   }
 
   addCustomPattern(name: string, pattern: string): void {
     this.engine.addCustomPattern(name, pattern);
+    this.customNames.add(name);
     this.cache.clear();
   }
 
@@ -575,6 +661,13 @@ export class EuRedact {
     const allowed = new Map(this.allowlist);
     for (const [k, v] of normalizeAllowlist(options.allowlist)) allowed.set(k, v);
     return allowed;
+  }
+
+  /** The instance's excluded types merged with a call's. */
+  private excludedFor(options: RedactOptions): Set<string> {
+    const excluded = new Set(this.excludeTypes);
+    for (const t of normalizeExcludeTypes(options.excludeTypes, this.customNames)) excluded.add(t);
+    return excluded;
   }
 
   /** The instance domain list merged with a call's. */
@@ -639,6 +732,7 @@ export class EuRedact {
 
     const allowed = this.allowedFor(options);
     const domains = this.domainsFor(options);
+    const excluded = this.excludedFor(options);
     const client = new CloudClient();
 
     // Dates are always on, whatever detectDates says: that is the rules output
@@ -646,8 +740,9 @@ export class EuRedact {
     // has no reason to travel. It is the one ignored option that is safe to
     // ignore — it can only cause MORE to be detected, never less.
     //
-    // No allowlist and no tokens on this pass. An exemption says what the
-    // caller wants back, not what may leave; both are applied below, after the
+    // No allowlist, no excluded types and no tokens on this pass. An exemption
+    // says what the caller wants back, not what may leave: an excluded EMAIL is
+    // still masked in the request. All three are applied below, after the
     // response, to the merged spans.
     const local = this.redactRules(
       text, { countries, detectDates: true, cache: options.cache }, new Map(), new Map(),
@@ -660,10 +755,10 @@ export class EuRedact {
     });
 
     // A new array throughout: `local` may be the cached rules result.
-    const [detections, exempted] = applyAllowlist(
+    const [detections, exempted] = exempt(
       text,
       [...local.detections, ...ontoOriginal(remote.detections, masked, text, labels, CloudError)],
-      allowed, domains,
+      allowed, domains, excluded,
     );
     detections.sort((a, b) => a.start - b.start || b.end - a.end);
     const tokenMapper = options.tokenize ? new TokenMapper(text, detections) : null;
@@ -684,6 +779,7 @@ export class EuRedact {
     checkLabelOptions(options);
     const allowed = this.allowedFor(options);
     const domains = this.domainsFor(options);
+    const excluded = this.excludedFor(options);
 
     const requestedMode = options.mode ?? "rules";
     if (requestedMode === "cloud") {
@@ -708,7 +804,7 @@ export class EuRedact {
       );
     }
 
-    return this.redactRules(text, options, allowed, domains);
+    return this.redactRules(text, options, allowed, domains, excluded);
   }
 
   /** The local pipeline: normalise, detect, exempt, mask. */
@@ -717,6 +813,7 @@ export class EuRedact {
     options: RedactOptions,
     allowed: Map<string, string>,
     domains: Map<string, string>,
+    excluded: ReadonlySet<string> = new Set(),
   ): RedactResult {
     if (text.length > this.maxInputLength) {
       throw new Error(
@@ -753,7 +850,8 @@ export class EuRedact {
     // JSON rather than a joined string: an entry may itself contain the
     // separator, and two different lists must never share a key.
     const allowKey = (allowed.size ? JSON.stringify([...allowed.keys()].sort()) : "")
-      + (domains.size ? "|dom=" + JSON.stringify([...domains.keys()].sort()) : "");
+      + (domains.size ? "|dom=" + JSON.stringify([...domains.keys()].sort()) : "")
+      + (excluded.size ? "|excl=" + JSON.stringify([...excluded].sort()) : "");
     const cacheMode = `rules|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}|tok=${tokenize}|allow=${allowKey}`;
 
     let cacheKey: string | undefined;
@@ -786,7 +884,7 @@ export class EuRedact {
       detections = detections.filter(d => !DATE_TYPES.has(d.entityType));
     }
     let exempted: Exemption[];
-    [detections, exempted] = applyAllowlist(text, detections, allowed, domains);
+    [detections, exempted] = exempt(text, detections, allowed, domains, excluded);
 
     detections.sort((a, b) => a.start - b.start || b.end - a.end);
 

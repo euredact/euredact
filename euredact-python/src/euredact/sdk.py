@@ -359,6 +359,82 @@ def _apply_allowlist(
     return kept, exempted
 
 
+def normalize_exclude_types(
+    values: object, custom_names: set[str] | frozenset[str] = frozenset(),
+    param: str = "exclude_types",
+) -> frozenset[str]:
+    """The entity types a caller asked to leave in the text, by canonical name.
+
+    Names are matched case-insensitively and legacy names resolve (``IBAN`` is
+    ``BANK_ACCOUNT``, ``CREDENTIAL`` is ``SECRET``). A custom pattern's name
+    counts once it is registered. Anything else raises: a typo in a type that
+    was meant to be switched off would otherwise switch nothing off, and a
+    typo in one meant to stay on is invisible until a document leaks
+    (rules-engine#125).
+    """
+    if values is None:
+        return frozenset()
+    check_allowlist_arg(values, param)
+    out: set[str] = set()
+    for v in values:  # type: ignore[union-attr]
+        if isinstance(v, EntityType):
+            out.add(v.value)
+            continue
+        if not isinstance(v, str):
+            raise TypeError(f"{param} entries must be type names, not {type(v).__name__}")
+        if v in custom_names:
+            out.add(v)
+            continue
+        try:
+            out.add(EntityType(v.strip().upper()).value)
+        except ValueError:
+            known = sorted(t.value for t in EntityType)
+            raise ValueError(
+                f"unknown entity type {v!r} in {param}. Known types: "
+                f"{', '.join(known)}"
+                + (f"; custom patterns: {', '.join(sorted(custom_names))}"
+                   if custom_names else "")) from None
+    return frozenset(out)
+
+
+def _apply_type_exclusion(
+    text: str, detections: list[Detection], excluded: frozenset[str],
+) -> tuple[list[Detection], list[Exemption]]:
+    """Split off the detections of the types the caller excluded.
+
+    Applied to each span's *final* type, after ranking. Dropping the candidates
+    of an excluded type before ranking would let the next-best type claim the
+    same span: "NHS Number: 5556953627" fits the Austrian SVNr check too, and
+    excluding HEALTH_INSURANCE would have re-masked it as SSN.
+    """
+    if not excluded:
+        return detections, []
+    kept: list[Detection] = []
+    exempted: list[Exemption] = []
+    for d in detections:
+        name = _type_label(d.entity_type)
+        if name in excluded:
+            exempted.append(Exemption(
+                entity_type=d.entity_type, start=d.start, end=d.end,
+                text=text[d.start : d.end], rule=name, rule_kind="type"))
+        else:
+            kept.append(d)
+    return kept, exempted
+
+
+def _exempt(
+    text: str, detections: list[Detection], allowed: dict[str, str],
+    domains: dict[str, str], excluded: frozenset[str],
+) -> tuple[list[Detection], list[Exemption]]:
+    """Allowlist first, then excluded types; every exemption in text order."""
+    detections, by_value = _apply_allowlist(text, detections, allowed, domains)
+    detections, by_type = _apply_type_exclusion(text, detections, excluded)
+    exempted = by_value + by_type
+    if by_value and by_type:
+        exempted.sort(key=lambda e: (e.start, -e.end))
+    return detections, exempted
+
+
 #: Characters a token suffix is drawn from. No vowels (and no Y), so a suffix
 #: never spells a word; no 0/1/I/O, so it survives being read back by a person;
 #: no underscore, so the type prefix stays unambiguous. A, E, U and Y were in it
@@ -457,6 +533,7 @@ class EuRedact:
         max_input_length: int = DEFAULT_MAX_INPUT_LENGTH,
         allowlist: list[str] | None = None,
         allowlist_domains: list[str] | None = None,
+        exclude_types: list[str] | None = None,
     ) -> None:
         """
         Args:
@@ -467,6 +544,11 @@ class EuRedact:
             allowlist_domains: Domains whose addresses are never redacted, e.g.
                 ``["acme.be"]``. Applies to EMAIL and URL only, and covers
                 subdomains. Merged with the per-call value.
+            exclude_types: Entity types never reported or masked, for every
+                call on this instance, e.g. ``["JOB_TITLE",
+                "FINANCIAL_AMOUNT"]`` for a taxonomy without them. Merged with
+                the per-call value. Each excluded detection is reported in
+                ``RedactResult.exempted``. Unknown names raise.
         """
         self._engine = RuleEngine()
         self._cache = ResultCache()
@@ -474,10 +556,13 @@ class EuRedact:
         self._max_input_length = max_input_length
         self._allowlist = _normalize_allowlist(allowlist)
         self._allowlist_domains = _normalize_domains(allowlist_domains)
+        self._custom_names: set[str] = set()
+        self._exclude_types = normalize_exclude_types(exclude_types)
 
     def add_custom_pattern(self, name: str, pattern: str) -> None:
         """Register a custom regex pattern detected as *name*."""
         self._engine.add_custom_pattern(name, pattern)
+        self._custom_names.add(name)
         self._cache.clear()
 
     def clear(self) -> None:
@@ -513,6 +598,7 @@ class EuRedact:
         tokenize: bool = False,
         allowlist: list[str] | None = None,
         allowlist_domains: list[str] | None = None,
+        exclude_types: list[str] | None = None,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -549,6 +635,14 @@ class EuRedact:
             allowlist: Values never to redact, matched whole and
                 case-insensitively against each detection. Merged with the
                 instance's allowlist.
+            exclude_types: Entity types to leave in the text: neither in
+                ``detections`` nor masked, and each such detection reported in
+                ``RedactResult.exempted`` (``rule_kind="type"``). Names are
+                case-insensitive and legacy names resolve; unknown names raise.
+                Merged with the instance's list. Default: nothing excluded.
+                In ``mode="cloud"`` an excluded rules type is still masked in
+                the text sent to the service -- this decides what comes back,
+                not what may leave.
             idempotency_key: ``mode="cloud"`` only. Sent as the request's
                 ``Idempotency-Key``: the same key returns the same job instead
                 of running (and billing) the document again, which is what a
@@ -566,14 +660,16 @@ class EuRedact:
                 "the same spans; pass one of them")
         allowed = {**self._allowlist, **_normalize_allowlist(allowlist)}
         domains = {**self._allowlist_domains, **_normalize_domains(allowlist_domains)}
+        excluded = self._exclude_types | normalize_exclude_types(
+            exclude_types, self._custom_names)
 
         if mode == "cloud":
             return self._redact_cloud(
                 text, countries=countries, country_hint=country_hint,
                 context=context, chunk_offset=chunk_offset,
                 referential_integrity=referential_integrity, tokenize=tokenize,
-                allowed=allowed, domains=domains, coref=coref, cache=cache,
-                idempotency_key=idempotency_key,
+                allowed=allowed, domains=domains, excluded=excluded, coref=coref,
+                cache=cache, idempotency_key=idempotency_key,
             )
         if idempotency_key is not None:
             raise ValueError(
@@ -587,8 +683,8 @@ class EuRedact:
             text, countries=countries, country_hint=country_hint,
             context=context, chunk_offset=chunk_offset,
             referential_integrity=referential_integrity, tokenize=tokenize,
-            allowed=allowed, domains=domains, detect_dates=detect_dates,
-            cache=cache,
+            allowed=allowed, domains=domains, excluded=excluded,
+            detect_dates=detect_dates, cache=cache,
         )
 
     def _redact_rules(
@@ -605,6 +701,7 @@ class EuRedact:
         domains: dict[str, str],
         detect_dates: bool,
         cache: bool,
+        excluded: frozenset[str] = frozenset(),
     ) -> RedactResult:
         """The local pipeline: normalise, detect, exempt, mask."""
         if len(text) > self._max_input_length:
@@ -629,6 +726,8 @@ class EuRedact:
         allow_key = json.dumps(sorted(allowed)) if allowed else ""
         if domains:
             allow_key += "|dom=" + json.dumps(sorted(domains))
+        if excluded:
+            allow_key += "|excl=" + json.dumps(sorted(excluded))
         cache_mode = f"rules|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}|tok={tokenize}|allow={allow_key}"
         # A context makes the result depend on evidence from other chunks, so
         # the text no longer identifies the result. Caching is disabled rather
@@ -667,7 +766,7 @@ class EuRedact:
         # Filter date types unless opted in
         if not detect_dates:
             detections = [d for d in detections if d.entity_type not in _DATE_TYPES]
-        detections, exempted = _apply_allowlist(text, detections, allowed, domains)
+        detections, exempted = _exempt(text, detections, allowed, domains, excluded)
 
         # Steps 7-13: [CLOUD EXTENSION] — no-ops in rules-only mode
 
@@ -721,6 +820,7 @@ class EuRedact:
         coref: bool,
         cache: bool,
         idempotency_key: str | None = None,
+        excluded: frozenset[str] = frozenset(),
     ) -> RedactResult:
         """Run the rules here, then send what they left to the cloud tier.
 
@@ -765,9 +865,10 @@ class EuRedact:
             # ignored option that is safe to ignore -- it can only cause MORE
             # to be detected, never less.
             #
-            # No allowlist and no tokens on this pass. An exemption says what
-            # the caller wants back, not what may leave; both are applied
-            # below, after the response, to the merged spans.
+            # No allowlist, no excluded types and no tokens on this pass. An
+            # exemption says what the caller wants back, not what may leave:
+            # an excluded EMAIL is still masked in the request. All three are
+            # applied below, after the response, to the merged spans.
             local = self._redact_rules(
                 text, countries=countries, country_hint=None, context=None,
                 chunk_offset=0, referential_integrity=False, tokenize=False,
@@ -780,7 +881,7 @@ class EuRedact:
         # A new list throughout: `local` may be the cached rules result.
         detections = local.detections + _onto_original(
             remote.detections, masked, text, labels)
-        detections, exempted = _apply_allowlist(text, detections, allowed, domains)
+        detections, exempted = _exempt(text, detections, allowed, domains, excluded)
         detections.sort(key=lambda d: (d.start, -d.end))
         token_mapper = TokenMapper(text, detections) if tokenize else None
         return replace(
@@ -807,6 +908,7 @@ class EuRedact:
         tokenize: bool = False,
         allowlist: list[str] | None = None,
         allowlist_domains: list[str] | None = None,
+        exclude_types: list[str] | None = None,
         detect_dates: bool = False,
         coref: bool = False,
         coref_model: str = "default",
@@ -833,6 +935,7 @@ class EuRedact:
                 tokenize=tokenize,
                 allowlist=allowlist,
                 allowlist_domains=allowlist_domains,
+                exclude_types=exclude_types,
                 detect_dates=detect_dates,
                 coref=coref,
                 coref_model=coref_model,
@@ -852,6 +955,7 @@ class EuRedact:
         tokenize: bool = False,
         allowlist: list[str] | None = None,
         allowlist_domains: list[str] | None = None,
+        exclude_types: list[str] | None = None,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> list[RedactResult]:
@@ -877,6 +981,7 @@ class EuRedact:
                 tokenize=tokenize,
                 allowlist=allowlist,
                 allowlist_domains=allowlist_domains,
+                exclude_types=exclude_types,
                 detect_dates=detect_dates,
                 cache=cache,
             )
@@ -894,6 +999,7 @@ class EuRedact:
         tokenize: bool = False,
         allowlist: list[str] | None = None,
         allowlist_domains: list[str] | None = None,
+        exclude_types: list[str] | None = None,
         detect_dates: bool = False,
         cache: bool = True,
         max_concurrency: int = 4,
@@ -923,6 +1029,7 @@ class EuRedact:
                     tokenize=tokenize,
                     allowlist=allowlist,
                     allowlist_domains=allowlist_domains,
+                    exclude_types=exclude_types,
                     detect_dates=detect_dates,
                     cache=cache,
                 )
@@ -940,6 +1047,7 @@ class EuRedact:
         tokenize: bool = False,
         allowlist: list[str] | None = None,
         allowlist_domains: list[str] | None = None,
+        exclude_types: list[str] | None = None,
         detect_dates: bool = False,
         cache: bool = True,
     ) -> Iterator[RedactResult]:
@@ -962,6 +1070,7 @@ class EuRedact:
                 tokenize=tokenize,
                 allowlist=allowlist,
                 allowlist_domains=allowlist_domains,
+                exclude_types=exclude_types,
                 detect_dates=detect_dates,
                 cache=cache,
             )
