@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Added
+
+- `EntityType.LOCATION`: a city, town, village, commune or district the document links to a person, returned by the cloud model from gen 13 on. It was masked before, as a plain string, but could not be named in `exclude_types` (it raised as unknown) or compared against the enum. *(rules-engine#134)*
+
 ## [0.7.1] - 2026-10-29
 
 ### Added

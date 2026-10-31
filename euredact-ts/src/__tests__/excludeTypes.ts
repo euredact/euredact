@@ -190,6 +190,48 @@ testAsync("the instance list reaches cloud mode", () =>
     assert.equal(r.redactedText, "Anna Kowalska, Head of IT, mail [EMAIL]");
   }));
 
+// ── LOCATION, the cloud model's type from gen 13 on (rules-engine#134) ──────
+
+const LOCATION_DOC = "Anna Weber woont in Mechelen.";
+const LOCATION_PAYLOAD = {
+  job_id: "00000000-0000-0000-0000-000000000134",
+  status: "succeeded",
+  redacted_text: "[PERSON_NAME] woont in [LOCATION].",
+  entities: [
+    { start: 0, end: 10, text: "Anna Weber", type: "PERSON_NAME", source: "model", match: "exact_body" },
+    { start: 20, end: 28, text: "Mechelen", type: "LOCATION", source: "model", match: "exact_body" },
+  ],
+  unlocated: [],
+};
+
+async function withLocationCloud(fn: () => Promise<void>): Promise<void> {
+  const realFetch = globalThis.fetch;
+  configure({ apiKey: "erk_test", baseUrl: "https://api.test" });
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify(LOCATION_PAYLOAD), { status: 200, headers: { "Content-Type": "application/json" } });
+  try {
+    await fn();
+  } finally {
+    globalThis.fetch = realFetch;
+    reset();
+  }
+}
+
+test("LOCATION is a type", () =>
+  assert.ok((Object.values(EntityType) as string[]).includes("LOCATION")));
+testAsync("a cloud LOCATION is typed", () =>
+  withLocationCloud(async () => {
+    const r = await new EuRedact().redactAsync(LOCATION_DOC, { countries: ["BE"], mode: "cloud" });
+    assert.deepEqual(r.detections.map(d => d.entityType), [EntityType.PERSON_NAME, "LOCATION"]);
+    assert.equal(r.redactedText, "[PERSON_NAME] woont in [LOCATION].");
+  }));
+testAsync("LOCATION can be excluded", () =>
+  withLocationCloud(async () => {
+    const r = await new EuRedact().redactAsync(LOCATION_DOC, { countries: ["BE"], mode: "cloud", excludeTypes: ["location"] });
+    assert.equal(r.redactedText, "[PERSON_NAME] woont in Mechelen.");
+    assert.deepEqual(r.exempted.map(e => [e.text, e.ruleKind]), [["Mechelen", "type"]]);
+  }));
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try {

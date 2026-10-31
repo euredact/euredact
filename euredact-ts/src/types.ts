@@ -70,6 +70,8 @@ export enum EntityType {
   // canon the service is trained and evaluated against.
   ORGANISATION_NAME = "ORGANISATION_NAME",
   JOB_TITLE = "JOB_TITLE",
+  /** A city, town, village, commune or district the document links to a person; model gen 13 on (rules-engine#134). */
+  LOCATION = "LOCATION",
   MEDICAL_CONDITION = "MEDICAL_CONDITION",
   SENSITIVE_ATTRIBUTE = "SENSITIVE_ATTRIBUTE",
   BIOMETRIC_REF = "BIOMETRIC_REF",

@@ -64,6 +64,10 @@ class EntityType(str, Enum):
     # string, and named to match the detection canon the service returns.
     ORGANISATION_NAME = "ORGANISATION_NAME"
     JOB_TITLE = "JOB_TITLE"
+    # A city, town, village, commune or district the document links to a
+    # person (canon 2026-10-28). Returned by the model from gen 13 on; in the
+    # enum so it can be named in exclude_types (rules-engine#134).
+    LOCATION = "LOCATION"
     MEDICAL_CONDITION = "MEDICAL_CONDITION"
     SENSITIVE_ATTRIBUTE = "SENSITIVE_ATTRIBUTE"
     BIOMETRIC_REF = "BIOMETRIC_REF"

@@ -160,7 +160,7 @@ test("an unknown type is passed through, not dropped", () => {
 test("the cloud-only types exist", () => {
   for (const t of ["ORGANISATION_NAME", "JOB_TITLE", "MEDICAL_CONDITION",
                    "SENSITIVE_ATTRIBUTE", "BIOMETRIC_REF", "FINANCIAL_AMOUNT",
-                   "QUASI_IDENTIFIER", "URL"]) {
+                   "QUASI_IDENTIFIER", "URL", "LOCATION"]) {
     assert.ok((Object.values(EntityType) as string[]).includes(t), `${t} missing`);
   }
 });

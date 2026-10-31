@@ -11,6 +11,17 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Added
+
+- **`EntityType.LOCATION`.** The cloud model returns `LOCATION` from gen 13 on
+  (`euredact-4b@2026-10-29T1724Z`): a city, town, village, commune or district
+  the document links to a person. The SDK passed it through as a plain string,
+  so it was masked, but `excludeTypes: ["LOCATION"]` threw as an unknown type
+  and it could not be compared against the enum. Like `JOB_TITLE`, the rules
+  engine never emits it. *(rules-engine#134)*
+
 ## 0.7.1 (2026-10-29)
 
 ### Added

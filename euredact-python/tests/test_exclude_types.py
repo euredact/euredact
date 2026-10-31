@@ -214,3 +214,57 @@ class TestCloud:
         sdk = euredact.EuRedact(exclude_types=["JOB_TITLE", "PERSON_NAME"])
         r = sdk.redact(CLOUD_DOC, countries=["BE"], mode="cloud")
         assert r.redacted_text == "Anna Kowalska, Head of IT, mail [EMAIL]"
+
+
+# ── LOCATION, the cloud model's type from gen 13 on (rules-engine#134) ──────
+
+LOCATION_DOC = "Anna Weber woont in Mechelen."
+LOCATION_PAYLOAD = {
+    "job_id": "00000000-0000-0000-0000-000000000134",
+    "status": "succeeded",
+    "redacted_text": "[PERSON_NAME] woont in [LOCATION].",
+    "entities": [
+        {"start": 0, "end": 10, "text": "Anna Weber", "type": "PERSON_NAME",
+         "source": "model", "match": "exact_body"},
+        {"start": 20, "end": 28, "text": "Mechelen", "type": "LOCATION",
+         "source": "model", "match": "exact_body"},
+    ],
+    "unlocated": [],
+}
+
+
+@pytest.fixture
+def location_cloud(monkeypatch):
+    cloud_config.configure(api_key="erk_test", base_url="https://api.test")
+
+    class FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def redact(self, text, *, country, **kw):
+            return _to_result(LOCATION_PAYLOAD, text=text)
+
+    monkeypatch.setattr("euredact.cloud.client.CloudClient", FakeClient)
+    yield
+    cloud_config.reset()
+
+
+class TestLocation:
+    def test_location_is_a_type(self):
+        assert EntityType("LOCATION") is EntityType.LOCATION
+
+    def test_a_cloud_location_is_typed(self, sdk, location_cloud):
+        r = sdk.redact(LOCATION_DOC, countries=["BE"], mode="cloud")
+        assert [d.entity_type for d in r.detections] == [EntityType.PERSON_NAME, EntityType.LOCATION]
+        assert r.redacted_text == "[PERSON_NAME] woont in [LOCATION]."
+
+    def test_location_can_be_excluded(self, sdk, location_cloud):
+        r = sdk.redact(LOCATION_DOC, countries=["BE"], mode="cloud", exclude_types=["location"])
+        assert r.redacted_text == "[PERSON_NAME] woont in Mechelen."
+        assert [(e.text, e.rule_kind) for e in r.exempted] == [("Mechelen", "type")]

@@ -39,7 +39,7 @@ console.log(result.redactedText);
 ## Features
 
 - **31 European countries** with country-specific patterns
-- **40 PII entity types:** national IDs, IBANs, phone numbers, email, VAT numbers, license plates, credit cards, BIC/SWIFT, VIN, IMEI, GPS coordinates, UUIDs, social handles, IP/IPv6, MAC addresses, secrets/API keys, and more
+- **41 PII entity types:** national IDs, IBANs, phone numbers, email, VAT numbers, license plates, credit cards, BIC/SWIFT, VIN, IMEI, GPS coordinates, UUIDs, social handles, IP/IPv6, MAC addresses, secrets/API keys, and more
 - **Optional [cloud tier](#cloud-tier) (private alpha):** `mode="cloud"` adds a fine-tuned model for the categories that have no shape to match on — person names, organisations, job titles, diagnoses
 - **Checksum validation:** IBAN (mod-97), Luhn (credit cards/IMEI), and 30+ country-specific validators (Dutch BSN 11-proof, Belgian national number, French NIR, etc.)
 - **Secret/API key detection:** known-prefix patterns for AWS, GitHub, Stripe, OpenAI, Slack, JWT, SendGrid + Shannon entropy-based fallback for generic secrets near context keywords
@@ -66,7 +66,7 @@ console.log(result.redactedText);
 
 ### Detected PII Types
 
-`EntityType` has **40 distinct values**. The rule engine emits the 30 that have
+`EntityType` has **41 distinct values**. The rule engine emits the 30 that have
 a shape to match on:
 
 ```
@@ -80,14 +80,14 @@ HEALTH_INSURANCE  HEALTHCARE_PROVIDER  CHAMBER_OF_COMMERCE
 RESIDENCE_PERMIT  INTERNAL_ID       OTHER
 ```
 
-The remaining 10 are the [cloud tier](#cloud-tier)'s. The rule engine never
+The remaining 11 are the [cloud tier](#cloud-tier)'s. The rule engine never
 emits them — there is no shape to match on, which is precisely why the model
 exists:
 
 ```
 PERSON_NAME       ADDRESS           ORGANISATION_NAME JOB_TITLE
 MEDICAL_CONDITION SENSITIVE_ATTRIBUTE  BIOMETRIC_REF  FINANCIAL_AMOUNT
-QUASI_IDENTIFIER  URL
+QUASI_IDENTIFIER  URL               LOCATION
 ```
 
 Three names are **legacy aliases** kept so existing code keeps working:
