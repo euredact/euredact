@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "description": "Cloud mode and the allowlist (rules-engine#141). An allowlisted value is never masked, whatever span the cloud tier returns around it: the value is cut out of a longer span and the rest stays masked under the span's type. Same case format as cloud_overlap.json, plus `allowlist` and `expectExempted` (sorted [type, text, rule]). Run by both SDKs through the cloud path against a mocked service.",
+  "cases": [
+    {
+      "id": "allowlist-a-value-inside-a-longer-cloud-span-stays-visible",
+      "text": "Contract tussen ACME NV en Jan Peeters; ACME NV Brussel betaalt.",
+      "country": "BE",
+      "entities": [
+        {
+          "start": 27,
+          "end": 38,
+          "type": "PERSON_NAME"
+        },
+        {
+          "start": 40,
+          "end": 55,
+          "type": "ORGANISATION_NAME"
+        }
+      ],
+      "excludeTypes": [],
+      "allowlist": [
+        "ACME NV"
+      ],
+      "expectRedactedText": "Contract tussen ACME NV en [PERSON_NAME]; ACME NV [ORGANISATION_NAME] betaalt.",
+      "expectDetections": [
+        [
+          "ORGANISATION_NAME",
+          "Brussel"
+        ],
+        [
+          "PERSON_NAME",
+          "Jan Peeters"
+        ]
+      ],
+      "expectExempted": [
+        [
+          "ORGANISATION_NAME",
+          "ACME NV",
+          "ACME NV"
+        ]
+      ]
+    },
+    {
+      "id": "allowlist-case-and-punctuation-around-the-value",
+      "text": "Afzender: acme nv, afdeling HR, Mechelen.",
+      "country": "BE",
+      "entities": [
+        {
+          "start": 10,
+          "end": 30,
+          "type": "ORGANISATION_NAME"
+        }
+      ],
+      "excludeTypes": [],
+      "allowlist": [
+        "ACME NV"
+      ],
+      "expectRedactedText": "Afzender: acme nv, [ORGANISATION_NAME], Mechelen.",
+      "expectDetections": [
+        [
+          "ORGANISATION_NAME",
+          "afdeling HR"
+        ]
+      ],
+      "expectExempted": [
+        [
+          "ORGANISATION_NAME",
+          "acme nv",
+          "ACME NV"
+        ]
+      ]
+    },
+    {
+      "id": "allowlist-a-value-in-the-middle-leaves-two-spans",
+      "text": "Afspraak bij Praktijk Dr. Peeters Gent op maandag.",
+      "country": "BE",
+      "entities": [
+        {
+          "start": 13,
+          "end": 38,
+          "type": "ORGANISATION_NAME"
+        }
+      ],
+      "excludeTypes": [],
+      "allowlist": [
+        "Dr. Peeters"
+      ],
+      "expectRedactedText": "Afspraak bij [ORGANISATION_NAME] Dr. Peeters [ORGANISATION_NAME] op maandag.",
+      "expectDetections": [
+        [
+          "ORGANISATION_NAME",
+          "Gent"
+        ],
+        [
+          "ORGANISATION_NAME",
+          "Praktijk"
+        ]
+      ],
+      "expectExempted": [
+        [
+          "ORGANISATION_NAME",
+          "Dr. Peeters",
+          "Dr. Peeters"
+        ]
+      ]
+    },
+    {
+      "id": "allowlist-a-value-inside-a-longer-word-is-not-cut",
+      "text": "Leverancier ACME NVX Holding factureert.",
+      "country": "BE",
+      "entities": [
+        {
+          "start": 12,
+          "end": 28,
+          "type": "ORGANISATION_NAME"
+        }
+      ],
+      "excludeTypes": [],
+      "allowlist": [
+        "ACME NV"
+      ],
+      "expectRedactedText": "Leverancier [ORGANISATION_NAME] factureert.",
+      "expectDetections": [
+        [
+          "ORGANISATION_NAME",
+          "ACME NVX Holding"
+        ]
+      ],
+      "expectExempted": []
+    },
+    {
+      "id": "allowlist-a-value-inside-overlapping-cloud-spans",
+      "text": "Geboorteplaats: Mechelen. Woont in Gent.",
+      "country": "BE",
+      "entities": [
+        {
+          "start": 0,
+          "end": 24,
+          "type": "SENSITIVE_ATTRIBUTE"
+        },
+        {
+          "start": 16,
+          "end": 24,
+          "type": "LOCATION"
+        },
+        {
+          "start": 35,
+          "end": 39,
+          "type": "LOCATION"
+        }
+      ],
+      "excludeTypes": [],
+      "allowlist": [
+        "Mechelen"
+      ],
+      "expectRedactedText": "[SENSITIVE_ATTRIBUTE]: Mechelen. Woont in [LOCATION].",
+      "expectDetections": [
+        [
+          "LOCATION",
+          "Gent"
+        ],
+        [
+          "SENSITIVE_ATTRIBUTE",
+          "Geboorteplaats"
+        ]
+      ],
+      "expectExempted": [
+        [
+          "LOCATION",
+          "Mechelen",
+          "Mechelen"
+        ],
+        [
+          "SENSITIVE_ATTRIBUTE",
+          "Mechelen",
+          "Mechelen"
+        ]
+      ]
+    },
+    {
+      "id": "allowlist-a-cloud-span-equal-to-the-value",
+      "text": "Contract tussen ACME NV en Jan Peeters.",
+      "country": "BE",
+      "entities": [
+        {
+          "start": 16,
+          "end": 23,
+          "type": "ORGANISATION_NAME"
+        },
+        {
+          "start": 27,
+          "end": 38,
+          "type": "PERSON_NAME"
+        }
+      ],
+      "excludeTypes": [],
+      "allowlist": [
+        "acme nv"
+      ],
+      "expectRedactedText": "Contract tussen ACME NV en [PERSON_NAME].",
+      "expectDetections": [
+        [
+          "PERSON_NAME",
+          "Jan Peeters"
+        ]
+      ],
+      "expectExempted": [
+        [
+          "ORGANISATION_NAME",
+          "ACME NV",
+          "acme nv"
+        ]
+      ]
+    }
+  ]
+}

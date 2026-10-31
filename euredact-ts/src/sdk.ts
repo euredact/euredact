@@ -435,6 +435,54 @@ function applyAllowlist(
   return [kept, exempted];
 }
 
+/** Trimmed off what is left of a cloud span once an allowlisted value is cut out of it. */
+const CUT_TRIM = new Set(" \t\r\n,;:.-–—/|()[]{}\"'„“”«»");
+
+/**
+ * Cut every allowlisted value out of the cloud tier's spans. The allowlist
+ * matches a detection whole, which suits the rules engine's value-shaped
+ * spans but not the model's: in "ACME NV Brussel" the allowlisted "ACME NV"
+ * was masked with the rest (rules-engine#141). It is cut out, as a whole
+ * word, and the rest stays masked under the span's type; the cut is recorded
+ * as a "value" exemption.
+ */
+function cutAllowlisted(
+  text: string, detections: Detection[], allowed: Map<string, string>,
+): [Detection[], Exemption[]] {
+  if (allowed.size === 0) return [detections, []];
+  const entries = [...new Set(allowed.values())]
+    .sort((a, b) => b.trim().length - a.trim().length || (a < b ? -1 : a > b ? 1 : 0));
+  const patterns = entries.map(entry => [entry, new RegExp(
+    "(?<![\\p{L}\\p{M}\\p{N}_])" + escapeRegExp(entry.trim().normalize("NFC")) + "(?![\\p{L}\\p{M}\\p{N}_])", "giu",
+  )] as const);
+  const kept: Detection[] = [];
+  const exempted: Exemption[] = [];
+  for (const d of detections) {
+    const span = text.slice(d.start, d.end);
+    const cuts: Array<[number, number, string]> = [];
+    for (const [entry, pattern] of patterns) {
+      for (const m of span.matchAll(pattern)) {
+        const s = d.start + m.index, e = s + m[0].length;
+        if (!cuts.some(([cs, ce]) => s < ce && cs < e)) cuts.push([s, e, entry]);
+      }
+    }
+    if (cuts.length === 0) { kept.push(d); continue; }
+    cuts.sort((x, y) => x[0] - y[0]);
+    let pos = d.start;
+    for (const [start, end, entry] of [...cuts, [d.end, d.end, ""] as [number, number, string]]) {
+      let a = pos, b = start;
+      while (a < b && CUT_TRIM.has(text[a])) a++;
+      while (b > a && CUT_TRIM.has(text[b - 1])) b--;
+      if (/[\p{L}\p{N}]/u.test(text.slice(a, b))) kept.push({ ...d, start: a, end: b, text: text.slice(a, b) });
+      if (entry) exempted.push({
+        entityType: d.entityType, start, end, text: text.slice(start, end), rule: entry, ruleKind: "value",
+      });
+      pos = end;
+    }
+  }
+  return [kept, exempted];
+}
+
 const KNOWN_TYPES = new Set<string>(Object.values(EntityType) as string[]);
 
 /**
@@ -793,11 +841,11 @@ export class EuRedact {
     });
 
     // A new array throughout: `local` may be the cached rules result.
-    const [detections, exempted] = exempt(
-      text,
-      [...local.detections, ...ontoOriginal(remote.detections, masked, text, labels, CloudError)],
-      allowed, domains, excluded,
-    );
+    const [remoteDetections, cut] = cutAllowlisted(
+      text, ontoOriginal(remote.detections, masked, text, labels, CloudError), allowed);
+    const [detections, byRule] = exempt(text, [...local.detections, ...remoteDetections], allowed, domains, excluded);
+    const exempted = cut.length === 0 ? byRule
+      : [...cut, ...byRule].sort((a, b) => a.start - b.start || b.end - a.end);
     detections.sort((a, b) => a.start - b.start || b.end - a.end);
     const tokenMapper = options.tokenize ? new TokenMapper(text, detections) : null;
     return {

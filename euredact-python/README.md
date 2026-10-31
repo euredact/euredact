@@ -1581,6 +1581,14 @@ single letters that exempt nothing. Works in cloud mode — including on types
 only the model finds, such as `ORGANISATION_NAME` — and together with
 `tokenize`.
 
+**Inside a longer cloud span.** The model's spans are not shaped like values:
+it may return `ACME NV Brussel` or `Praktijk Dr. Peeters` as one
+`ORGANISATION_NAME`. An allowlisted value is never masked, so it is cut out of
+a cloud span that contains it as a whole word, and the rest of the span stays
+masked under its type: `ACME NV [ORGANISATION_NAME] betaalt.` The cut is in
+`exempted` with `rule_kind` `"value"`. Rules detections keep whole-span
+matching, and `allowlist_domains` is unaffected.
+
 ### Spacing and punctuation
 
 For **structured identifiers** separators are presentational, so an allowlisted

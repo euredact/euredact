@@ -2,6 +2,8 @@
  * Overlapping cloud spans (rules-engine#139): the cases live in
  * conformance/cloud_overlap.json and run in both SDKs. Mirrors
  * tests/test_cloud_overlap.py. Run with `npm run test:cloud-overlap`.
+ * conformance/cloud_allowlist.json (rules-engine#141) runs through the same
+ * harness: an allowlisted value inside a longer cloud span is cut out of it.
  */
 
 import assert from "node:assert/strict";
@@ -13,11 +15,14 @@ interface Case {
   id: string; text: string; country: string;
   entities: Array<{ start: number; end: number; type: string }>;
   excludeTypes: string[]; expectRedactedText: string; expectDetections: Array<[string, string]>;
+  allowlist?: string[]; expectExempted?: Array<[string, string, string]>;
 }
 
-const CASES: Case[] = JSON.parse(
-  readFileSync(new URL("../../../conformance/cloud_overlap.json", import.meta.url), "utf8"),
-).cases;
+const CASES: Case[] = ["cloud_overlap.json", "cloud_allowlist.json"].flatMap(name => JSON.parse(
+  readFileSync(new URL(`../../../conformance/${name}`, import.meta.url), "utf8"),
+).cases);
+
+const byText = (a: string[], b: string[]) => (a.join("\u0000") < b.join("\u0000") ? -1 : 1);
 
 let passed = 0;
 const failures: string[] = [];
@@ -59,13 +64,21 @@ async function check(name: string, fn: () => Promise<void>): Promise<void> {
 (async () => {
   for (const c of CASES) {
     await check(c.id, () => withService(payload(c), async () => {
-      const r = await new EuRedact().redactAsync(c.text, { countries: [c.country], mode: "cloud", excludeTypes: c.excludeTypes });
+      const r = await new EuRedact().redactAsync(c.text, {
+        countries: [c.country], mode: "cloud", excludeTypes: c.excludeTypes, allowlist: c.allowlist,
+      });
       assert.equal(r.redactedText, c.expectRedactedText);
-      const got = r.detections.map(d => [String(d.entityType), d.text]).sort((a, b) => (a[0] + a[1] < b[0] + b[1] ? -1 : 1));
+      const got = r.detections.map(d => [String(d.entityType), d.text]).sort(byText);
       assert.deepEqual(got, c.expectDetections);
+      if (c.expectExempted) {
+        assert.deepEqual(r.exempted.map(e => [String(e.entityType), e.text, e.rule]).sort(byText), c.expectExempted);
+        assert.ok(r.exempted.every(e => e.ruleKind === "value"));
+      }
     }));
     await check(`${c.id} (tokens round-trip)`, () => withService(payload(c), async () => {
-      const r = await new EuRedact().redactAsync(c.text, { countries: [c.country], mode: "cloud", excludeTypes: c.excludeTypes, tokenize: true });
+      const r = await new EuRedact().redactAsync(c.text, {
+        countries: [c.country], mode: "cloud", excludeTypes: c.excludeTypes, allowlist: c.allowlist, tokenize: true,
+      });
       assert.equal(restore(r.redactedText, r.tokens), c.text);
     }));
   }

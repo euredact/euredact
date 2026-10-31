@@ -386,6 +386,60 @@ def _apply_allowlist(
     return kept, exempted
 
 
+#: What is trimmed off what is left of a cloud span once an allowlisted value
+#: is cut out of it: "acme nv, afdeling HR" leaves "afdeling HR".
+_CUT_TRIM = frozenset(" \t\r\n,;:.-–—/|()[]{}\"'„“”«»")
+
+
+def _cut_allowlisted(
+    text: str, detections: list[Detection], allowed: dict[str, str],
+) -> tuple[list[Detection], list[Exemption]]:
+    """Cut every allowlisted value out of the cloud tier's spans.
+
+    The allowlist matches a detection whole, which suits the rules engine: its
+    spans are shaped like the values they find. The model's are not. It
+    returns "ACME NV Brussel" or "Praktijk Dr. Peeters", and the allowlisted
+    "ACME NV" inside it was masked with the rest (rules-engine#141). An
+    allowlisted value is never masked, so it is cut out of a span that
+    contains it, as a whole word, and the rest stays masked under the span's
+    type: "ACME NV [ORGANISATION_NAME]". Masking the rest is the safe
+    direction. The cut is recorded as a "value" exemption.
+    """
+    if not allowed:
+        return detections, []
+    patterns = [
+        (entry, re.compile(r"(?<!\w)" + re.escape(unicodedata.normalize("NFC", entry.strip()))
+                           + r"(?!\w)", re.IGNORECASE))
+        for entry in sorted(set(allowed.values()), key=lambda e: (-len(e.strip()), e))
+    ]
+    kept: list[Detection] = []
+    exempted: list[Exemption] = []
+    for d in detections:
+        cuts: list[tuple[int, int, str]] = []
+        for entry, pattern in patterns:
+            for m in pattern.finditer(text, d.start, d.end):
+                if not any(m.start() < e and s < m.end() for s, e, _ in cuts):
+                    cuts.append((m.start(), m.end(), entry))
+        if not cuts:
+            kept.append(d)
+            continue
+        pos = d.start
+        for start, end, entry in sorted(cuts) + [(d.end, d.end, "")]:
+            a, b = pos, start
+            while a < b and text[a] in _CUT_TRIM:
+                a += 1
+            while b > a and text[b - 1] in _CUT_TRIM:
+                b -= 1
+            if any(ch.isalnum() for ch in text[a:b]):
+                kept.append(replace(d, start=a, end=b, text=text[a:b]))
+            if entry:
+                exempted.append(Exemption(
+                    entity_type=d.entity_type, start=start, end=end,
+                    text=text[start:end], rule=entry, rule_kind="value"))
+            pos = end
+    return kept, exempted
+
+
 def normalize_exclude_types(
     values: object, custom_names: set[str] | frozenset[str] = frozenset(),
     param: str = "exclude_types",
@@ -906,9 +960,12 @@ class EuRedact:
                                    idempotency_key=idempotency_key)
 
         # A new list throughout: `local` may be the cached rules result.
-        detections = local.detections + _onto_original(
-            remote.detections, masked, text, labels)
-        detections, exempted = _exempt(text, detections, allowed, domains, excluded)
+        remote_detections, cut = _cut_allowlisted(
+            text, _onto_original(remote.detections, masked, text, labels), allowed)
+        detections, exempted = _exempt(
+            text, local.detections + remote_detections, allowed, domains, excluded)
+        if cut:
+            exempted = sorted(cut + exempted, key=lambda e: (e.start, -e.end))
         detections.sort(key=lambda d: (d.start, -d.end))
         token_mapper = TokenMapper(text, detections) if tokenize else None
         return replace(

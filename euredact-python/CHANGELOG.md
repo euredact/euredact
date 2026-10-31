@@ -11,6 +11,26 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **An allowlisted value inside a longer cloud span stays visible.** The
+  allowlist matched a detection whole, which suits the rules engine, whose
+  spans are shaped like the values they find. The model's spans are not:
+  given `allowlist=["ACME NV"]` and a cloud span `ACME NV Brussel`, the
+  whole span was masked, allowlisted value included (rules-engine#141).
+  The value is now cut out of every cloud span that contains it, as a
+  whole word and case-insensitively; what is left, trimmed of spaces and
+  punctuation, stays masked under the span's type (`ACME NV
+  [ORGANISATION_NAME]`), one span per piece. Masking the rest is the safe
+  direction: "ACME NV Brussel" may be a subsidiary. The cut is recorded in
+  `exempted` with rule kind `"value"`. Spans of every type the service
+  returns are cut, including overlapping gen 14 spans. Rules detections and
+  `allowlist_domains` are unchanged. Tested by
+  `conformance/cloud_allowlist.json` (6 cases, 4 failing before) in both
+  SDKs through the cloud path against a mocked service.
+
 ## 0.8.0 (2026-10-31)
 
 ### Added

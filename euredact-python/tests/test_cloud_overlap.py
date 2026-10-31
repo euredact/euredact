@@ -7,6 +7,9 @@ SENSITIVE_ATTRIBUTE, "Rotterdam" is LOCATION inside the SENSITIVE_ATTRIBUTE
 "Geboorteplaats: Rotterdam". Switching one type off must not expose characters
 another enabled type covers, and the placeholder must not reveal the special
 category when a non-sensitive type covers the same text.
+
+``conformance/cloud_allowlist.json`` (rules-engine#141) runs through the same
+harness: an allowlisted value inside a longer cloud span is cut out of it.
 """
 from __future__ import annotations
 
@@ -19,9 +22,9 @@ import euredact
 from euredact.cloud import config as cloud_config
 from euredact.cloud.client import _to_result
 
-CASES = json.loads(
-    (Path(__file__).resolve().parents[2] / "conformance" / "cloud_overlap.json").read_text()
-)["cases"]
+_CONFORMANCE = Path(__file__).resolve().parents[2] / "conformance"
+CASES = [c for name in ("cloud_overlap.json", "cloud_allowlist.json")
+         for c in json.loads((_CONFORMANCE / name).read_text())["cases"]]
 
 
 def _payload(case: dict) -> dict:
@@ -70,16 +73,21 @@ def _value(t) -> str:
 def test_overlap_case(case, service):
     service["case"] = case
     r = euredact.EuRedact().redact(case["text"], countries=[case["country"]], mode="cloud",
-                                   exclude_types=case["excludeTypes"])
+                                   exclude_types=case["excludeTypes"],
+                                   allowlist=case.get("allowlist"))
     assert r.redacted_text == case["expectRedactedText"]
     assert sorted([_value(d.entity_type), d.text] for d in r.detections) == case["expectDetections"]
+    if "expectExempted" in case:
+        assert sorted([_value(e.entity_type), e.text, e.rule] for e in r.exempted) == case["expectExempted"]
+        assert all(e.rule_kind == "value" for e in r.exempted)
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
 def test_overlap_case_round_trips_through_tokens(case, service):
     service["case"] = case
     r = euredact.EuRedact().redact(case["text"], countries=[case["country"]], mode="cloud",
-                                   exclude_types=case["excludeTypes"], tokenize=True)
+                                   exclude_types=case["excludeTypes"],
+                                   allowlist=case.get("allowlist"), tokenize=True)
     assert euredact.restore(r.redacted_text, r.tokens) == case["text"]
     # One token per masked region, whatever the number of spans in it.
     assert r.redacted_text.count("_") >= len(r.tokens)
