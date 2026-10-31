@@ -59,7 +59,7 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "postbuild:cjs": "echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
-    "test": "npm run test:spec && npm run test:inference && npm run test:cloud && npm run test:cloud-api && npm run test:tokenize && npm run test:allowlist && npm run test:exclude-types && npm run test:eval-scoring && npm run test:platform && npm run test:batches && npm run test:conformance",
+    "test": "npm run test:spec && npm run test:inference && npm run test:cloud && npm run test:cloud-api && npm run test:tokenize && npm run test:allowlist && npm run test:exclude-types && npm run test:cloud-overlap && npm run test:eval-scoring && npm run test:platform && npm run test:batches && npm run test:conformance",
     "benchmark": "node --import tsx src/__tests__/benchmark.ts",
     "prepublishOnly": "npm run build",
     "test:spec": "node --import tsx src/__tests__/spec.ts",
@@ -73,6 +73,7 @@
     "test:tokenize": "node --import tsx src/__tests__/tokenize.ts",
     "test:allowlist": "node --import tsx src/__tests__/allowlist.ts",
     "test:exclude-types": "node --import tsx src/__tests__/excludeTypes.ts",
+    "test:cloud-overlap": "node --import tsx src/__tests__/cloudOverlap.ts",
     "test:eval-scoring": "node --import tsx src/__tests__/evalScoring.ts",
     "test:platform": "node --import tsx src/__tests__/platform.ts",
     "test:batches": "node --import tsx src/__tests__/batches.ts"

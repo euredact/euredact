@@ -163,10 +163,12 @@ test("tokens count towards the cache budget", () => {
 
 // ── applyReplacements: only the cloud path can hand it overlapping spans ────
 
-test("an overlapping tail is masked, not leaked", () => {
+test("overlapping spans are masked as one region", () => {
   const out = applyReplacements("0123456789", [det(0, 5, "01234"), det(3, 8, "34567")], (_d, s) => `<${s}>`);
-  assert.equal(out, "<01234><567>89");
+  assert.equal(out, "<01234567>89");
 });
+test("touching spans stay two regions", () =>
+  assert.equal(applyReplacements("0123456789", [det(0, 3, "012"), det(3, 6, "345")], (_d, s) => `<${s}>`), "<012><345>6789"));
 test("a span inside an earlier one is dropped", () =>
   assert.equal(applyReplacements("0123456789", [det(0, 8, "01234567"), det(3, 5, "34")], () => "#"), "#89"));
 test("tokens over overlapping spans still round-trip", () => {

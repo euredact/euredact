@@ -22,6 +22,32 @@ narrative lives. Sections here use that vocabulary
   and it could not be compared against the enum. Like `JOB_TITLE`, the rules
   engine never emits it. *(rules-engine#134)*
 
+### Fixed
+
+- **Overlapping cloud spans are masked as one region.** From gen 14 the model
+  returns overlapping spans of different types (canon cross-cutting rule 17,
+  2026-10-31): `Fedasil` as `ORGANISATION_NAME` and `SENSITIVE_ATTRIBUTE`,
+  `Rotterdam` as a `LOCATION` inside the `SENSITIVE_ATTRIBUTE`
+  `Geboorteplaats: Rotterdam`. The masking pass masked a span that started
+  inside the previous one from the previous one's end: one value under two
+  placeholders, the first labelled by whichever span the service listed first,
+  so `Imam` (listed `SENSITIVE_ATTRIBUTE`, then `JOB_TITLE`) became
+  `[SENSITIVE_ATTRIBUTE]` and disclosed the special category.
+  - **One region, one placeholder:** spans sharing a character are masked
+    together; touching spans stay separate.
+  - **The label:** a span covering the whole region, a non-sensitive type
+    before `MEDICAL_CONDITION` / `SENSITIVE_ATTRIBUTE` / `BIOMETRIC_REF`, then
+    the longest span, the earliest and the type name, independent of the
+    service's order. Tokens and referential labels cover the whole region, so
+    `restore()` round-trips.
+  - **`exclude_types` never uncovers another type's text:** it removes the
+    excluded spans before the regions are formed, so text another enabled type
+    covers stays masked.
+  - `detections` still lists each span with its own type. The same pass masks
+    Batches results.
+  - Tested by `conformance/cloud_overlap.json` (11 cases), run by both SDKs
+    through the cloud path against a mocked service. *(rules-engine#139)*
+
 ## 0.7.1 (2026-10-29)
 
 ### Added

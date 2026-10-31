@@ -1676,6 +1676,16 @@ list is merged with it.
   sent to the service. The option decides what comes back, not what may leave
   your machine. Model types (`JOB_TITLE`, `FINANCIAL_AMOUNT`, …) are filtered
   from the merged result.
+- **An excluded type never uncovers another type's text.** The cloud model
+  can give one stretch of text two types: `Fedasil` is an organisation and, in
+  context, a sensitive attribute; `Rotterdam` in `Geboorteplaats: Rotterdam`
+  is a `LOCATION` inside a `SENSITIVE_ATTRIBUTE`. Excluding one type leaves the
+  text masked by the other. Overlapping spans are masked as one stretch under
+  one placeholder, and when a non-sensitive type covers the same text as
+  `MEDICAL_CONDITION`, `SENSITIVE_ATTRIBUTE` or `BIOMETRIC_REF`, the
+  placeholder names the non-sensitive type (`Imam` is `[JOB_TITLE]`), so the
+  mask does not disclose the special category. `detections` still lists every
+  span with its own type.
 - **There is no include-list.** A list of types to keep would leave every type
   a later release adds unmasked for you, without notice.
 - **A type is one switch.** `INTERNAL_ID` covers employee and customer numbers

@@ -27,6 +27,26 @@ _DATE_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
 _DEFAULT_POOL = ThreadPoolExecutor()
 
 
+# Special-category types (GDPR Art. 9). When one of these and another type
+# cover the same text, the placeholder names the other one, so the mask does
+# not disclose the category (canon cross-cutting rule 17, rules-engine#139).
+_SENSITIVE_TYPES = frozenset({"MEDICAL_CONDITION", "SENSITIVE_ATTRIBUTE", "BIOMETRIC_REF"})
+
+
+def _region_label_source(region: list[Detection], start: int, end: int) -> Detection:
+    """The detection whose type labels the region ``[start, end)``.
+
+    A span covering the whole region first, then a non-sensitive type, then
+    the longest span, the earliest, and the type name, so the choice does not
+    depend on the order the service listed the spans in.
+    """
+    def key(det: Detection) -> tuple:
+        name = _type_label(det.entity_type)
+        return (not (det.start <= start and det.end >= end), name in _SENSITIVE_TYPES,
+                -(det.end - det.start), det.start, name)
+    return min(region, key=key)
+
+
 def _apply_replacements(
     text: str,
     detections: list[Detection],
@@ -46,28 +66,35 @@ def _apply_replacements(
     8,000 detections, versus 0.7 ms here.
 
     Spans from the rule engine are deduplicated and non-overlapping. Spans
-    from elsewhere (the cloud service) are only sorted, so a span may start
-    behind the cursor. Its uncovered tail is still masked rather than dropped:
-    dropping the span would leave those characters in the clear, and splicing
-    it whole would corrupt the label already emitted over its head.
+    from elsewhere (the cloud service) may overlap, with different types over
+    the same characters. Spans sharing a character form one region, masked
+    whole under one label (rules-engine#139): masking each span on its own
+    either leaked a tail or split one value over two labels. *label_for* then
+    receives the detection whose type names the region (see
+    ``_region_label_source``), carrying the region's extent and text.
     """
-    kept: list[tuple[Detection, int, int]] = []
-    pos = 0
+    regions: list[tuple[list[Detection], int, int]] = []
     for det in detections:
-        start = max(det.start, pos)
-        if det.end <= start:
+        if det.end <= det.start:
             continue
-        kept.append((det, start, det.end))
-        pos = det.end
+        if regions and det.start < regions[-1][2]:
+            group, start, end = regions[-1]
+            group.append(det)
+            regions[-1] = (group, start, max(end, det.end))
+        else:
+            regions.append(([det], det.start, det.end))
 
-    labels: list[str] = [""] * len(kept)
-    for idx in range(len(kept) - 1, -1, -1):
-        det, start, end = kept[idx]
+    labels: list[str] = [""] * len(regions)
+    for idx in range(len(regions) - 1, -1, -1):
+        group, start, end = regions[idx]
+        det = group[0] if len(group) == 1 else _region_label_source(group, start, end)
+        if det.start != start or det.end != end:
+            det = replace(det, start=start, end=end, text=text[start:end])
         labels[idx] = label_for(det, text[start:end])
 
     parts: list[str] = []
     pos = 0
-    for (_det, start, end), label in zip(kept, labels):
+    for (_group, start, end), label in zip(regions, labels):
         parts.append(text[pos:start])
         parts.append(label)
         pos = end

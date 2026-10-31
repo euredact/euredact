@@ -25,36 +25,74 @@ type LabelFor = (det: Detection, slice: string) => string;
  * 15,000 detections, versus 2 ms here.
  *
  * Spans from the rule engine are deduplicated and non-overlapping. Spans from
- * elsewhere (the cloud service) are only sorted, so a span may start behind
- * the cursor. Its uncovered tail is still masked rather than dropped: dropping
- * the span would leave those characters in the clear, and splicing it whole
- * would corrupt the label already emitted over its head.
+ * elsewhere (the cloud service) may overlap, with different types over the
+ * same characters. Spans sharing a character form one region, masked whole
+ * under one label (rules-engine#139): masking each span on its own either
+ * leaked a tail or split one value over two labels. `labelFor` then receives
+ * the detection whose type names the region (see `regionLabelSource`),
+ * carrying the region's extent and text.
  */
 export function applyReplacements(text: string, detections: Detection[], labelFor: LabelFor): string {
-  const kept: Array<[Detection, number, number]> = [];
-  let pos = 0;
+  const regions: Array<[Detection[], number, number]> = [];
   for (const det of detections) {
-    const start = Math.max(det.start, pos);
-    if (det.end <= start) continue;
-    kept.push([det, start, det.end]);
-    pos = det.end;
+    if (det.end <= det.start) continue;
+    const last = regions[regions.length - 1];
+    if (last !== undefined && det.start < last[2]) {
+      last[0].push(det);
+      last[2] = Math.max(last[2], det.end);
+    } else {
+      regions.push([[det], det.start, det.end]);
+    }
   }
 
-  const labels: string[] = new Array(kept.length);
-  for (let i = kept.length - 1; i >= 0; i--) {
-    const [det, start, end] = kept[i];
+  const labels: string[] = new Array(regions.length);
+  for (let i = regions.length - 1; i >= 0; i--) {
+    const [group, start, end] = regions[i];
+    let det = group.length === 1 ? group[0] : regionLabelSource(group, start, end);
+    if (det.start !== start || det.end !== end) det = { ...det, start, end, text: text.slice(start, end) };
     labels[i] = labelFor(det, text.slice(start, end));
   }
 
   const parts: string[] = [];
-  pos = 0;
-  for (let i = 0; i < kept.length; i++) {
-    const [, start, end] = kept[i];
+  let pos = 0;
+  for (let i = 0; i < regions.length; i++) {
+    const [, start, end] = regions[i];
     parts.push(text.slice(pos, start), labels[i]);
     pos = end;
   }
   parts.push(text.slice(pos));
   return parts.join("");
+}
+
+/**
+ * Special-category types (GDPR Art. 9). When one of these and another type
+ * cover the same text, the placeholder names the other one, so the mask does
+ * not disclose the category (canon cross-cutting rule 17, rules-engine#139).
+ */
+const SENSITIVE_TYPES: ReadonlySet<string> = new Set(["MEDICAL_CONDITION", "SENSITIVE_ATTRIBUTE", "BIOMETRIC_REF"]);
+
+/**
+ * The detection whose type labels the region `[start, end)`: a span covering
+ * the whole region first, then a non-sensitive type, then the longest span,
+ * the earliest, and the type name, so the choice does not depend on the order
+ * the service listed the spans in.
+ */
+function regionLabelSource(region: Detection[], start: number, end: number): Detection {
+  const key = (d: Detection): [number, number, number, number, string] => {
+    const name = String(d.entityType);
+    return [d.start <= start && d.end >= end ? 0 : 1, SENSITIVE_TYPES.has(name) ? 1 : 0, -(d.end - d.start), d.start, name];
+  };
+  let best = region[0];
+  let bestKey = key(best);
+  for (const d of region.slice(1)) {
+    const k = key(d);
+    for (let i = 0; i < k.length; i++) {
+      if (k[i] === bestKey[i]) continue;
+      if (k[i] < bestKey[i]) { best = d; bestKey = k; }
+      break;
+    }
+  }
+  return best;
 }
 
 /**

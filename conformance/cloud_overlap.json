@@ -1,0 +1,309 @@
+{
+ "version": 1,
+ "description": "Overlapping cloud spans (rules-engine#139, canon cross-cutting rule 17). From gen 14 the service may return spans of different types over the same characters. A character is masked when any span covering it has an enabled type; each maximal masked region gets one placeholder, the type of an enabled span covering the whole region, a non-sensitive one before MEDICAL_CONDITION, SENSITIVE_ATTRIBUTE or BIOMETRIC_REF, else the longest; detections keep every enabled span. Each case runs the full cloud path with a mocked service whose entities are `entities` (offsets into `text`, which carries nothing the rules engine detects, so the service receives it unchanged). `expectDetections` is the sorted list of [type, text]. Option names are the TypeScript ones.",
+ "cases": [
+  {
+   "id": "overlap-identical-org-and-sa-org-excluded",
+   "text": "Hij wordt sinds maart begeleid door Fedasil in Brussel.",
+   "entities": [
+    {
+     "start": 36,
+     "end": 43,
+     "type": "ORGANISATION_NAME"
+    },
+    {
+     "start": 36,
+     "end": 43,
+     "type": "SENSITIVE_ATTRIBUTE"
+    }
+   ],
+   "excludeTypes": [
+    "ORGANISATION_NAME"
+   ],
+   "expectRedactedText": "Hij wordt sinds maart begeleid door [SENSITIVE_ATTRIBUTE] in Brussel.",
+   "expectDetections": [
+    [
+     "SENSITIVE_ATTRIBUTE",
+     "Fedasil"
+    ]
+   ],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-identical-org-and-sa-sa-excluded",
+   "text": "Hij wordt sinds maart begeleid door Fedasil in Brussel.",
+   "entities": [
+    {
+     "start": 36,
+     "end": 43,
+     "type": "ORGANISATION_NAME"
+    },
+    {
+     "start": 36,
+     "end": 43,
+     "type": "SENSITIVE_ATTRIBUTE"
+    }
+   ],
+   "excludeTypes": [
+    "SENSITIVE_ATTRIBUTE"
+   ],
+   "expectRedactedText": "Hij wordt sinds maart begeleid door [ORGANISATION_NAME] in Brussel.",
+   "expectDetections": [
+    [
+     "ORGANISATION_NAME",
+     "Fedasil"
+    ]
+   ],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-identical-org-and-sa-both-excluded",
+   "text": "Hij wordt sinds maart begeleid door Fedasil in Brussel.",
+   "entities": [
+    {
+     "start": 36,
+     "end": 43,
+     "type": "ORGANISATION_NAME"
+    },
+    {
+     "start": 36,
+     "end": 43,
+     "type": "SENSITIVE_ATTRIBUTE"
+    }
+   ],
+   "excludeTypes": [
+    "ORGANISATION_NAME",
+    "SENSITIVE_ATTRIBUTE"
+   ],
+   "expectRedactedText": "Hij wordt sinds maart begeleid door Fedasil in Brussel.",
+   "expectDetections": [],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-identical-org-and-sa-placeholder-is-non-sensitive",
+   "text": "Hij wordt sinds maart begeleid door Fedasil in Brussel.",
+   "entities": [
+    {
+     "start": 36,
+     "end": 43,
+     "type": "ORGANISATION_NAME"
+    },
+    {
+     "start": 36,
+     "end": 43,
+     "type": "SENSITIVE_ATTRIBUTE"
+    }
+   ],
+   "excludeTypes": [],
+   "expectRedactedText": "Hij wordt sinds maart begeleid door [ORGANISATION_NAME] in Brussel.",
+   "expectDetections": [
+    [
+     "ORGANISATION_NAME",
+     "Fedasil"
+    ],
+    [
+     "SENSITIVE_ATTRIBUTE",
+     "Fedasil"
+    ]
+   ],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-nested-sa-over-location-sa-excluded",
+   "text": "Geboorteplaats: Rotterdam, verder geen gegevens.",
+   "entities": [
+    {
+     "start": 0,
+     "end": 25,
+     "type": "SENSITIVE_ATTRIBUTE"
+    },
+    {
+     "start": 16,
+     "end": 25,
+     "type": "LOCATION"
+    }
+   ],
+   "excludeTypes": [
+    "SENSITIVE_ATTRIBUTE"
+   ],
+   "expectRedactedText": "Geboorteplaats: [LOCATION], verder geen gegevens.",
+   "expectDetections": [
+    [
+     "LOCATION",
+     "Rotterdam"
+    ]
+   ],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-nested-sa-over-location-location-excluded",
+   "text": "Geboorteplaats: Rotterdam, verder geen gegevens.",
+   "entities": [
+    {
+     "start": 0,
+     "end": 25,
+     "type": "SENSITIVE_ATTRIBUTE"
+    },
+    {
+     "start": 16,
+     "end": 25,
+     "type": "LOCATION"
+    }
+   ],
+   "excludeTypes": [
+    "LOCATION"
+   ],
+   "expectRedactedText": "[SENSITIVE_ATTRIBUTE], verder geen gegevens.",
+   "expectDetections": [
+    [
+     "SENSITIVE_ATTRIBUTE",
+     "Geboorteplaats: Rotterdam"
+    ]
+   ],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-nested-sa-over-location-none-excluded",
+   "text": "Geboorteplaats: Rotterdam, verder geen gegevens.",
+   "entities": [
+    {
+     "start": 0,
+     "end": 25,
+     "type": "SENSITIVE_ATTRIBUTE"
+    },
+    {
+     "start": 16,
+     "end": 25,
+     "type": "LOCATION"
+    }
+   ],
+   "excludeTypes": [],
+   "expectRedactedText": "[SENSITIVE_ATTRIBUTE], verder geen gegevens.",
+   "expectDetections": [
+    [
+     "LOCATION",
+     "Rotterdam"
+    ],
+    [
+     "SENSITIVE_ATTRIBUTE",
+     "Geboorteplaats: Rotterdam"
+    ]
+   ],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-imam-placeholder-does-not-reveal-the-category",
+   "text": "Hij werkt als Imam in de moskee van de wijk.",
+   "entities": [
+    {
+     "start": 14,
+     "end": 18,
+     "type": "SENSITIVE_ATTRIBUTE"
+    },
+    {
+     "start": 14,
+     "end": 18,
+     "type": "JOB_TITLE"
+    }
+   ],
+   "excludeTypes": [],
+   "expectRedactedText": "Hij werkt als [JOB_TITLE] in de moskee van de wijk.",
+   "expectDetections": [
+    [
+     "JOB_TITLE",
+     "Imam"
+    ],
+    [
+     "SENSITIVE_ATTRIBUTE",
+     "Imam"
+    ]
+   ],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-org-over-person-name-both-enabled",
+   "text": "Afspraak bij Praktijk Dr. Peeters morgen om tien uur.",
+   "entities": [
+    {
+     "start": 13,
+     "end": 33,
+     "type": "ORGANISATION_NAME"
+    },
+    {
+     "start": 22,
+     "end": 33,
+     "type": "PERSON_NAME"
+    }
+   ],
+   "excludeTypes": [],
+   "expectRedactedText": "Afspraak bij [ORGANISATION_NAME] morgen om tien uur.",
+   "expectDetections": [
+    [
+     "ORGANISATION_NAME",
+     "Praktijk Dr. Peeters"
+    ],
+    [
+     "PERSON_NAME",
+     "Dr. Peeters"
+    ]
+   ],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-org-over-person-name-org-excluded",
+   "text": "Afspraak bij Praktijk Dr. Peeters morgen om tien uur.",
+   "entities": [
+    {
+     "start": 13,
+     "end": 33,
+     "type": "ORGANISATION_NAME"
+    },
+    {
+     "start": 22,
+     "end": 33,
+     "type": "PERSON_NAME"
+    }
+   ],
+   "excludeTypes": [
+    "ORGANISATION_NAME"
+   ],
+   "expectRedactedText": "Afspraak bij Praktijk [PERSON_NAME] morgen om tien uur.",
+   "expectDetections": [
+    [
+     "PERSON_NAME",
+     "Dr. Peeters"
+    ]
+   ],
+   "country": "BE"
+  },
+  {
+   "id": "overlap-partial-two-enabled-types-one-region",
+   "text": "Afspraak bij Praktijk Dr. Peeters Gent morgen om tien uur.",
+   "entities": [
+    {
+     "start": 13,
+     "end": 33,
+     "type": "ORGANISATION_NAME"
+    },
+    {
+     "start": 26,
+     "end": 38,
+     "type": "LOCATION"
+    }
+   ],
+   "excludeTypes": [],
+   "expectRedactedText": "Afspraak bij [ORGANISATION_NAME] morgen om tien uur.",
+   "expectDetections": [
+    [
+     "LOCATION",
+     "Peeters Gent"
+    ],
+    [
+     "ORGANISATION_NAME",
+     "Praktijk Dr. Peeters"
+    ]
+   ],
+   "country": "BE"
+  }
+ ]
+}

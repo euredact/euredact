@@ -158,11 +158,16 @@ class TestApplyReplacements:
         return Detection(entity_type=EntityType.OTHER, start=start, end=end, text=text,
                          source=DetectionSource.CLOUD, country=None)
 
-    def test_an_overlapping_tail_is_masked_not_leaked(self):
+    def test_overlapping_spans_are_masked_as_one_region(self):
         text = "0123456789"
         dets = [self._det(0, 5, "01234"), self._det(3, 8, "34567")]
         out = _apply_replacements(text, dets, lambda d, s: f"<{s}>")
-        assert out == "<01234><567>89"
+        assert out == "<01234567>89"
+
+    def test_touching_spans_stay_two_regions(self):
+        text = "0123456789"
+        dets = [self._det(0, 3, "012"), self._det(3, 6, "345")]
+        assert _apply_replacements(text, dets, lambda d, s: f"<{s}>") == "<012><345>6789"
 
     def test_a_span_inside_an_earlier_one_is_dropped(self):
         text = "0123456789"

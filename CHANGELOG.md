@@ -31,6 +31,10 @@ which both test suites run.
 
 - `EntityType.LOCATION`: a city, town, village, commune or district the document links to a person, returned by the cloud model from gen 13 on. It was masked before, as a plain string, but could not be named in `exclude_types` (it raised as unknown) or compared against the enum. *(rules-engine#134)*
 
+### Fixed
+
+- Overlapping cloud spans are masked as one region under one placeholder. From gen 14 the model gives one stretch of text more than one type; excluding one type (`exclude_types=["ORGANISATION_NAME"]`) now leaves text another enabled type covers masked, and where a non-sensitive type covers the same text as `MEDICAL_CONDITION`, `SENSITIVE_ATTRIBUTE` or `BIOMETRIC_REF`, the placeholder names the non-sensitive type. Before, a span starting inside another was masked from where the first ended, which split one value over two placeholders and labelled it by list order. Shared cases in `conformance/cloud_overlap.json`. *(rules-engine#139)*
+
 ## [0.7.1] - 2026-10-29
 
 ### Added
