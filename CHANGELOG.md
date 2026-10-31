@@ -27,10 +27,6 @@ which both test suites run.
 
 ## [Unreleased]
 
-### Fixed
-
-- In cloud mode an allowlisted value inside a longer span the cloud tier returned (`ACME NV` in `ACME NV Brussel`) was masked with it: the allowlist matched whole spans only. It is now cut out of the span, the rest stays masked under the span's type, and the cut is recorded in `exempted`. Rules detections keep whole-span matching. *(rules-engine#141)*
-
 ## [0.8.0] - 2026-10-31
 
 ### Added
@@ -48,6 +44,7 @@ which both test suites run.
 - Service logs are no longer over-redacted: a number followed by `bytes` is no `PHONE`; the loopback and unspecified addresses (`127.0.0.0/8`, `0.0.0.0`, `::1`, `::`) are no `IP_ADDRESS` / `IPV6_ADDRESS`; and a value assigned to a key (`key='value'`, `"key": "value"`, `Key: value`) is a `SECRET` only when the key (a subscript too: `config['api_key']`) or the line before the value names a credential, not when a credential word appears anywhere within 150 characters. A `[TYPE]` placeholder is no context keyword, so on text masked once `[SECRET]` no longer makes the values near it secrets (the gateway's second pass typed names, customer ids and whole JSON log lines `SECRET`). *(rules-engine#136)*
 - A UK Unique Taxpayer Reference behind its label (`UTR:`, `self_assessment_utr`, `Unique Taxpayer Reference`) is `TAX_ID`, ten digits with or without the space after the fifth, with a passing check digit or without. *(rules-engine#137)*
 - An IBAN wrapped over a line break between its groups, with or without indentation, is one `BANK_ACCOUNT`; the second line was left visible, part of it as a `PHONE`. *(rules-engine#138)*
+- In cloud mode an allowlisted value inside a longer span the cloud tier returned (`ACME NV` in `ACME NV Brussel`) was masked with it: the allowlist matched whole spans only. It is now cut out of the span, the rest stays masked under the span's type, and the cut is recorded in `exempted`. Rules detections keep whole-span matching. *(rules-engine#141)*
 
 ## [0.7.1] - 2026-10-29
 
