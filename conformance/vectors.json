@@ -7841,6 +7841,32 @@
       },
       "expectRedactedText": "IBAN: [BANK_ACCOUNT]\nKBC Brussels",
       "notes": "rules-engine#138: guard; the exact length and mod-97 decide where a wrapped IBAN ends."
+    },
+    {
+      "id": "secret-a-subscript-key-naming-a-credential-stays-masked",
+      "text": "config['access_token'] = 'Rq7fdQfb0EC56GGg0qD81cDPZSUhvzyvIdsn'",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "Rq7fdQfb0EC56GGg0qD81cDPZSUhvzyvIdsn"
+        ]
+      },
+      "notes": "rules-engine#136: guard; a subscript is the value's key."
+    },
+    {
+      "id": "secret-a-credential-word-earlier-on-the-line-stays-masked",
+      "text": "j.peeters@example.be accessed secret store, retrieved: Zt4mQ9vLx2Rk8WbN5cHp3sYd7Fg6",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "Zt4mQ9vLx2Rk8WbN5cHp3sYd7Fg6"
+        ]
+      },
+      "notes": "rules-engine#136: guard; the line before the value names the credential before its key."
     }
   ]
 }

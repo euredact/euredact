@@ -1302,7 +1302,11 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
   }
   if (match.patternDef.entityType === EntityType.SECRET) {
     const key = assignmentKey(text, match.start);
-    if (key !== null) return !namesACredential(key, match.patternDef.contextKeywords);
+    if (key !== null) {
+      const kws = match.patternDef.contextKeywords;
+      const line = text.slice(text.lastIndexOf("\n", match.start - 1) + 1, match.start);
+      return !(namesACredential(key, kws) || namesACredential(line.replace(MASKED_VALUE, " "), kws, false));
+    }
   }
   const [before, after] = getContext(text, match.start, match.end);
   // A placeholder is no keyword: on text masked once, "[SECRET]" holds the
@@ -1321,7 +1325,7 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
  * a key too. The span may start inside the value: the token rule finds
  * `var/lib/...` in `model='/var/lib/...'`.
  */
-const ASSIGNMENT_KEY = /[\n,;{}()[\]|:=]([^\n,;{}()[\]|:=]{1,48}?)["'`]?[ \t]*[:=][ \t]?["'`[{(]?[^\s"'`:=]{0,40}$/;
+const ASSIGNMENT_KEY = /[\n,;{}()[\]|:=]([^\n,;{}()[\]|:=]{1,48}?)["'`]?\]?[ \t]*[:=][ \t]?["'`[{(]?[^\s"'`:=]{0,40}$/;
 /** What separates the words of a key: "aws_secret_access_key", "db.password", '"apiKey"'. */
 const KEY_SEPARATORS = /[\s_\-.:"'`$[\]{}()/\\,;|@#]+/g;
 /** Credential words that name a credential only as a key: `pass=`, `pwd:`, `"pin":`. */
@@ -1344,15 +1348,17 @@ function keyWords(value: string): string {
  * record's `"id": "KD-3611868"` was a SECRET, as were `model='/var/lib/...'`
  * and the `Van: Ann-Sophie` of a mail header (rules-engine#136). A keyword is
  * a word of the key, plural allowed; a long one may sit inside a compound
- * ("dbpassword", "clientsecret").
+ * ("dbpassword", "clientsecret"). The line before the value counts by whole
+ * words only: "accessed secret store, retrieved: ..." names the credential
+ * before its key. A subscript is a key too (`config['api_key'] = ...`).
  */
-function namesACredential(key: string, keywords: readonly string[]): boolean {
+function namesACredential(key: string, keywords: readonly string[], compounds = true): boolean {
   const words = keyWords(key);
   const joined = words.replace(/ /g, "");
   for (const kw of [...keywords, ...CREDENTIAL_KEY_WORDS]) {
     const kwWords = keyWords(kw).trim();
     if (new RegExp("(?<![a-z0-9])" + escapeRe(kwWords) + "s?(?![a-z0-9])").test(words)) return true;
-    if (kwWords.length >= 6 && joined.includes(kwWords.replace(/ /g, ""))) return true;
+    if (compounds && kwWords.length >= 6 && joined.includes(kwWords.replace(/ /g, ""))) return true;
   }
   return false;
 }

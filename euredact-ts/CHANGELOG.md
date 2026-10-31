@@ -59,8 +59,14 @@ narrative lives. Sections here use that vocabulary
     keyword within 150 characters, which took the `token` inside
     `tokenizer_mode`. A value assigned to a key now has that key as its
     context: it is a `SECRET` when a word of the key names a credential
-    (`DB_PASSWORD=`, `clientSecret:`, `pass:`, "Your new password is:"),
-    and not otherwise.
+    (`DB_PASSWORD=`, `clientSecret:`, `pass:`, `config['api_key'] =`, "Your
+    new password is:"), or a credential word stands earlier on its line
+    ("accessed secret store, retrieved: …"), and not otherwise;
+  - **Measured** on the 152,300-document corpus against 0.7.1: `SECRET`
+    recall 90.12% → 90.62% (misses 184 → 153) and precision 95.96% →
+    96.69% (false positives 213 → 174), in both modes. `IP_ADDRESS` loses
+    one value, `127.240.69.162`, which the generator labelled and which is a
+    loopback address;
   - **The gateway's second pass.** It reads text the SDK masked, where
     `[SECRET]` holds the word "secret". That placeholder, and the Bearer
     header two lines up, made `SECRET`s of a JSON record's `"id": "KD-…"`,

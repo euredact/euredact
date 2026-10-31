@@ -1884,7 +1884,10 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
     if match.pattern_def.entity_type == EntityType.SECRET:
         key = _assignment_key(text, match.start)
         if key is not None:
-            return not _names_a_credential(key, match.pattern_def.context_keywords)
+            kws = match.pattern_def.context_keywords
+            line = text[text.rfind("\n", 0, match.start) + 1:match.start]
+            return not (_names_a_credential(key, kws) or _names_a_credential(
+                _MASKED_VALUE.sub(" ", line), kws, compounds=False))
     before, after = _get_context(text, match.start, match.end)
     # A placeholder is no keyword: on text masked once, "[SECRET]" holds the
     # word "secret" and licensed every value near it (rules-engine#136).
@@ -1902,10 +1905,11 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
 #: The key a value is assigned to: `password = "..."`, `"id": "KD-3611868"`,
 #: `Van: Ann-Sophie`, `model='/var/lib/...'`. The key runs back to the line
 #: start or the previous delimiter, so a label in prose ("Your new password
-#: is: ...") is a key too. The span may start inside the value: the token
-#: rule finds `var/lib/...` in `model='/var/lib/...'`.
+#: is: ...") is a key too, and so is a subscript (`config['api_key'] = ...`).
+#: The span may start inside the value: the token rule finds `var/lib/...` in
+#: `model='/var/lib/...'`.
 _ASSIGNMENT_KEY = re.compile(
-    r"[\n,;{}()\[\]|:=]([^\n,;{}()\[\]|:=]{1,48}?)[\"'`]?[ \t]*[:=][ \t]?[\"'`\[{(]?"
+    r"[\n,;{}()\[\]|:=]([^\n,;{}()\[\]|:=]{1,48}?)[\"'`]?\]?[ \t]*[:=][ \t]?[\"'`\[{(]?"
     r"[^\s\"'`:=]{0,40}$")
 
 #: What separates the words of a key: "aws_secret_access_key",
@@ -1931,8 +1935,8 @@ def _key_words(value: str) -> str:
     return " " + _KEY_SEPARATORS.sub(" ", value).strip().lower() + " "
 
 
-def _names_a_credential(key: str, keywords: list[str]) -> bool:
-    """True when *key* names a credential.
+def _names_a_credential(key: str, keywords: list[str], *, compounds: bool = True) -> bool:
+    """True when *key*, or the line before the value, names a credential.
 
     A value assigned to a key has that key as its context; the window around it
     is other keys' business. Any secret keyword within 150 characters made a
@@ -1940,7 +1944,9 @@ def _names_a_credential(key: str, keywords: list[str]) -> bool:
     record's `"id": "KD-3611868"` was a SECRET, as were a config's
     `model='/var/lib/...'` and the `Van: Ann-Sophie` of a mail header
     (rules-engine#136). A keyword is a word of the key, plural allowed; a long
-    one may sit inside a compound ("dbpassword", "clientsecret").
+    one may sit inside a compound ("dbpassword", "clientsecret"). The line
+    before the value counts by whole words only: "accessed secret store,
+    retrieved: ..." names the credential before its key.
     """
     words = _key_words(key)
     joined = words.replace(" ", "")
@@ -1948,7 +1954,7 @@ def _names_a_credential(key: str, keywords: list[str]) -> bool:
         kw_words = _key_words(kw).strip()
         if re.search(rf"(?<![a-z0-9]){re.escape(kw_words)}s?(?![a-z0-9])", words):
             return True
-        if len(kw_words) >= 6 and kw_words.replace(" ", "") in joined:
+        if compounds and len(kw_words) >= 6 and kw_words.replace(" ", "") in joined:
             return True
     return False
 
