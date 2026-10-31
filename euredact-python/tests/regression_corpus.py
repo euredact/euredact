@@ -665,6 +665,81 @@ def _polish_ur(rng):
     return text, [pii(born, "DOB", "PL")], []
 
 
+def _log_loopback(rng):
+    """Loopback and unspecified addresses in a service log name no host; a
+    client's address does (#136)."""
+    host = f"192.168.{rng.randrange(0, 255)}.{rng.randrange(2, 254)}"
+    text = (f"INFO Starting vLLM server on http://0.0.0.0:{rng.randrange(8000, 8999)}\n"
+            f"INFO metrics on http://127.0.0.1:{rng.randrange(9000, 9999)}/metrics\n"
+            f"INFO client {host}:{rng.randrange(40000, 65000)} connected")
+    return text, [pii(host, "IP_ADDRESS", "BE")], ["0.0.0.0", "127.0.0.1"]
+
+
+def _byte_count(rng):
+    """A number followed by "bytes" is a size, not a phone (#136)."""
+    size = str(rng.randrange(10_000_000, 99_999_999))
+    text = (f"collected artifacts: {rng.randrange(10, 99)} entries, {rng.randrange(2, 30)} artifacts, "
+            f"{size} bytes total\nnotify: {email(rng)}")
+    return text, [pii(text.rsplit(" ", 1)[1], "EMAIL", "NL")], [size]
+
+
+def _config_key_values(rng):
+    """A config value is a credential when its key names one (#136)."""
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+    secret = "".join(rng.choice(alphabet) for _ in range(7)) + "!" + "".join(rng.choice(alphabet) for _ in range(7))
+    bundle = f"/var/lib/euredact/bundles/2026-10-{rng.randrange(10, 29)}T{rng.randrange(1000, 2359)}Z"
+    text = (f"with config: model='{bundle}', tokenizer_mode='auto', seed=0\n"
+            f"DB_PASSWORD={secret}")
+    return text, [pii(secret, "SECRET", "DE")], [bundle]
+
+
+def _json_id_near_bearer(rng):
+    """On text masked once, a JSON record's id is not a credential because a
+    Bearer header sits above it (#136)."""
+    cid = f"KD-{rng.randrange(1_000_000, 9_999_999)}"
+    mail = email(rng)
+    text = (f'Authorization: Bearer [SECRET]\nAccept: application/json\n\n'
+            f'{{\n  "id": "{cid}",\n  "email": "{mail}"\n}}')
+    return text, [pii(mail, "EMAIL", "DE")], [cid]
+
+
+def _mail_header_near_password_word(rng):
+    """The sender of a mail is no credential because "wachtwoord" is nearby (#136)."""
+    mail = email(rng)
+    sender = f"{rng.choice(['Ann-Sophie', 'Marie-Claire', 'Jan-Willem'])} {rng.choice(_LAST).capitalize()}"
+    text = f"Ik stuur het wachtwoordmailtje morgen.\n\nVan: {sender} <{mail}>\nOnderwerp: toegang"
+    return text, [pii(mail, "EMAIL", "NL")], [sender.split()[0]]
+
+
+def utr(rng: random.Random, *, valid: bool) -> str:
+    """A UK Unique Taxpayer Reference. *valid* chooses whether its check digit holds."""
+    good = _sample(rng, lambda r: str(r.randrange(1, 10)) + _digits(r, 9), "uk_utr")
+    if valid:
+        return good
+    return rng.choice([d for d in "0123456789" if d != good[0]]) + good[1:]
+
+
+def _utr(label: str, valid: bool, spaced: bool):
+    """A UTR behind its label, with or without a passing check digit (#137)."""
+    def build(rng):
+        v = utr(rng, valid=valid)
+        if spaced:
+            v = f"{v[:5]} {v[5:]}"
+        return label.format(v=v), [pii(v, "TAX_ID", "UK")], []
+    return build
+
+
+def _wrapped_iban(indent: str):
+    """An IBAN wrapped over a line break between groups (#138)."""
+    def build(rng):
+        n = nrb(rng)
+        groups = ["PL" + n[:2]] + [n[i:i + 4] for i in range(2, 26, 4)]
+        v = " ".join(groups[:3]) + "\n" + indent + " ".join(groups[3:])
+        text = f"Prosimy o wpłatę na rachunek:\n{indent}{v}\nDziękujemy."
+        return text, [pii(v, "BANK_ACCOUNT", "PL")], []
+    return build
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -769,6 +844,21 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#130: psql table, dob column", _psql_birth_table),
     ("rules-engine#130: passport column", _passport_column),
     ("rules-engine#130: Polish ur.", _polish_ur),
+    # #136: service logs and text masked once.
+    ("rules-engine#136: loopback and unspecified addresses", _log_loopback),
+    ("rules-engine#136: byte count", _byte_count),
+    ("rules-engine#136: config keys", _config_key_values),
+    ("rules-engine#136: JSON id near a Bearer header", _json_id_near_bearer),
+    ("rules-engine#136: mail header near a password word", _mail_header_near_password_word),
+    # #137: the UK UTR behind its label.
+    ("rules-engine#137: UTR label, spaced", _utr("Supplier UTR: {v}, registered in Leeds.", valid=True, spaced=True)),
+    ("rules-engine#137: UTR label, bad check digit", _utr("Supplier UTR: {v}, registered in Leeds.", valid=False, spaced=False)),
+    ("rules-engine#137: UTR field", _utr("self_assessment_utr: {v}", valid=False, spaced=False)),
+    ("rules-engine#137: UTR in prose", _utr("Payment checked against UTR {v} before release.", valid=True, spaced=False)),
+    ("rules-engine#137: Unique Taxpayer Reference", _utr("Your Unique Taxpayer Reference is {v}.", valid=False, spaced=True)),
+    # #138: an IBAN wrapped over a line break.
+    ("rules-engine#138: wrapped IBAN, indented", _wrapped_iban("  ")),
+    ("rules-engine#138: wrapped IBAN", _wrapped_iban("")),
     # #103: residence card and visa sticker.
     ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
     ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),
