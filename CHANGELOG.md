@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- In cloud mode an allowlisted value inside a longer span the cloud tier returned (`ACME NV` in `ACME NV Brussel`) was masked with it: the allowlist matched whole spans only. It is now cut out of the span, the rest stays masked under the span's type, and the cut is recorded in `exempted`. Rules detections keep whole-span matching. *(rules-engine#141)*
+
 ## [0.8.0] - 2026-10-31
 
 ### Added
