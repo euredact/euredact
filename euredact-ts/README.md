@@ -4,8 +4,8 @@
 
 ---
 
-Fast, zero-dependency European PII detection and redaction SDK. Detects and
-redacts personal data across **31 European countries** using rule-based pattern
+**euRedact Core** is the open-source, zero-dependency European PII detection
+and redaction SDK. It detects and redacts personal data across **31 European countries** using rule-based pattern
 matching with checksum validation, context-aware false-positive suppression,
 and priority-based deduplication.
 
@@ -34,9 +34,9 @@ console.log(result.detections);
 ## Features
 
 - **31 European countries** with country-specific patterns
-- **41 PII entity types** (30 from the rules engine, 11 from the
-  [cloud tier](#cloud-tier)): national IDs, IBANs, phone numbers, email, VAT
-  numbers, license plates, credit cards, BIC/SWIFT, VIN, IMEI, GPS coordinates,
+- **41 PII entity types** (29 from the rules engine, 11 from
+  [euRedact Cloud](#cloud-tier), and `OTHER`, the cloud client's fallback):
+  national IDs, IBANs, phone numbers, email, VAT numbers, license plates, credit cards, BIC/SWIFT, VIN, IMEI, GPS coordinates,
   UUIDs, social handles, IP/IPv6, MAC addresses, secrets/API keys, and more
 - **Secret/API key detection:** known-prefix patterns for AWS, GitHub, Stripe,
   OpenAI, Slack, JWT, SendGrid, plus Shannon entropy-based detection for generic
@@ -316,21 +316,24 @@ identifier it had recognised and rejected.
 String enum with all supported PII categories:
 
 ```
-PERSON_NAME       ADDRESS           BANK_ACCOUNT      BIC
-CREDIT_CARD       PHONE             EMAIL             DOB
-DATE_OF_DEATH     NATIONAL_ID       SSN               TAX_ID
-PASSPORT          DRIVERS_LICENSE   RESIDENCE_PERMIT  LICENSE_PLATE
-VIN               VAT               POSTAL_CODE       IP_ADDRESS
-IPV6_ADDRESS      MAC_ADDRESS       HEALTH_INSURANCE  HEALTHCARE_PROVIDER
-CHAMBER_OF_COMMERCE  IMEI          GPS_COORDINATES   UUID
-SOCIAL_HANDLE     SECRET            INTERNAL_ID       OTHER
+BANK_ACCOUNT      BIC               CREDIT_CARD       PHONE
+EMAIL             DOB               DATE_OF_DEATH     NATIONAL_ID
+SSN               TAX_ID            PASSPORT          DRIVERS_LICENSE
+RESIDENCE_PERMIT  LICENSE_PLATE     VIN               VAT
+POSTAL_CODE       IP_ADDRESS        IPV6_ADDRESS      MAC_ADDRESS
+HEALTH_INSURANCE  HEALTHCARE_PROVIDER  CHAMBER_OF_COMMERCE  IMEI
+GPS_COORDINATES   UUID              SOCIAL_HANDLE     SECRET
+INTERNAL_ID
 
 Cloud tier only — the rule engine never emits these, because there is no shape
 to match on. That is precisely why the model exists:
 
-ORGANISATION_NAME JOB_TITLE         MEDICAL_CONDITION SENSITIVE_ATTRIBUTE
-BIOMETRIC_REF     FINANCIAL_AMOUNT  QUASI_IDENTIFIER  URL
-LOCATION
+PERSON_NAME       ADDRESS           ORGANISATION_NAME JOB_TITLE
+MEDICAL_CONDITION SENSITIVE_ATTRIBUTE  BIOMETRIC_REF  FINANCIAL_AMOUNT
+QUASI_IDENTIFIER  URL               LOCATION
+
+OTHER: the cloud client's fallback for a label the service returns and the
+SDK does not know. Neither layer detects anything as OTHER.
 ```
 
 `SECRET` is the one type for credentials, whichever layer finds them: the rules
@@ -466,7 +469,7 @@ label, redact them as one text, or use `referentialIntegrity: true`, whose
 
 The rule engine catches what has a shape: IBANs, national IDs, phone numbers,
 anything with a checksum. It cannot catch what does not — a person's name, an
-employer, a diagnosis, a job title. The cloud tier adds a fine-tuned model
+employer, a diagnosis, a job title. euRedact Cloud, the cloud tier, adds a fine-tuned model
 asked only *what did the rules miss?*
 
 ```ts

@@ -1,11 +1,11 @@
 # EuRedact
 
-**European PII redaction SDK -- rule engine**
+**European PII redaction SDK -- euRedact Core**
 
 ---
 
-EuRedact is a pure-Python SDK for detecting and redacting personally identifiable
-information (PII) in European text data. It covers 31 countries with a two-pass
+euRedact Core is the open-source, pure-Python SDK for detecting and redacting
+personally identifiable information (PII) in European text data. It covers 31 countries with a two-pass
 architecture: liberal pattern matching in the first pass, followed by suppression
 filters and checksum validation in the second. The library has zero required
 dependencies, is thread-safe, and produces immutable detection objects.
@@ -30,9 +30,9 @@ print(result.detections)
 ## Features
 
 - **31 European countries** (see list below)
-- **41 PII entity types** (30 from the rules engine, 11 from the
-  [cloud tier](#cloud-tier)): national IDs, IBANs, phone numbers, email addresses,
-  VAT numbers, license plates, VIN, credit cards, BIC/SWIFT, IMEI, GPS
+- **41 PII entity types** (29 from the rules engine, 11 from
+  [euRedact Cloud](#cloud-tier), and `OTHER`, the cloud client's fallback):
+  national IDs, IBANs, phone numbers, email addresses, VAT numbers, license plates, VIN, credit cards, BIC/SWIFT, IMEI, GPS
   coordinates, UUIDs, social handles, MAC addresses, IP/IPv6 addresses, health
   insurance numbers, passport numbers, driver's licenses, secrets/API keys, and more
 - **Secret/API key detection:** known-prefix patterns for AWS, GitHub, Stripe,
@@ -396,21 +396,24 @@ identifier it had recognised and rejected.
 String enum with all supported PII categories:
 
 ```
-PERSON_NAME       ADDRESS           BANK_ACCOUNT      BIC
-CREDIT_CARD       PHONE             EMAIL             DOB
-DATE_OF_DEATH     NATIONAL_ID       SSN               TAX_ID
-PASSPORT          DRIVERS_LICENSE   RESIDENCE_PERMIT  LICENSE_PLATE
-VIN               VAT               POSTAL_CODE       IP_ADDRESS
-IPV6_ADDRESS      MAC_ADDRESS       HEALTH_INSURANCE  HEALTHCARE_PROVIDER
-CHAMBER_OF_COMMERCE  IMEI          GPS_COORDINATES   UUID
-SOCIAL_HANDLE     SECRET            INTERNAL_ID       OTHER
+BANK_ACCOUNT      BIC               CREDIT_CARD       PHONE
+EMAIL             DOB               DATE_OF_DEATH     NATIONAL_ID
+SSN               TAX_ID            PASSPORT          DRIVERS_LICENSE
+RESIDENCE_PERMIT  LICENSE_PLATE     VIN               VAT
+POSTAL_CODE       IP_ADDRESS        IPV6_ADDRESS      MAC_ADDRESS
+HEALTH_INSURANCE  HEALTHCARE_PROVIDER  CHAMBER_OF_COMMERCE  IMEI
+GPS_COORDINATES   UUID              SOCIAL_HANDLE     SECRET
+INTERNAL_ID
 
 Cloud tier only — the rule engine never emits these, because there is no shape
 to match on. That is precisely why the model exists:
 
-ORGANISATION_NAME JOB_TITLE         MEDICAL_CONDITION SENSITIVE_ATTRIBUTE
-BIOMETRIC_REF     FINANCIAL_AMOUNT  QUASI_IDENTIFIER  URL
-LOCATION
+PERSON_NAME       ADDRESS           ORGANISATION_NAME JOB_TITLE
+MEDICAL_CONDITION SENSITIVE_ATTRIBUTE  BIOMETRIC_REF  FINANCIAL_AMOUNT
+QUASI_IDENTIFIER  URL               LOCATION
+
+OTHER: the cloud client's fallback for a label the service returns and the
+SDK does not know. Neither layer detects anything as OTHER.
 ```
 
 `SECRET` is the one type for credentials, whichever layer finds them: the rules
@@ -533,7 +536,7 @@ label, redact them as one text, or use `referential_integrity=True`, whose
 
 The rule engine catches what has a shape: IBANs, national IDs, phone numbers,
 anything with a checksum. It cannot catch what does not — a person's name, an
-employer, a diagnosis, a job title. The cloud tier adds a fine-tuned model
+employer, a diagnosis, a job title. euRedact Cloud, the cloud tier, adds a fine-tuned model
 asked only *what did the rules miss?*
 
 ```bash

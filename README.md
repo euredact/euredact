@@ -2,7 +2,7 @@
 
 **European PII detection and redaction SDK** -- available for Python and Node.js.
 
-euRedact detects and redacts personally identifiable information across **31 European countries** using a two-pass rule engine: liberal pattern matching followed by checksum validation, context-aware suppression, and priority-based deduplication. Zero required dependencies in both languages.
+**euRedact Core** is the open-source SDK: it runs on your machine and detects and redacts personally identifiable information across **31 European countries** using a two-pass rule engine: liberal pattern matching followed by checksum validation, context-aware suppression, and priority-based deduplication. Zero required dependencies in both languages.
 
 ## Quick Start
 
@@ -40,7 +40,7 @@ console.log(result.redactedText);
 
 - **31 European countries** with country-specific patterns
 - **41 PII entity types:** national IDs, IBANs, phone numbers, email, VAT numbers, license plates, credit cards, BIC/SWIFT, VIN, IMEI, GPS coordinates, UUIDs, social handles, IP/IPv6, MAC addresses, secrets/API keys, and more
-- **Optional [cloud tier](#cloud-tier) (private alpha):** `mode="cloud"` adds a fine-tuned model for the categories that have no shape to match on — person names, organisations, job titles, diagnoses
+- **Optional [euRedact Cloud](#cloud-tier) (private alpha):** `mode="cloud"` adds a fine-tuned model for the categories that have no shape to match on — person names, organisations, job titles, diagnoses
 - **Checksum validation:** IBAN (mod-97), Luhn (credit cards/IMEI), and 30+ country-specific validators (Dutch BSN 11-proof, Belgian national number, French NIR, etc.)
 - **Secret/API key detection:** known-prefix patterns for AWS, GitHub, Stripe, OpenAI, Slack, JWT, SendGrid + Shannon entropy-based fallback for generic secrets near context keywords
 - **Context-aware:** keyword proximity checks and structural detection (JSON field names, CSV headers) for ambiguous patterns like dates of birth
@@ -66,7 +66,7 @@ console.log(result.redactedText);
 
 ### Detected PII Types
 
-`EntityType` has **41 distinct values**. The rule engine emits the 30 that have
+`EntityType` has **41 distinct values**. The rule engine emits the 29 that have
 a shape to match on:
 
 ```
@@ -77,10 +77,10 @@ BIC               VIN               IMEI              SECRET
 IP_ADDRESS        IPV6_ADDRESS      MAC_ADDRESS       UUID
 GPS_COORDINATES   SOCIAL_HANDLE     DOB               DATE_OF_DEATH
 HEALTH_INSURANCE  HEALTHCARE_PROVIDER  CHAMBER_OF_COMMERCE
-RESIDENCE_PERMIT  INTERNAL_ID       OTHER
+RESIDENCE_PERMIT  INTERNAL_ID
 ```
 
-The remaining 11 are the [cloud tier](#cloud-tier)'s. The rule engine never
+11 are the [cloud tier](#cloud-tier)'s. The rule engine never
 emits them — there is no shape to match on, which is precisely why the model
 exists:
 
@@ -89,6 +89,9 @@ PERSON_NAME       ADDRESS           ORGANISATION_NAME JOB_TITLE
 MEDICAL_CONDITION SENSITIVE_ATTRIBUTE  BIOMETRIC_REF  FINANCIAL_AMOUNT
 QUASI_IDENTIFIER  URL               LOCATION
 ```
+
+The last is `OTHER`: the cloud client's fallback for a label the service
+returns and the SDK does not know. Neither layer detects anything as `OTHER`.
 
 Three names are **legacy aliases** kept so existing code keeps working:
 `IBAN` → `BANK_ACCOUNT`, `NAME` → `PERSON_NAME` and `CREDENTIAL` → `SECRET`
@@ -115,7 +118,7 @@ only checksum-backed types.
 
 The rule engine catches what has a shape: IBANs, national IDs, phone numbers,
 anything with a checksum. It cannot catch what does not — a person's name, an
-employer, a diagnosis, a job title. The cloud tier runs the rules engine on
+employer, a diagnosis, a job title. euRedact Cloud, the cloud tier, runs the rules engine on
 your machine, sends only the text it left behind to the euRedact inference
 service, and asks a fine-tuned model *what did the rules miss?*
 
