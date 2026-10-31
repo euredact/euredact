@@ -371,12 +371,12 @@ false positive — see `euredact-python/tests/metrics.py`, which reproduces this
 | | precision | recall | F1 |
 |---|---:|---:|---:|
 | With country hints | 99.9% | 99.8% | **99.8%** |
-| Blind (no `countries` passed) | 99.7% | 99.7% | **99.7%** |
+| Blind (no `countries` passed) | 99.8% | 99.7% | **99.7%** |
 
-Blind detection is within 0.2 points of hinted on every measure — recall costs
-0.1 and precision 0.2 — so the engine does not need to be told the country.
-False positives: 759 with hints, 1,684 blind. The whole of the blind recall gap
-is values masked under another type (1,189 against 264 with hints): blind
+Blind detection is within 0.1 points of hinted on every measure, so the engine
+does not need to be told the country. False positives: 720 with hints, 1,645
+blind. The whole of the blind recall gap is values masked under another type
+(1,180 against 255 with hints): blind
 detection hides as many values as hinted, and these count as misses here
 because their type is wrong.
 

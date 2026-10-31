@@ -1,12 +1,12 @@
 {
  "engine": {
   "package": "euredact",
-  "version": "0.7.1",
-  "commit": "b43707d",
-  "describe": "v0.7.0-8-gb43707d",
+  "version": "0.8.0",
+  "commit": "a6084bd",
+  "describe": "v0.7.1-7-ga6084bd",
   "released": true
  },
- "generated": "2026-10-29",
+ "generated": "2026-10-31",
  "corpus": {
   "files": [
    {
@@ -530,35 +530,35 @@
    },
    "IP_ADDRESS": {
     "support": 10038,
-    "hits": 10027,
-    "mistyped": 11,
+    "hits": 10033,
+    "mistyped": 4,
     "partial": 0,
-    "misses": 0,
+    "misses": 1,
     "unlocatable": 0,
     "categories": [
      "IP_ADDRESS"
     ],
-    "detections": 10066,
-    "tp": 10027,
+    "detections": 10072,
+    "tp": 10033,
     "fp": 39,
-    "recall": 99.89,
+    "recall": 99.95,
     "precision": 99.61,
     "also_accepts": []
    },
    "LICENSE_PLATE": {
     "support": 6445,
-    "hits": 6436,
-    "mistyped": 2,
+    "hits": 6438,
+    "mistyped": 0,
     "partial": 2,
     "misses": 5,
     "unlocatable": 0,
     "categories": [
      "LICENSE_PLATE"
     ],
-    "detections": 6436,
-    "tp": 6436,
+    "detections": 6438,
+    "tp": 6438,
     "fp": 0,
-    "recall": 99.86,
+    "recall": 99.89,
     "precision": 100.0,
     "also_accepts": []
    },
@@ -653,19 +653,19 @@
    },
    "SECRET": {
     "support": 5798,
-    "hits": 5225,
+    "hits": 5254,
     "mistyped": 77,
-    "partial": 173,
-    "misses": 184,
+    "partial": 175,
+    "misses": 153,
     "unlocatable": 139,
     "categories": [
      "SECRET"
     ],
-    "detections": 5267,
-    "tp": 5054,
-    "fp": 213,
-    "recall": 90.12,
-    "precision": 95.96,
+    "detections": 5259,
+    "tp": 5085,
+    "fp": 174,
+    "recall": 90.62,
+    "precision": 96.69,
     "also_accepts": []
    },
    "SOCIAL_HANDLE": {
@@ -956,35 +956,35 @@
    },
    "IP_ADDRESS": {
     "support": 10038,
-    "hits": 10027,
-    "mistyped": 11,
+    "hits": 10033,
+    "mistyped": 4,
     "partial": 0,
-    "misses": 0,
+    "misses": 1,
     "unlocatable": 0,
     "categories": [
      "IP_ADDRESS"
     ],
-    "detections": 10066,
-    "tp": 10027,
+    "detections": 10072,
+    "tp": 10033,
     "fp": 39,
-    "recall": 99.89,
+    "recall": 99.95,
     "precision": 99.61,
     "also_accepts": []
    },
    "LICENSE_PLATE": {
     "support": 6445,
-    "hits": 6436,
-    "mistyped": 2,
+    "hits": 6438,
+    "mistyped": 0,
     "partial": 2,
     "misses": 5,
     "unlocatable": 0,
     "categories": [
      "LICENSE_PLATE"
     ],
-    "detections": 6436,
-    "tp": 6436,
+    "detections": 6438,
+    "tp": 6438,
     "fp": 0,
-    "recall": 99.86,
+    "recall": 99.89,
     "precision": 100.0,
     "also_accepts": []
    },
@@ -1079,19 +1079,19 @@
    },
    "SECRET": {
     "support": 5798,
-    "hits": 5225,
+    "hits": 5254,
     "mistyped": 77,
-    "partial": 173,
-    "misses": 184,
+    "partial": 175,
+    "misses": 153,
     "unlocatable": 139,
     "categories": [
      "SECRET"
     ],
-    "detections": 5267,
-    "tp": 5054,
-    "fp": 213,
-    "recall": 90.12,
-    "precision": 95.96,
+    "detections": 5259,
+    "tp": 5085,
+    "fp": 174,
+    "recall": 90.62,
+    "precision": 96.69,
     "also_accepts": []
    },
    "SOCIAL_HANDLE": {
@@ -1216,7 +1216,7 @@
   ]
  },
  "regressions": {
-  "records": 534,
+  "records": 606,
   "failures": 0
  }
 }

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Iterator
 
-__version__ = "0.7.1"
+__version__ = "0.8.0"
 
 from euredact.cloud.config import configure
 from euredact.rules.bic_registry import set_bic_registry

@@ -1,6 +1,6 @@
-# Corpus results — euredact 0.7.1 (`b43707d`)
+# Corpus results — euredact 0.8.0 (`a6084bd`)
 
-Generated 2026-10-29 by `make eval` from `corpus-results.json`, which carries the same figures. Per entity type, under the names the API returns. No aggregate figure is given: each row stands with the conditions below (rules-engine#109).
+Generated 2026-10-31 by `make eval` from `corpus-results.json`, which carries the same figures. Per entity type, under the names the API returns. No aggregate figure is given: each row stands with the conditions below (rules-engine#109).
 
 ## Conditions
 
@@ -28,14 +28,14 @@ Generated 2026-10-29 by `make eval` from `corpus-results.json`, which carries th
 | `HEALTH_INSURANCE` | 1,185 | 1,185 | 0 | 0 | 0 | 100.00% | 1,076 | 0 | 100.00% | HEALTH_ID, HEALTH_INSURANCE (also accepts NATIONAL_ID) |
 | `IMEI` | 2,443 | 2,443 | 0 | 0 | 0 | 100.00% | 2,443 | 0 | 100.00% | IMEI |
 | `IPV6_ADDRESS` | 636 | 636 | 0 | 0 | 0 | 100.00% | 636 | 0 | 100.00% | IP_ADDRESS_V6 |
-| `IP_ADDRESS` | 10,038 | 10,027 | 11 | 0 | 0 | 99.89% | 10,066 | 39 | 99.61% | IP_ADDRESS |
-| `LICENSE_PLATE` | 6,445 | 6,436 | 2 | 2 | 5 | 99.86% | 6,436 | 0 | 100.00% | LICENSE_PLATE |
+| `IP_ADDRESS` | 10,038 | 10,033 | 4 | 0 | 1 | 99.95% | 10,072 | 39 | 99.61% | IP_ADDRESS |
+| `LICENSE_PLATE` | 6,445 | 6,438 | 0 | 2 | 5 | 99.89% | 6,438 | 0 | 100.00% | LICENSE_PLATE |
 | `MAC_ADDRESS` | 3,546 | 3,546 | 0 | 0 | 0 | 100.00% | 3,546 | 0 | 100.00% | MAC_ADDRESS |
 | `NATIONAL_ID` | 118,582 | 118,212 | 0 | 0 | 370 | 99.69% | 94,411 | 163 | 99.83% | NATIONAL_ID, NATIONAL_ID_CARD (also accepts SSN, TAX_ID) |
 | `PASSPORT` | 1,072 | 879 | 0 | 0 | 193 | 82.00% | 879 | 0 | 100.00% | PASSPORT |
 | `PHONE` | 123,151 | 122,934 | 164 | 51 | 2 | 99.82% | 122,988 | 3 | 100.00% | PHONE |
 | `POSTAL_CODE` | 53,914 | 53,897 | 10 | 0 | 7 | 99.97% | 53,925 | 28 | 99.95% | POSTAL_CODE |
-| `SECRET` | 5,798 | 5,225 | 77 | 173 | 184 | 90.12% | 5,267 | 213 | 95.96% | SECRET |
+| `SECRET` | 5,798 | 5,254 | 77 | 175 | 153 | 90.62% | 5,259 | 174 | 96.69% | SECRET |
 | `SOCIAL_HANDLE` | 2,267 | 2,267 | 0 | 0 | 0 | 100.00% | 2,267 | 0 | 100.00% | SOCIAL_HANDLE |
 | `SSN` | 1,288 | 1,288 | 0 | 0 | 0 | 100.00% | 14,511 | 1 | 99.99% | SOCIAL_SECURITY (also accepts NATIONAL_ID) |
 | `TAX_ID` | 3,729 | 3,729 | 0 | 0 | 0 | 100.00% | 14,969 | 0 | 100.00% | TAX_ID, TAX_ID_PERSONAL |
@@ -58,14 +58,14 @@ Optional: `DOB` — support 89,805, recall 100.00%, detections 89,805, FP 0, pre
 | `HEALTH_INSURANCE` | 1,185 | 1,185 | 0 | 0 | 0 | 100.00% | 1,076 | 0 | 100.00% | HEALTH_ID, HEALTH_INSURANCE (also accepts NATIONAL_ID) |
 | `IMEI` | 2,443 | 2,443 | 0 | 0 | 0 | 100.00% | 2,485 | 42 | 98.31% | IMEI |
 | `IPV6_ADDRESS` | 636 | 636 | 0 | 0 | 0 | 100.00% | 636 | 0 | 100.00% | IP_ADDRESS_V6 |
-| `IP_ADDRESS` | 10,038 | 10,027 | 11 | 0 | 0 | 99.89% | 10,066 | 39 | 99.61% | IP_ADDRESS |
-| `LICENSE_PLATE` | 6,445 | 6,436 | 2 | 2 | 5 | 99.86% | 6,436 | 0 | 100.00% | LICENSE_PLATE |
+| `IP_ADDRESS` | 10,038 | 10,033 | 4 | 0 | 1 | 99.95% | 10,072 | 39 | 99.61% | IP_ADDRESS |
+| `LICENSE_PLATE` | 6,445 | 6,438 | 0 | 2 | 5 | 99.89% | 6,438 | 0 | 100.00% | LICENSE_PLATE |
 | `MAC_ADDRESS` | 3,546 | 3,546 | 0 | 0 | 0 | 100.00% | 3,546 | 0 | 100.00% | MAC_ADDRESS |
 | `NATIONAL_ID` | 118,582 | 118,077 | 135 | 0 | 370 | 99.57% | 94,728 | 742 | 99.22% | NATIONAL_ID, NATIONAL_ID_CARD (also accepts SSN, TAX_ID) |
 | `PASSPORT` | 1,072 | 879 | 0 | 0 | 193 | 82.00% | 879 | 0 | 100.00% | PASSPORT |
 | `PHONE` | 123,151 | 122,169 | 929 | 51 | 2 | 99.20% | 122,334 | 114 | 99.91% | PHONE |
 | `POSTAL_CODE` | 53,914 | 53,897 | 10 | 0 | 7 | 99.97% | 53,925 | 28 | 99.95% | POSTAL_CODE |
-| `SECRET` | 5,798 | 5,225 | 77 | 173 | 184 | 90.12% | 5,267 | 213 | 95.96% | SECRET |
+| `SECRET` | 5,798 | 5,254 | 77 | 175 | 153 | 90.62% | 5,259 | 174 | 96.69% | SECRET |
 | `SOCIAL_HANDLE` | 2,267 | 2,267 | 0 | 0 | 0 | 100.00% | 2,267 | 0 | 100.00% | SOCIAL_HANDLE |
 | `SSN` | 1,288 | 1,283 | 5 | 0 | 0 | 99.61% | 14,598 | 86 | 99.41% | SOCIAL_SECURITY (also accepts NATIONAL_ID) |
 | `TAX_ID` | 3,729 | 3,709 | 20 | 0 | 0 | 99.46% | 15,171 | 102 | 99.33% | TAX_ID, TAX_ID_PERSONAL |
@@ -136,4 +136,4 @@ Labels per category: `EMAIL` 152,938, `IBAN` 126,428, `PHONE` 123,151, `NATIONAL
 
 ## Regression records
 
-534 records from `tests/regression_corpus.py`, 0 failures, checked in both modes.
+606 records from `tests/regression_corpus.py`, 0 failures, checked in both modes.

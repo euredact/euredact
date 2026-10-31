@@ -27,9 +27,16 @@ which both test suites run.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-31
+
 ### Added
 
 - `EntityType.LOCATION`: a city, town, village, commune or district the document links to a person, returned by the cloud model from gen 13 on. It was masked before, as a plain string, but could not be named in `exclude_types` (it raised as unknown) or compared against the enum. *(rules-engine#134)*
+
+### Changed
+
+- Documentation: the open-source SDK is named **euRedact Core** and the cloud tier **euRedact Cloud**, in the READMEs and the package descriptions. The package names (`euredact` on PyPI and npm) and the imports are unchanged. *(rules-engine#135)*
+- Documentation: the rule engine emits 29 types, not 30. `OTHER` is listed apart, as the cloud client's fallback for a label it does not know, and the package READMEs list `PERSON_NAME` and `ADDRESS` with the cloud types. *(rules-engine#124)*
 
 ### Fixed
 
@@ -37,11 +44,6 @@ which both test suites run.
 - Service logs are no longer over-redacted: a number followed by `bytes` is no `PHONE`; the loopback and unspecified addresses (`127.0.0.0/8`, `0.0.0.0`, `::1`, `::`) are no `IP_ADDRESS` / `IPV6_ADDRESS`; and a value assigned to a key (`key='value'`, `"key": "value"`, `Key: value`) is a `SECRET` only when the key (a subscript too: `config['api_key']`) or the line before the value names a credential, not when a credential word appears anywhere within 150 characters. A `[TYPE]` placeholder is no context keyword, so on text masked once `[SECRET]` no longer makes the values near it secrets (the gateway's second pass typed names, customer ids and whole JSON log lines `SECRET`). *(rules-engine#136)*
 - A UK Unique Taxpayer Reference behind its label (`UTR:`, `self_assessment_utr`, `Unique Taxpayer Reference`) is `TAX_ID`, ten digits with or without the space after the fifth, with a passing check digit or without. *(rules-engine#137)*
 - An IBAN wrapped over a line break between its groups, with or without indentation, is one `BANK_ACCOUNT`; the second line was left visible, part of it as a `PHONE`. *(rules-engine#138)*
-
-### Changed
-
-- Documentation: the open-source SDK is named **euRedact Core** and the cloud tier **euRedact Cloud**, in the READMEs and the package descriptions. The package names (`euredact` on PyPI and npm) and the imports are unchanged. *(rules-engine#135)*
-- Documentation: the rule engine emits 29 types, not 30. `OTHER` is listed apart, as the cloud client's fallback for a label it does not know, and the package READMEs list `PERSON_NAME` and `ADDRESS` with the cloud types. *(rules-engine#124)*
 
 ## [0.7.1] - 2026-10-29
 
@@ -437,7 +439,8 @@ which both test suites run.
 
 - First release. *(Python only)* 31 countries, 20+ PII entity types, checksum validation, two-pass detection, context-aware detection, batch processing, true async, referential integrity, Aho-Corasick acceleration, and zero required dependencies.
 
-[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.1...main
+[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v0.8.0...main
+[0.8.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.1...v0.8.0
 [0.7.1]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.0...v0.7.1
 [0.7.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.6.0...v0.7.0
 [0.6.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.5.1...v0.6.0
