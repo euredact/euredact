@@ -34,6 +34,14 @@ which both test suites run.
 ### Fixed
 
 - Overlapping cloud spans are masked as one region under one placeholder. From gen 14 the model gives one stretch of text more than one type; excluding one type (`exclude_types=["ORGANISATION_NAME"]`) now leaves text another enabled type covers masked, and where a non-sensitive type covers the same text as `MEDICAL_CONDITION`, `SENSITIVE_ATTRIBUTE` or `BIOMETRIC_REF`, the placeholder names the non-sensitive type. Before, a span starting inside another was masked from where the first ended, which split one value over two placeholders and labelled it by list order. Shared cases in `conformance/cloud_overlap.json`. *(rules-engine#139)*
+- Service logs are no longer over-redacted: a number followed by `bytes` is no `PHONE`; the loopback and unspecified addresses (`127.0.0.0/8`, `0.0.0.0`, `::1`, `::`) are no `IP_ADDRESS` / `IPV6_ADDRESS`; and a value assigned to a key (`key='value'`, `"key": "value"`, `Key: value`) is a `SECRET` only when the key names a credential, not when a credential word appears anywhere within 150 characters. A `[TYPE]` placeholder is no context keyword, so on text masked once `[SECRET]` no longer makes the values near it secrets (the gateway's second pass typed names, customer ids and whole JSON log lines `SECRET`). *(rules-engine#136)*
+- A UK Unique Taxpayer Reference behind its label (`UTR:`, `self_assessment_utr`, `Unique Taxpayer Reference`) is `TAX_ID`, ten digits with or without the space after the fifth, with a passing check digit or without. *(rules-engine#137)*
+- An IBAN wrapped over a line break between its groups, with or without indentation, is one `BANK_ACCOUNT`; the second line was left visible, part of it as a `PHONE`. *(rules-engine#138)*
+
+### Changed
+
+- Documentation: the open-source SDK is named **euRedact Core** and the cloud tier **euRedact Cloud**, in the READMEs and the package descriptions. The package names (`euredact` on PyPI and npm) and the imports are unchanged. *(rules-engine#135)*
+- Documentation: the rule engine emits 29 types, not 30. `OTHER` is listed apart, as the cloud client's fallback for a label it does not know, and the package READMEs list `PERSON_NAME` and `ADDRESS` with the cloud types. *(rules-engine#124)*
 
 ## [0.7.1] - 2026-10-29
 

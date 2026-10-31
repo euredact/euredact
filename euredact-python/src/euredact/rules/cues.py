@@ -205,6 +205,12 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         r"|steuernummer|st\.?-?nr|stnr|tin"
         r"|finanzamt\s+ist|tax\s*(?:id|no|number)|daňové\s*číslo"
         r"|numer\s*podatkowy)" + _SEP, re.IGNORECASE)),
+    # The UK Unique Taxpayer Reference. Without countries its ten digits are a
+    # phone first, and the label is what says otherwise (rules-engine#137).
+    # No run-on: "utr" runs on into "Utrecht".
+    (EntityType.TAX_ID, re.compile(
+        _B + r"(?:utr|self[_\s-]?assessment[_\s-]?utr"
+        r"|unique\s+tax(?:payer)?\s+reference)" + _tail(""), re.IGNORECASE)),
 
     # ── Health insurance ───────────────────────────────────────────────
     (EntityType.HEALTH_INSURANCE, re.compile(

@@ -1864,16 +1864,16 @@
       "expectRedactedText": "Neighbour [IPV6_ADDRESS] on eth0."
     },
     {
-      "id": "ipv6-loopback-leading-compression",
-      "text": "Bound to ::1 only.",
+      "id": "ipv6-leading-compression",
+      "text": "Bound to ::8a2e:370:7334 only.",
       "countries": null,
       "mustDetect": {
         "IPV6_ADDRESS": [
-          "::1"
+          "::8a2e:370:7334"
         ]
       },
       "expectRedactedText": "Bound to [IPV6_ADDRESS] only.",
-      "notes": "issue rules-engine#5: not detected at all before, because the pattern anchored on \\b and ':' is a non-word character."
+      "notes": "issue rules-engine#5: not detected at all before, because the pattern anchored on \\b and ':' is a non-word character. The example was ::1 until rules-engine#136 left the loopback address unmasked."
     },
     {
       "id": "ipv6-trailing-compression-prefix",
@@ -7575,6 +7575,272 @@
         "DOB"
       ],
       "notes": "rules-engine#130: guard; skipping the rule row must not turn leave dates into birth dates."
+    },
+    {
+      "id": "ip-loopback-and-unspecified-addresses-are-no-hosts",
+      "text": "Starting vLLM server on http://0.0.0.0:8000; metrics on 127.0.0.1:9101, admin on [::1]:8080.",
+      "countries": [
+        "BE",
+        "NL",
+        "FR",
+        "DE"
+      ],
+      "mustNotDetect": [
+        "IP_ADDRESS",
+        "IPV6_ADDRESS",
+        "POSTAL_CODE"
+      ],
+      "expectRedactedText": "Starting vLLM server on http://0.0.0.0:8000; metrics on 127.0.0.1:9101, admin on [::1]:8080.",
+      "notes": "rules-engine#136: the loopback (127.0.0.0/8, ::1) and unspecified (0.0.0.0) addresses exist on every machine and identify no one's device."
+    },
+    {
+      "id": "ip-a-private-host-with-a-port-stays-masked",
+      "text": "client 192.168.1.23:51515 connected",
+      "countries": [
+        "BE",
+        "NL",
+        "FR",
+        "DE"
+      ],
+      "mustDetect": {
+        "IP_ADDRESS": [
+          "192.168.1.23"
+        ]
+      },
+      "expectRedactedText": "client [IP_ADDRESS]:51515 connected",
+      "notes": "rules-engine#136: guard; only loopback and unspecified addresses are left."
+    },
+    {
+      "id": "phone-a-byte-count-is-no-phone",
+      "text": "collected artifacts: 33 entries, 13 artifacts, 48213377 bytes total",
+      "countries": [
+        "BE",
+        "NL",
+        "FR",
+        "DE"
+      ],
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "expectRedactedText": "collected artifacts: 33 entries, 13 artifacts, 48213377 bytes total",
+      "notes": "rules-engine#136: a number followed by bytes is a size."
+    },
+    {
+      "id": "secret-a-config-key-that-names-no-credential",
+      "text": "with config: model='/var/lib/euredact/bundles/2026-10-29T1724Z', tokenizer_mode='auto', seed=0",
+      "countries": [
+        "BE",
+        "NL",
+        "FR",
+        "DE"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "expectRedactedText": "with config: model='/var/lib/euredact/bundles/2026-10-29T1724Z', tokenizer_mode='auto', seed=0",
+      "notes": "rules-engine#136: an assigned value is a credential when its key names one; \"token\" inside tokenizer_mode is not that key."
+    },
+    {
+      "id": "secret-a-json-id-near-a-bearer-header-is-no-secret",
+      "text": "Authorization: Bearer [SECRET]\n\n{\n  \"id\": \"KD-3611868\",\n  \"first_name\": \"Ursula\"\n}",
+      "countries": [
+        "DE"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "notes": "rules-engine#136: the gateway's pass on SDK-masked text; the Bearer header two lines up is another key's context."
+    },
+    {
+      "id": "secret-a-json-log-line-is-no-secret",
+      "text": "Przykładowy wpis ze stagingu:\n\n{\"ts\":\"2026-10-21T09:14:22.018Z\",\"level\":\"DEBUG\",\"traceId\":\"7f3a91c2\",\"method\":\"PUT\",\"path\":\"/v1/customers/88412\",\"status\":200,\"user\":\"jkowalska07\",\"headers\":{\"Authorization\":\"Bearer [SECRET]\"},\"requestBody\":{\"firstName\":\"Joanna\",\"birthDate\":\"[DOB]\"}}",
+      "countries": [
+        "PL"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "notes": "rules-engine#136: the [SECRET] placeholder licensed a 141-character span over the whole line."
+    },
+    {
+      "id": "secret-a-placeholder-is-no-keyword",
+      "text": "Gewijzigde bestanden:\n- [SECRET].yml\n- src/main/java/be/example/hr/logging/MaskingConverter.java",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "notes": "rules-engine#136: \"[SECRET]\" holds the word secret; a placeholder is no keyword."
+    },
+    {
+      "id": "secret-a-mail-header-name-is-no-secret",
+      "text": "Ik stuur het wachtwoordmailtje morgen.\n\nVan: Ann-Sophie Engelen <[EMAIL]>",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "notes": "rules-engine#136: the key is Van; wachtwoord elsewhere in the window does not make the sender a credential."
+    },
+    {
+      "id": "secret-a-csv-time-is-no-key",
+      "text": "time,user,method\n15/10/2026 11:15,Heather Gethin,fingerprint\nauth_method,temp",
+      "countries": [
+        "GB"
+      ],
+      "mustNotDetect": [
+        "SECRET"
+      ],
+      "notes": "rules-engine#136: 11:15,Heather was a value assigned to the key 11."
+    },
+    {
+      "id": "secret-a-key-naming-a-credential-stays-masked",
+      "text": "DB_PASSWORD=Xk92!mQz7Lp4w\nclientSecret: \"Tq8vN3rK!1sZp\"\npass: Hv72k#Lq9Zt",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "Xk92!mQz7Lp4w",
+          "Tq8vN3rK!1sZp",
+          "Hv72k#Lq9Zt"
+        ]
+      },
+      "notes": "rules-engine#136: guard; a key that names a credential still makes its value one."
+    },
+    {
+      "id": "secret-a-password-label-in-prose-stays-masked",
+      "text": "Your new password is: Tr4v3l!Kx92q",
+      "countries": [
+        "GB"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "Tr4v3l!Kx92q"
+        ]
+      },
+      "notes": "rules-engine#136: guard; a label in prose is the value's key."
+    },
+    {
+      "id": "tax-id-uk-utr-behind-its-label",
+      "text": "Payment checked against UTR 22345 67890 before release.",
+      "countries": [
+        "GB"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "22345 67890"
+        ]
+      },
+      "expectRedactedText": "Payment checked against UTR [TAX_ID] before release.",
+      "notes": "rules-engine#137: the UK Unique Taxpayer Reference, 5 + 5 digits, check digit valid."
+    },
+    {
+      "id": "tax-id-uk-utr-with-a-failing-check-digit-behind-its-label",
+      "text": "Supplier UTR: 58230 19476, registered in Leeds.",
+      "countries": [
+        "GB"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "58230 19476"
+        ]
+      },
+      "expectRedactedText": "Supplier UTR: [TAX_ID], registered in Leeds.",
+      "notes": "rules-engine#137: 4 of the 6 benchmark UTRs fail the check digit; the label carries them, as for the Swiss AHV (#82)."
+    },
+    {
+      "id": "tax-id-uk-utr-assigned-to-a-key",
+      "text": "self_assessment_utr: 2234567890",
+      "countries": [
+        "UK"
+      ],
+      "mustDetect": {
+        "TAX_ID": [
+          "2234567890"
+        ]
+      },
+      "expectRedactedText": "self_assessment_utr: [TAX_ID]",
+      "notes": "rules-engine#137: a field name is a label; UK is the alias of GB."
+    },
+    {
+      "id": "tax-id-uk-utr-spelled-out-without-a-country",
+      "text": "Your Unique Taxpayer Reference is 2234567890.",
+      "countries": null,
+      "mustDetect": {
+        "TAX_ID": [
+          "2234567890"
+        ]
+      },
+      "expectRedactedText": "Your Unique Taxpayer Reference is [TAX_ID].",
+      "notes": "rules-engine#137"
+    },
+    {
+      "id": "tax-id-ten-digits-without-a-utr-label-are-no-utr",
+      "text": "Order 5823019476 shipped.",
+      "countries": [
+        "GB"
+      ],
+      "mustNotDetect": [
+        "TAX_ID"
+      ],
+      "notes": "rules-engine#137: guard; the UTR needs its label."
+    },
+    {
+      "id": "tax-id-utrecht-is-no-utr-label",
+      "text": "Kantoor Utrecht, telefoon 0301234567.",
+      "countries": null,
+      "mustNotDetect": [
+        "TAX_ID"
+      ],
+      "notes": "rules-engine#137: guard; context is matched by substring, so the labels are delimited."
+    },
+    {
+      "id": "iban-wrapped-over-a-line-break-with-indentation",
+      "text": "Prosimy o wpłatę na rachunek:\n  PL61 1090 1014\n  0000 0712 1981 2874\nDziękujemy.",
+      "countries": [
+        "PL"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "PL61 1090 1014\n  0000 0712 1981 2874"
+        ]
+      },
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "expectRedactedText": "Prosimy o wpłatę na rachunek:\n  [BANK_ACCOUNT]\nDziękujemy.",
+      "notes": "rules-engine#138: the second line was left visible, part of it as a PHONE."
+    },
+    {
+      "id": "iban-wrapped-over-a-line-break",
+      "text": "IBAN BE68 5390\n0754 7034 voor de huur",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "BE68 5390\n0754 7034"
+        ]
+      },
+      "expectRedactedText": "IBAN [BANK_ACCOUNT] voor de huur",
+      "notes": "rules-engine#138"
+    },
+    {
+      "id": "iban-at-a-line-end-does-not-take-the-next-line",
+      "text": "IBAN: BE68 5390 0754 7034\nKBC Brussels",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "BE68 5390 0754 7034"
+        ]
+      },
+      "expectRedactedText": "IBAN: [BANK_ACCOUNT]\nKBC Brussels",
+      "notes": "rules-engine#138: guard; the exact length and mod-97 decide where a wrapped IBAN ends."
     }
   ]
 }

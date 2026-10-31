@@ -32,11 +32,16 @@ function writtenDatePattern(): string {
 function buildIbanPattern(): string {
   const alternatives = Object.entries(IBAN_LENGTHS)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([code, length]) => `${code}\\d{2}(?:[ \\-]?[A-Z0-9]){${length - 4}}`);
+    // Or a line break and its indentation between groups: a wrapped IBAN
+    // ("PL61 1090 1014\n  0000 0712 1981 2874", rules-engine#138).
+    .map(([code, length]) => `${code}\\d{2}(?:(?:[ \\-]|\\r?\\n[ \\t]*)?[A-Z0-9]){${length - 4}}`);
   return String.raw`\b(?:` + alternatives.join("|") + String.raw`)\b`;
 }
 
 const GENERIC_IBAN = buildIbanPattern();
+
+/** What names a Unique Taxpayer Reference; delimited, since "utr" sits inside "Utrecht" (rules-engine#137). */
+const UTR_LABELS = ["UTR:", "UTR ", "UTR-", "(UTR", "_utr", "utr_", "UTR number", "Unique Taxpayer Reference", "Unique Tax Reference", "taxpayer reference"];
 
 /**
  * Helper to create a PatternDef with sensible defaults.
@@ -687,6 +692,10 @@ const UK: CountryConfig = {
     p(EntityType.HEALTHCARE_PROVIDER, String.raw`\b\d{7}\b`, null, "UK GMC number — 7 digits", ["GMC number", "GMC no", "GMC reference", "GMC reg", "GMC:", "GMC-Nr", "General Medical Council"], true),
     // UK NINO: a social-security number, so SSN, as the canon defaults it (rules-engine#47).
     p(EntityType.SSN, String.raw`\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?\d{2}\s?\d{2}\s?\d{2}\s?[ABCD]\b`),
+    // Unique Taxpayer Reference behind its label, with and without a passing
+    // check digit, as the AHV number (rules-engine#137, #82).
+    p(EntityType.TAX_ID, String.raw`\b\d{5} ?\d{5}\b`, "uk_utr", "UK UTR — 10 digits with check digit, behind its label", UTR_LABELS, true),
+    p(EntityType.TAX_ID, String.raw`\b\d{5} ?\d{5}\b`, null, "UK UTR — 10 digits, check digit not required beside its label", UTR_LABELS, true),
     p(EntityType.HEALTH_INSURANCE, String.raw`\b\d{3}\s?\d{3}\s?\d{4}\b`, "uk_nhs", "", ["NHS", "NHS number", "health number", "NHS no"], true),
     p(EntityType.IBAN, String.raw`\bGB\d{2}\s?[A-Z]{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b`, "iban"),
     p(EntityType.IBAN, String.raw`\bGB\d{2}[A-Z]{4}\d{14}\b`, "iban"),

@@ -116,6 +116,10 @@ export const CUES: Array<[EntityType, RegExp]> = [
   // words, and `steuer-?id` cannot reach across "liche " (rules-engine#26).
   [EntityType.TAX_ID,
    /(?<![A-Za-z0-9_])(?:αφμ|α\.φ\.μ\.|steuerliche\s*identifikations-?nummer|steuer-?identifikations-?nummer|steuer-?id-?nr\.?|steuer-?id|steuernummer|st\.?-?nr|stnr|tin|finanzamt\s+ist|tax\s*(?:id|no|number)|daňové\s*číslo|numer\s*podatkowy)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+  // The UK Unique Taxpayer Reference: without countries its ten digits are a
+  // phone first (rules-engine#137). No run-on: "utr" runs on into "Utrecht".
+  [EntityType.TAX_ID,
+   /(?<![A-Za-z0-9_])(?:utr|self[_\s-]?assessment[_\s-]?utr|unique\s+tax(?:payer)?\s+reference)(?:|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Health insurance: the insured person.
   [EntityType.HEALTH_INSURANCE,

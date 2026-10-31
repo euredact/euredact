@@ -4,6 +4,9 @@ from __future__ import annotations
 from euredact.rules.countries._base import CountryConfig, PatternDef
 from euredact.types import EntityType
 
+#: What names a Unique Taxpayer Reference (rules-engine#137).
+_UTR_LABELS = ["UTR:", "UTR ", "UTR-", "(UTR", "_utr", "utr_", "UTR number", "Unique Taxpayer Reference", "Unique Tax Reference", "taxpayer reference"]
+
 
 class UKConfig(CountryConfig):
     def __post_init__(self) -> None:
@@ -36,6 +39,20 @@ class UKConfig(CountryConfig):
                        description="UK NHS Number — 10 digits with mod-11 check",
                        context_keywords=["NHS", "NHS number", "health number", "NHS no"],
                        requires_context=True),
+            # Unique Taxpayer Reference: ten digits, often 5 + 5, behind its
+            # label. The canon's TAX_ID for the UK; without a pattern a
+            # labelled UTR was left in the text (rules-engine#137). Ten digits
+            # are also a phone or an NHS number, so the label gates both forms;
+            # the checksum one is the stronger claim, and the bare one covers a
+            # UTR whose check digit fails, as the AHV number does (#82). The
+            # labels are delimited: matching is by substring, and a bare "utr"
+            # sits inside "Utrecht" and "neutral".
+            PatternDef(entity_type=EntityType.TAX_ID, pattern=r"\b\d{5} ?\d{5}\b",
+                       validator="uk_utr", description="UK UTR — 10 digits with check digit, behind its label",
+                       context_keywords=_UTR_LABELS, requires_context=True),
+            PatternDef(entity_type=EntityType.TAX_ID, pattern=r"\b\d{5} ?\d{5}\b",
+                       validator=None, description="UK UTR — 10 digits, check digit not required beside its label",
+                       context_keywords=_UTR_LABELS, requires_context=True),
             # IBAN
             PatternDef(entity_type=EntityType.IBAN,
                        pattern=r"\bGB\d{2}\s?[A-Z]{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b",

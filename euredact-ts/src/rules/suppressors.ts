@@ -39,7 +39,8 @@ const AMOUNT_LABEL_BEFORE =
 // Use Unicode-aware word boundary via \p{L} negative lookahead instead of \b
 // because JS \b is ASCII-only and fails on Unicode letters (e.g. "München" → \bm\b matches M before ü)
 // Horizontal space only: a unit is on the number's own line (rules-engine#51).
-const UNIT_AFTER = /^[ \t]*(?:kg|km|cm|mm|m[²³]|ml|mg|GB|MB|KB|TB|%|jaar|maanden|weken|dagen|uur|minuten|seconden|stuks|pcs|pieces|ans|mois|semaines|jours|heures|Jahre|Monate|Wochen|Tage|Stunden)(?![a-zA-Z\u00C0-\u024F\u0400-\u04FF])/i;
+// A size in bytes: "48213377 bytes total" in a build log (rules-engine#136).
+const UNIT_AFTER = /^[ \t]*(?:bytes?|octets?|KiB|MiB|GiB|TiB|kg|km|cm|mm|m[²³]|ml|mg|GB|MB|KB|TB|%|jaar|maanden|weken|dagen|uur|minuten|seconden|stuks|pcs|pieces|ans|mois|semaines|jours|heures|Jahre|Monate|Wochen|Tage|Stunden)(?![a-zA-Z\u00C0-\u024F\u0400-\u04FF])/i;
 
 // Same missing-boundary flaw: "ref" matched the tail of "kortref".
 const REFERENCE_BEFORE = /\b(?:dossier|ref\.?|referentie|reference|référence|factuurnummer|invoice\s*(?:nr|number|no)?|bestelnummer|order\s*(?:nr|number|no)?|kenmerk|ordernummer|Aktenzeichen|numéro\s*de\s*(?:dossier|facture|commande)|bestellnummer|Rechnungsnummer|artikelnr|article\s*no|contract\s*(?:nr|number|no)?|pagina|page|Seite|blz\.?|Facture\s*n[°o]?|Faktura\s*n[°or]\.?|Lasku\s*n[°or]o?\.?|Rechnung\s*(?:Nr|n[°o])?|faktura\s*(?:nr|n[°o])?|bestilling\s*(?:nr|n[°o])?|bestelling\s*n[°or]\.?|Reikningur\s*nr|ticket|incident\s*(?:report|nr|no)?|case\s*(?:nr|no|id)?|zaaknummer|meldingsnummer|Vorgangsnummer|Vorgang|Störungsmeldung|saksnummer|ärendenummer|sagsnummer|asianumero|Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.#]?\s*$/i;
@@ -658,15 +659,22 @@ const CIDR_PREFIX_AFTER = /^\/(\d{1,2})(?!\d)/;
 /** RFC 5737's documentation ranges: reserved, never routed, used in examples. */
 const DOCUMENTATION_NETS = ["192.0.2.", "198.51.100.", "203.0.113."];
 
+/** The loopback and unspecified IPv6 addresses: "::1", "::", and the same written out. */
+const IPV6_NO_HOST = /^(?=.*::|(?:0+:){7})[0:]*1?$/;
+
 /**
- * An IPv4 shape that names no host (rules-engine#126): a network address
- * ("10.40.0.0/16"), a documentation address, or a version with leading zeros.
- * An interface address with its prefix ("192.168.1.23/24") stays.
+ * An IP address shape that names no host (rules-engine#126, #136): a network
+ * address ("10.40.0.0/16"), a documentation address, or a version with leading
+ * zeros. An interface address with its prefix ("192.168.1.23/24") stays. Nor
+ * the loopback and unspecified addresses (127.0.0.0/8, 0.0.0.0, ::1, ::), which
+ * every machine has and which identify no one's device.
  */
 function suppressIpNotAHost(text: string, match: RawMatch): boolean {
+  if (match.patternDef.entityType === EntityType.IPV6_ADDRESS) return IPV6_NO_HOST.test(match.text);
   if (match.patternDef.entityType !== EntityType.IP_ADDRESS) return false;
   const ip = match.text;
   if (IP_LEADING_ZERO.test(ip) || DOCUMENTATION_NETS.some((n) => ip.startsWith(n))) return true;
+  if (ip === "0.0.0.0" || ip.startsWith("127.")) return true;
   // Part of a longer dotted run: "urn:oid:1.2.250.1.71.4.2.1" is an OID.
   if (/\d\.$/.test(text.slice(Math.max(0, match.start - 2), match.start))
     || /^\.\d/.test(text.slice(match.end, match.end + 2))) return true;
@@ -1292,12 +1300,61 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
     return !labelsThisDate(text, match.start, match.end, match.patternDef.contextKeywords,
                            match.patternDef.entityType);
   }
+  if (match.patternDef.entityType === EntityType.SECRET) {
+    const key = assignmentKey(text, match.start);
+    if (key !== null) return !namesACredential(key, match.patternDef.contextKeywords);
+  }
   const [before, after] = getContext(text, match.start, match.end);
-  const context = (before + " " + after).toLowerCase();
+  // A placeholder is no keyword: on text masked once, "[SECRET]" holds the
+  // word "secret" and licensed every value near it (rules-engine#136).
+  const context = (before + " " + after).replace(MASKED_VALUE, " ").toLowerCase();
   if (match.patternDef.contextKeywords.some(kw => context.includes(kw.toLowerCase()))) return false;
   // The column names it: a passport under "Passport" rows below the header (#130).
   const header = columnHeader(text, match.start);
   return header === null || !match.patternDef.contextKeywords.some(kw => keywordAt(header, kw, false) >= 0);
+}
+
+/**
+ * The key a value is assigned to: `password = "..."`, `"id": "KD-3611868"`,
+ * `Van: Ann-Sophie`, `model='/var/lib/...'`. It runs back to the line start or
+ * the previous delimiter, so a label in prose ("Your new password is: ...") is
+ * a key too. The span may start inside the value: the token rule finds
+ * `var/lib/...` in `model='/var/lib/...'`.
+ */
+const ASSIGNMENT_KEY = /[\n,;{}()[\]|:=]([^\n,;{}()[\]|:=]{1,48}?)["'`]?[ \t]*[:=][ \t]?["'`[{(]?[^\s"'`:=]{0,40}$/;
+/** What separates the words of a key: "aws_secret_access_key", "db.password", '"apiKey"'. */
+const KEY_SEPARATORS = /[\s_\-.:"'`$[\]{}()/\\,;|@#]+/g;
+/** Credential words that name a credential only as a key: `pass=`, `pwd:`, `"pin":`. */
+const CREDENTIAL_KEY_WORDS = ["pass", "pwd", "pw", "pin", "otp", "passphrase", "authorization", "authentication", "mdp"];
+
+function assignmentKey(text: string, start: number): string | null {
+  const lo = Math.max(0, start - 60);
+  const found = ASSIGNMENT_KEY.exec((lo === 0 ? "\n" : "") + text.slice(lo, start));
+  return found === null ? null : found[1];
+}
+
+/** `value` as space-separated lower-case words, camelCase split. */
+function keyWords(value: string): string {
+  return " " + value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(KEY_SEPARATORS, " ").trim().toLowerCase() + " ";
+}
+
+/**
+ * True when `key` names a credential. A value assigned to a key has that key
+ * as its context: with "Authorization: Bearer ..." two lines up, a JSON
+ * record's `"id": "KD-3611868"` was a SECRET, as were `model='/var/lib/...'`
+ * and the `Van: Ann-Sophie` of a mail header (rules-engine#136). A keyword is
+ * a word of the key, plural allowed; a long one may sit inside a compound
+ * ("dbpassword", "clientsecret").
+ */
+function namesACredential(key: string, keywords: readonly string[]): boolean {
+  const words = keyWords(key);
+  const joined = words.replace(/ /g, "");
+  for (const kw of [...keywords, ...CREDENTIAL_KEY_WORDS]) {
+    const kwWords = keyWords(kw).trim();
+    if (new RegExp("(?<![a-z0-9])" + escapeRe(kwWords) + "s?(?![a-z0-9])").test(words)) return true;
+    if (kwWords.length >= 6 && joined.includes(kwWords.replace(/ /g, ""))) return true;
+  }
+  return false;
 }
 
 /** Date types decided by a label: DOB and DATE_OF_DEATH share one date shape. */
@@ -1486,6 +1543,7 @@ const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.MAC_ADDRESS]: [suppressMacInReference],
   [EntityType.CREDIT_CARD]: [suppressCardInsideDigitRun],
   [EntityType.IP_ADDRESS]: [suppressIpNotAHost],
+  [EntityType.IPV6_ADDRESS]: [suppressIpNotAHost],
 };
 for (const type of EXAMPLE_TYPES) {
   TYPE_SUPPRESSORS[type] = [...(TYPE_SUPPRESSORS[type] ?? []), suppressExampleValue, suppressNotAnIdentifier];

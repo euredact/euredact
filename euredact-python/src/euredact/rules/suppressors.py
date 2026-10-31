@@ -63,7 +63,9 @@ _AMOUNT_LABEL_BEFORE = re.compile(
 # break, "Mob: +49 172 634 85 21" followed by "m.k@example.de" on the next line
 # was "21 m" and the whole phone number was dropped (rules-engine#51).
 _UNIT_AFTER = re.compile(
-    r"^[ \t]*(?:kg|km|cm|mm|m[²³]?|m\b|g\b|l\b|ml|mg|GB|MB|KB|TB|%|"
+    # A size in bytes: "48213377 bytes total" in a build log (rules-engine#136).
+    r"^[ \t]*(?:bytes?|octets?|KiB|MiB|GiB|TiB|"
+    r"kg|km|cm|mm|m[²³]?|m\b|g\b|l\b|ml|mg|GB|MB|KB|TB|%|"
     r"jaar|maanden|weken|dagen|uur|minuten|seconden|"
     # "st" (stuks/pieces) must not swallow the "St." of a place name —
     # "Postal: 9600 St. Paul's Bay", "Adresse: 8386 St. Gallen".
@@ -1140,18 +1142,31 @@ _CIDR_PREFIX_AFTER = re.compile(r"^/(\d{1,2})(?!\d)")
 _DOCUMENTATION_NETS = ("192.0.2.", "198.51.100.", "203.0.113.")
 
 
+#: The loopback and unspecified IPv6 addresses: "::1", "::", and the same
+#: written out ("0:0:0:0:0:0:0:1").
+_IPV6_NO_HOST = re.compile(r"^(?=.*::|(?:0+:){7})[0:]*1?$")
+
+
 def suppress_ip_not_a_host(text: str, match: RawMatch) -> bool:
-    """An IPv4 shape that names no host (rules-engine#126).
+    """An IP address shape that names no host (rules-engine#126, #136).
 
     A network address ("10.40.0.0/16": the host part is all zeros), an address
     in a documentation range, or a dotted version number with leading zeros
     ("HANA-Revision 2.00.079.01"). An interface address with its prefix
     ("192.168.1.23/24") is a host, and stays.
+
+    Nor the loopback and unspecified addresses (127.0.0.0/8, 0.0.0.0, ::1,
+    ::), which every machine has: in "Starting server on http://0.0.0.0:8000"
+    or "127.0.0.1:54170 - GET /v1/models" they cannot identify anyone's device.
     """
+    if match.pattern_def.entity_type == EntityType.IPV6_ADDRESS:
+        return bool(_IPV6_NO_HOST.match(match.text))
     if match.pattern_def.entity_type != EntityType.IP_ADDRESS:
         return False
     ip = match.text
     if _IP_LEADING_ZERO.search(ip) or ip.startswith(_DOCUMENTATION_NETS):
+        return True
+    if ip == "0.0.0.0" or ip.startswith("127."):
         return True
     # Part of a longer dotted run: "urn:oid:1.2.250.1.71.4.2.1" is an OID.
     if (re.search(r"\d\.$", text[max(0, match.start - 2):match.start])
@@ -1866,8 +1881,14 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
         return not _labels_this_date(
             text, match.start, match.end, match.pattern_def.context_keywords,
             match.pattern_def.entity_type)
+    if match.pattern_def.entity_type == EntityType.SECRET:
+        key = _assignment_key(text, match.start)
+        if key is not None:
+            return not _names_a_credential(key, match.pattern_def.context_keywords)
     before, after = _get_context(text, match.start, match.end)
-    context = (before + " " + after).lower()
+    # A placeholder is no keyword: on text masked once, "[SECRET]" holds the
+    # word "secret" and licensed every value near it (rules-engine#136).
+    context = _MASKED_VALUE.sub(" ", before + " " + after).lower()
     if any(kw.lower() in context for kw in match.pattern_def.context_keywords):
         return False
     # The column names it: a passport under "Passport", "Paspoort" or
@@ -1876,6 +1897,60 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
     return header is None or not any(
         _keyword_at(header, kw, last=False) >= 0
         for kw in match.pattern_def.context_keywords)
+
+
+#: The key a value is assigned to: `password = "..."`, `"id": "KD-3611868"`,
+#: `Van: Ann-Sophie`, `model='/var/lib/...'`. The key runs back to the line
+#: start or the previous delimiter, so a label in prose ("Your new password
+#: is: ...") is a key too. The span may start inside the value: the token
+#: rule finds `var/lib/...` in `model='/var/lib/...'`.
+_ASSIGNMENT_KEY = re.compile(
+    r"[\n,;{}()\[\]|:=]([^\n,;{}()\[\]|:=]{1,48}?)[\"'`]?[ \t]*[:=][ \t]?[\"'`\[{(]?"
+    r"[^\s\"'`:=]{0,40}$")
+
+#: What separates the words of a key: "aws_secret_access_key",
+#: "Ocp-Apim-Subscription-Key", "db.password", '"apiKey"'.
+_KEY_SEPARATORS = re.compile(r"[\s_\-.:\"'`$\[\]{}()/\\,;|@#]+")
+
+#: Credential words that name a credential only as a key, too short or too
+#: common to be keywords in prose: `pass=`, `pwd:`, `"pin":`.
+_CREDENTIAL_KEY_WORDS = ("pass", "pwd", "pw", "pin", "otp", "passphrase",
+                         "authorization", "authentication", "mdp")
+
+
+def _assignment_key(text: str, start: int) -> str | None:
+    """The key the value at *start* is assigned to, or None."""
+    lo = max(0, start - 60)
+    found = _ASSIGNMENT_KEY.search(("\n" if lo == 0 else "") + text[lo:start])
+    return found.group(1) if found else None
+
+
+def _key_words(value: str) -> str:
+    """*value* as space-separated lower-case words, camelCase split."""
+    value = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)
+    return " " + _KEY_SEPARATORS.sub(" ", value).strip().lower() + " "
+
+
+def _names_a_credential(key: str, keywords: list[str]) -> bool:
+    """True when *key* names a credential.
+
+    A value assigned to a key has that key as its context; the window around it
+    is other keys' business. Any secret keyword within 150 characters made a
+    value a credential, so with "Authorization: Bearer ..." two lines up a JSON
+    record's `"id": "KD-3611868"` was a SECRET, as were a config's
+    `model='/var/lib/...'` and the `Van: Ann-Sophie` of a mail header
+    (rules-engine#136). A keyword is a word of the key, plural allowed; a long
+    one may sit inside a compound ("dbpassword", "clientsecret").
+    """
+    words = _key_words(key)
+    joined = words.replace(" ", "")
+    for kw in list(keywords) + list(_CREDENTIAL_KEY_WORDS):
+        kw_words = _key_words(kw).strip()
+        if re.search(rf"(?<![a-z0-9]){re.escape(kw_words)}s?(?![a-z0-9])", words):
+            return True
+        if len(kw_words) >= 6 and kw_words.replace(" ", "") in joined:
+            return True
+    return False
 
 
 #: Date types decided by a label. DOB and DATE_OF_DEATH share one date shape,
@@ -2120,6 +2195,7 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
     EntityType.MAC_ADDRESS: [suppress_mac_in_reference],
     EntityType.CREDIT_CARD: [suppress_card_inside_digit_run],
     EntityType.IP_ADDRESS: [suppress_ip_not_a_host],
+    EntityType.IPV6_ADDRESS: [suppress_ip_not_a_host],
 }
 #: The identifier types an example marker or a dummy value rules out.
 _EXAMPLE_TYPES = frozenset({

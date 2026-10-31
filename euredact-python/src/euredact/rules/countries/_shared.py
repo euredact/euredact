@@ -21,8 +21,12 @@ def _build_iban_pattern() -> str:
     """
     alternatives = [
         # 2-letter country + 2 check digits, then exactly (length - 4) more
-        # alphanumerics, each optionally preceded by a space or hyphen.
-        f"{code}\\d{{2}}(?:[ \\-]?[A-Z0-9]){{{length - 4}}}"
+        # alphanumerics, each optionally preceded by a space or hyphen, or by a
+        # line break and its indentation: a letter or a PDF wraps an IBAN
+        # between groups ("PL61 1090 1014\n  0000 0712 1981 2874"), and the
+        # second line was left visible with part of it read as a phone
+        # (rules-engine#138). The exact length and mod-97 still decide.
+        f"{code}\\d{{2}}(?:(?:[ \\-]|\\r?\\n[ \\t]*)?[A-Z0-9]){{{length - 4}}}"
         for code, length in sorted(IBAN_LENGTHS.items())
     ]
     return r"\b(?:" + "|".join(alternatives) + r")\b"

@@ -28,7 +28,7 @@ IBAN_LENGTHS: dict[str, int] = {
 
 def validate_iban(candidate: str) -> bool:
     """ISO 13616 IBAN validation. Move country code to end, convert letters to digits, mod 97."""
-    clean = candidate.replace(" ", "").replace("-", "").upper()
+    clean = re.sub(r"[\s\-]", "", candidate).upper()  # a wrapped IBAN (#138)
     if len(clean) < 5 or not clean[:2].isalpha() or not clean[2:4].isdigit():
         return False
 
@@ -901,6 +901,20 @@ def validate_uk_nhs(candidate: str) -> bool:
     return int(clean[9]) == check
 
 
+def validate_uk_utr(candidate: str) -> bool:
+    """UK Unique Taxpayer Reference: 10 digits, the first a check digit.
+
+    Weights 6, 7, 8, 9, 10, 5, 4, 3, 2 over digits 2-10; the sum mod 11 picks
+    the check digit from "21987654321" (HMRC's scheme, as python-stdnum
+    implements it).
+    """
+    clean = re.sub(r"\s", "", candidate)
+    if len(clean) != 10 or not clean.isdigit():
+        return False
+    total = sum(int(d) * w for d, w in zip(clean[1:], (6, 7, 8, 9, 10, 5, 4, 3, 2)))
+    return clean[0] == "21987654321"[total % 11]
+
+
 def validate_greek_afm(candidate: str) -> bool:
     """Greek AFM (Tax ID): 9 digits. Each of first 8 digits × 2^(8-i), sum mod 11 mod 10 = check."""
     clean = re.sub(r"[\s\-]", "", candidate)
@@ -1008,6 +1022,7 @@ VALIDATORS: dict[str, Callable[[str], bool]] = {
     "irish_pps": validate_irish_pps,
     "estonian_id": validate_estonian_id,
     "uk_nhs": validate_uk_nhs,
+    "uk_utr": validate_uk_utr,
     "greek_afm": validate_greek_afm,
     "greek_amka": validate_greek_amka,
     "high_entropy": validate_high_entropy,

@@ -609,6 +609,19 @@ export function validateUkNhs(candidate: string): boolean {
   return parseInt(c[9]) === check;
 }
 
+/**
+ * UK Unique Taxpayer Reference: 10 digits, the first a check digit. Weights
+ * 6, 7, 8, 9, 10, 5, 4, 3, 2 over digits 2-10; the sum mod 11 picks the check
+ * digit from "21987654321" (HMRC's scheme, as python-stdnum implements it).
+ */
+export function validateUkUtr(candidate: string): boolean {
+  const c = candidate.replace(/\s/g, "");
+  if (!/^\d{10}$/.test(c)) return false;
+  const weights = [6, 7, 8, 9, 10, 5, 4, 3, 2];
+  let total = 0; for (let i = 0; i < 9; i++) total += Number(c[i + 1]) * weights[i];
+  return c[0] === "21987654321"[total % 11];
+}
+
 export function validateGreekAfm(candidate: string): boolean {
   const c = candidate.replace(/[\s\-]/g, "");
   if (c.length !== 9 || !/^\d{9}$/.test(c)) return false;
@@ -701,6 +714,7 @@ export const VALIDATORS: Record<string, (candidate: string) => boolean> = {
   irish_pps: validateIrishPps,
   estonian_id: validateEstonianId,
   uk_nhs: validateUkNhs,
+  uk_utr: validateUkUtr,
   greek_afm: validateGreekAfm,
   greek_amka: validateGreekAmka,
   high_entropy: validateHighEntropy,

@@ -47,6 +47,62 @@ narrative lives. Sections here use that vocabulary
     Batches results.
   - Tested by `conformance/cloud_overlap.json` (11 cases), run by both SDKs
     through the cloud path against a mocked service. *(rules-engine#139)*
+- **Log text** *(rules-engine#136)*. Lines from service logs were masked
+  where nothing personal is:
+  - `48213377 bytes total` was a `PHONE`: `bytes`, `octets` and `KiB`…`TiB`
+    are units now;
+  - `http://0.0.0.0:8000`, `127.0.0.1:54170` and `[::1]:8080` were
+    `IP_ADDRESS` / `IPV6_ADDRESS`. Loopback (`127.0.0.0/8`, `::1`) and
+    unspecified (`0.0.0.0`, `::`) addresses exist on every machine and
+    identify no one's device; a private host such as `192.168.1.23` stays;
+  - `model='/var/lib/…'` was a `SECRET`. A label-gated secret licensed by any
+    keyword within 150 characters, which took the `token` inside
+    `tokenizer_mode`. A value assigned to a key now has that key as its
+    context: it is a `SECRET` when a word of the key names a credential
+    (`DB_PASSWORD=`, `clientSecret:`, `pass:`, "Your new password is:"),
+    and not otherwise.
+  - **The gateway's second pass.** It reads text the SDK masked, where
+    `[SECRET]` holds the word "secret". That placeholder, and the Bearer
+    header two lines up, made `SECRET`s of a JSON record's `"id": "KD-…"`,
+    a mail's `Van: Ann-Sophie`, a CSV row's `11:15,Heather` and a 141-character
+    run over a JSON log line. A placeholder is no context keyword any more,
+    for any type. On the IT, HR and medical benchmark sets (650 documents),
+    the SECRET spans of that second pass fell from 17 to 1 (a source path in
+    a file list, left as #126 left paths).
+  - The conformance vector for a leading-compressed IPv6 address used `::1`;
+    it uses `::8a2e:370:7334` now, and a new vector asserts `::1` is left.
+- **UK Unique Taxpayer Reference** *(rules-engine#137)*. No pattern found a
+  UTR: `Supplier UTR: 58230 19476` was left in the text, and the gateway's
+  pass caught some by accident as two postcodes. A UTR behind its label
+  (`UTR:`, `UTR `, `(UTR`, `self_assessment_utr`, "Unique Taxpayer
+  Reference", "taxpayer reference") is now `TAX_ID`, ten digits with or
+  without the space after the fifth. Two patterns, as for the Swiss AHV
+  (#82): one with HMRC's check digit (weights 6, 7, 8, 9, 10, 5, 4, 3, 2,
+  as python-stdnum implements it), and one without, since four of the six
+  benchmark UTRs fail it. The labels are delimited, because context is
+  matched by substring and a bare "utr" sits inside "Utrecht". Sequential
+  digits such as `12345 67890` stay unmasked, as every sequential value
+  does.
+- **Wrapped IBANs** *(rules-engine#138)*. An IBAN broken over a line
+  between groups (`PL61 1090 1014\n  0000 0712 1981 2874`, as letters and
+  extracted PDFs break it) was not found: the generic pattern allowed only a
+  space or a hyphen between characters, so the second line stayed visible
+  and `0000 0712 1981` was a `PHONE`. A line break and its indentation now
+  count as a separator; the exact length per country and mod-97 still decide
+  where the IBAN ends, so `IBAN: BE68 5390 0754 7034\nKBC` takes no letters
+  from the next line.
+
+### Changed
+
+- **Product names in the documentation.** The open-source SDK is
+  **euRedact Core**, the paid cloud tier (`mode="cloud"`) **euRedact Cloud**
+  (decided 2026-10-30), in the README and the package description. The
+  package, its imports and the repository keep their names. *(rules-engine#135)*
+- **Type counts in the README.** The rule engine emits 29 types: counted from
+  the country configurations, no pattern emits `OTHER`, which only the cloud
+  client returns, for a label it does not know. The type list had `OTHER`,
+  `PERSON_NAME` and `ADDRESS` in the rules block; they are now listed with
+  the cloud types and apart. 41 = 29 + 11 + `OTHER`. *(rules-engine#124)*
 
 ## 0.7.1 (2026-10-29)
 
