@@ -431,7 +431,8 @@ const results = await Promise.all(
 Bound that yourself if the batch is large. The service's rate limit answers
 `429`, which the client retries, honouring `Retry-After`, before throwing
 `RateLimitedError`. A `429` for the daily quota throws `QuotaExceededError`
-at once: it will not clear before the day does.
+at once: it will not clear before the day does. A `402` throws
+`InsufficientCreditsError` at once, for the same reason.
 
 ### Reuse one instance
 
@@ -684,7 +685,7 @@ is not, because a key cannot do it. Every call returns a `Promise`.
 | Call | Service endpoint | Resolves to |
 |---|---|---|
 | `new Account().summary()` | `GET /v1/account` | `AccountSummary` |
-| `new Account().credits()` | `GET /v1/account/credits` | `Credits` |
+| `new Account().credits()` | `GET /v1/account/credits` | `Credits`, with `budget` and `extra` (see below) |
 | `new Account().creditHistory(limit = 50)` | `GET /v1/account/credits/history` | `CreditEntry[]`, newest first; `limit` 1–500 |
 | `new Account().usage(days = 30)` | `GET /v1/account/usage` | `UsageDay[]` |
 | `new Account().usageByKey(days = 30)` | `GET /v1/account/usage/by-key` | `KeyUsage[]` |
@@ -692,6 +693,14 @@ is not, because a key cannot do it. Every call returns a `Promise`.
 | `new Account().revokeKey(keyId)` | `POST /v1/account/keys/{id}/revoke` | `KeyRevocation` |
 | `new Jobs().retrieve(jobId)` | `GET /v1/jobs/{id}` | `Job` |
 | `new Batches().list(limit = 20)` | `GET /v1/batches` | `Batch[]`, newest first; `limit` 1–100 |
+
+`Credits.balance` is what is left in all: this period's Budget
+(`credits.budget`: `granted`, `remaining`, `expiresAt`) plus prepaid extra
+volume (`credits.extra`: `remaining`, `nextExpiry`, `expiringNext`). A call
+uses the Budget first, then extra volume; Budget left at `expiresAt` lapses.
+"How much is left this month" is `credits.budget.remaining`. Either breakdown
+is `null` when the service sends none — an account without a Budget, or an
+older service — and `raw` keeps the whole answer.
 
 ```ts
 import { Account, Batches, Jobs } from "euredact";
@@ -701,7 +710,13 @@ const summary = await account.summary();
 if (summary.quotaRemaining !== null && summary.quotaRemaining < 100) {
   console.log(`${summary.quotaRemaining} documents left today`);
 }
-console.log((await account.credits()).balance);
+const credits = await account.credits();
+if (credits.budget) {        // this period's Budget, used first
+  console.log(`${credits.budget.remaining} left this period, until ${credits.budget.expiresAt}`);
+}
+if (credits.extra) {         // prepaid extra volume, used after the Budget
+  console.log(`${credits.extra.remaining} extra, ${credits.extra.expiringNext} expiring ${credits.extra.nextExpiry}`);
+}
 for (const day of await account.usage(7)) console.log(day.day, day.documents, day.tokens);
 for (const key of await account.keys()) console.log(key.id, key.name, key.active, key.lastUsedAt);
 
@@ -814,7 +829,8 @@ Test the specific ones first: `RateLimitedError` extends `QuotaExceededError`.
 
 ```ts
 import {
-  CloudError, QuotaExceededError, RateLimitedError, TooLargeError, redactAsync,
+  CloudError, InsufficientCreditsError, QuotaExceededError, RateLimitedError, TooLargeError,
+  redactAsync,
 } from "euredact";
 
 try {
@@ -826,6 +842,9 @@ try {
     // rate limit still hit after every retry: back off, then retry with the same key
   } else if (err instanceof QuotaExceededError) {
     // daily quota used up (err.detail.used, err.detail.limit): wait for tomorrow
+  } else if (err instanceof InsufficientCreditsError) {
+    // Budget and extra volume spent: err.balance left, err.required needed,
+    // err.shortfall to top up. Wait for the next period, or top up
   } else if (err instanceof TooLargeError) {
     // over the input cap: split the document and send the parts
   } else if (err instanceof CloudError) {
@@ -840,6 +859,7 @@ try {
 |---|---|---|---|
 | `NotConfiguredError` | — | no API key configured, or no global `fetch` | no |
 | `CloudError` | 401 | the key is wrong or revoked | no |
+| `InsufficientCreditsError` | 402 | the Budget and extra volume are spent; `balance`, `required`, `shortfall`, `promptTokens` and `maxResponseTokens` say by how much | **no**: it will not clear before the next period or a top-up |
 | `CloudError` | 403 | the service refused the call. Account calls are accepted with an API key while the service does not require a browser `Origin`; if that changes they answer 403 | no |
 | `CloudError` | 403 | `Batches.create` on a workspace without retention: `detail.code === "retention_required"` (see [Batches](#batches)) | no |
 | `NotFoundError` | 404 | no such job, batch or key — or another account's; also every batch call, `list()` included, while batches are not enabled on the service (`batches_not_enabled`) | no |

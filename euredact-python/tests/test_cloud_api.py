@@ -19,6 +19,7 @@ from euredact.cloud import (
     Batches,
     CloudClient,
     CloudError,
+    InsufficientCreditsError,
     Jobs,
     NotFoundError,
     QuotaExceededError,
@@ -127,6 +128,52 @@ def test_a_quota_429_is_final_and_an_edge_429_is_retried(case):
         assert len(service.requests) == 3
 
 
+# -- 402: the Budget and extra volume are spent -------------------------------
+
+
+def _answer(case):
+    if "json" in case:
+        return httpx.Response(case["status"], json=case["json"])
+    return httpx.Response(case["status"], text=case["text"],
+                          headers={"Content-Type": "text/html"})
+
+
+@pytest.mark.parametrize("case", CASES["insufficient_credits"], ids=lambda c: c["id"])
+def test_a_402_raises_insufficient_credits_at_once(case):
+    _configure(max_retries=3)
+    service = _Service(_answer(case))
+    with CloudClient(client=service.client()) as client:
+        with pytest.raises(InsufficientCreditsError) as exc:
+            client.redact(DOC, country="BE")
+    assert len(service.requests) == 1
+    err = exc.value
+    assert isinstance(err, CloudError) and err.status == 402
+    assert {k: getattr(err, k) for k in case["expect"]} == case["expect"]
+    assert err.detail == (case.get("json") or {}).get("detail", {})
+
+
+def test_a_402_from_the_top_level_cloud_call_is_the_same_error():
+    _configure()
+    case = CASES["insufficient_credits"][0]
+    service = _Service(_answer(case))
+    import euredact.cloud.client as client_module
+    real = client_module.CloudClient
+    client_module.CloudClient = lambda *a, **kw: real(client=service.client())
+    try:
+        with pytest.raises(InsufficientCreditsError) as exc:
+            euredact.redact("Mijn naam is Anna Weber.", countries=["BE"], mode="cloud")
+    finally:
+        client_module.CloudClient = real
+    assert exc.value.shortfall == 2770
+
+
+def test_a_402_on_an_account_read_is_not_retried():
+    service, account = _account(_answer(CASES["insufficient_credits"][0]))
+    with pytest.raises(InsufficientCreditsError):
+        account.summary()
+    assert len(service.requests) == 1
+
+
 # -- top-level idempotency key -------------------------------------------------
 
 
@@ -200,9 +247,13 @@ def test_account_summary():
         assert service.requests[0].url.path == "/v1/account"
 
 
-def test_account_credits():
-    service, account = _account((200, ACCOUNT["credits"]["wire"]))
-    assert _without_raw(account.credits()) == ACCOUNT["credits"]["expect"]
+@pytest.mark.parametrize(
+    "name", ["credits", "credits_with_budget_and_extra", "credits_extra_only"])
+def test_account_credits(name):
+    service, account = _account((200, ACCOUNT[name]["wire"]))
+    credits = account.credits()
+    assert _without_raw(credits) == ACCOUNT[name]["expect"]
+    assert credits.raw == ACCOUNT[name]["wire"]
     assert service.requests[0].url.path == "/v1/account/credits"
 
 

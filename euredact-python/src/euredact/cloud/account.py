@@ -105,13 +105,58 @@ class AccountSummary:
 
 
 @dataclass(frozen=True)
+class Budget:
+    """This period's Budget: what the plan grants each period, used first."""
+
+    granted: int | None
+    remaining: int | None
+    expires_at: str | None
+    """When the period ends and what is left of the Budget lapses (ISO 8601)."""
+
+    @classmethod
+    def _from(cls, raw: object) -> Budget | None:
+        if not isinstance(raw, dict):
+            return None
+        return cls(granted=_integer(raw.get("granted")),
+                   remaining=_integer(raw.get("remaining")),
+                   expires_at=_string(raw.get("expires_at")))
+
+
+@dataclass(frozen=True)
+class Extra:
+    """Prepaid extra volume, used once the Budget is spent."""
+
+    remaining: int | None
+    next_expiry: str | None
+    """When the oldest extra volume expires (ISO 8601), or None."""
+    expiring_next: int | None
+    """How much expires then."""
+
+    @classmethod
+    def _from(cls, raw: object) -> Extra | None:
+        if not isinstance(raw, dict):
+            return None
+        return cls(remaining=_integer(raw.get("remaining")),
+                   next_expiry=_string(raw.get("next_expiry")),
+                   expiring_next=_integer(raw.get("expiring_next")))
+
+
+@dataclass(frozen=True)
 class Credits:
-    """``GET /v1/account/credits``: the balance, in credits."""
+    """``GET /v1/account/credits``: the balance, in credits.
+
+    ``balance`` is ``budget.remaining`` plus ``extra.remaining``. A call uses
+    the Budget first, then extra volume (rules-engine#146). Either breakdown
+    is None when the service sends none: an account without a Budget, or a
+    service older than the split.
+    """
 
     balance: int | None
     granted: int | None
     spent: int | None
     unit: str | None
+    budget: Budget | None = None
+    extra: Extra | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -121,6 +166,8 @@ class Credits:
             granted=_integer(raw.get("granted")),
             spent=_integer(raw.get("spent")),
             unit=_string(raw.get("unit")),
+            budget=Budget._from(raw.get("budget")),
+            extra=Extra._from(raw.get("extra")),
             raw=raw,
         )
 

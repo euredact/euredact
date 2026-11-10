@@ -16,6 +16,7 @@ import { CloudClient } from "../cloud/client.js";
 import { configure, reset, type CloudConfig } from "../cloud/config.js";
 import {
   CloudError,
+  InsufficientCreditsError,
   NotFoundError,
   QuotaExceededError,
   RateLimitedError,
@@ -30,6 +31,7 @@ const CASES = JSON.parse(
 ) as {
   results: Array<{ id: string; wire: Json; expect: Json }>;
   throttling: Array<{ id: string; status: number; json?: Json; text?: string; expect: string }>;
+  insufficient_credits: Array<{ id: string; status: number; json?: Json; text?: string; expect: Json }>;
   batches: Array<{ id: string; wire: Json; expect: Json }>;
   account: Record<string, { wire: Json; expect: unknown }>;
 };
@@ -83,6 +85,24 @@ for (const c of CASES.results) {
       job_id: cloud.jobId, model_version: cloud.modelVersion, has_usage: cloud.usage !== undefined,
       unlocated: cloud.unlocated.map(u => ({ text: u.text, entity_type: String(u.entityType) })),
     }, c.expect);
+  });
+}
+
+// ── 402: the Budget and extra volume are spent ──────────────────────────────
+
+for (const c of CASES.insufficient_credits) {
+  test(`a 402 throws InsufficientCreditsError at once: ${c.id}`, async () => {
+    config({ maxRetries: 3 } as Partial<CloudConfig>);
+    const { fetchImpl, requests } = service({ status: c.status, json: c.json, text: c.text });
+    const err = await new CloudClient().redact(DOC, { country: "BE", fetchImpl }).then(() => null, e => e);
+    assert.ok(err instanceof InsufficientCreditsError);
+    assert.ok(err instanceof CloudError);
+    assert.equal(err.status, 402);
+    assert.equal(requests.length, 1);
+    const got = snake({ balance: err.balance, required: err.required, shortfall: err.shortfall,
+                        promptTokens: err.promptTokens, maxResponseTokens: err.maxResponseTokens });
+    assert.deepEqual(got, c.expect);
+    assert.deepEqual(err.detail, (c.json?.detail as Json | undefined) ?? {});
   });
 }
 
@@ -167,10 +187,22 @@ test("account summary", async () => {
   }
 });
 
-test("account credits", async () => {
-  const { account: a, requests } = account({ status: 200, json: ACCOUNT.credits.wire });
-  assert.deepEqual(snake(await a.credits()), ACCOUNT.credits.expect);
-  assert.equal(requests[0].url.pathname, "/v1/account/credits");
+for (const name of ["credits", "credits_with_budget_and_extra", "credits_extra_only"]) {
+  test(`account credits: ${name}`, async () => {
+    const { account: a, requests } = account({ status: 200, json: ACCOUNT[name].wire });
+    const credits = await a.credits();
+    assert.deepEqual(snake(credits), ACCOUNT[name].expect);
+    assert.deepEqual(credits.raw, ACCOUNT[name].wire);
+    assert.equal(requests[0].url.pathname, "/v1/account/credits");
+  });
+}
+
+test("a 402 on an account read is not retried", async () => {
+  const c = CASES.insufficient_credits[0];
+  const { account: a, requests } = account({ status: c.status, json: c.json });
+  const err = await a.summary().then(() => null, e => e);
+  assert.ok(err instanceof InsufficientCreditsError);
+  assert.equal(requests.length, 1);
 });
 
 test("account credit history", async () => {

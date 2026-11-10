@@ -11,6 +11,34 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Added
+
+- **`InsufficientCreditsError` for a 402.** Once metering is on, a cloud
+  call on an account whose Budget and extra volume are spent gets HTTP 402.
+  The SDK raised a plain `CloudError` for it, so a caller had to branch on
+  `err.status === 402` (rules-engine#145). It now raises
+  `InsufficientCreditsError`, a `CloudError` subclass, so existing handlers
+  still catch it. It is never retried: like the daily-quota 429, it holds
+  until the next period or a top-up. `balance`, `required`, `shortfall`,
+  `promptTokens` and `maxResponseTokens` are read from the gateway's
+  `detail`; one it did not send, or sent malformed, is `null`, and `detail`
+  keeps the whole object. Every call raises it the same way: `redactAsync`,
+  `Account`, `Jobs` and `Batches`.
+- **The credit balance broken down.** `new Account().credits()` read only
+  `balance`, `granted`, `spent` and `unit`; the service also says what the
+  balance is made of, which callers could reach only through `raw`
+  (rules-engine#146). `Credits` gains `budget` (`granted`, `remaining`,
+  `expiresAt`: this period's Budget, used first and lapsing at the period's
+  end) and `extra` (`remaining`, `nextExpiry`, `expiringNext`: prepaid
+  volume, used after the Budget). Either is `null` when the service sends
+  none, from an account without a Budget or an older service, and `raw` is
+  unchanged.
+- Both are tested by new cases in `conformance/cloud_result.json`, run by
+  both SDKs: three 402 bodies (full, partly malformed, not JSON) and three
+  credit answers (no breakdown, Budget and extra, extra only).
+
 ## 0.8.0 (2026-10-31)
 
 ### Added
