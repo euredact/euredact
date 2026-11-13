@@ -7918,14 +7918,14 @@
       ],
       "mustDetect": {
         "PHONE": [
-          "0612345678"
+          "０６１２３４５６７８"
         ]
       },
       "mustNotDetect": [
         "TAX_ID"
       ],
       "expectRedactedText": "Tel [PHONE]",
-      "notes": "rules-engine#150: digits are folded to ASCII before matching, one character for one. The Python SDK masked nine digits as a TAX_ID and left the tenth; the TypeScript SDK left all ten. The detection text is the normalised one, as for NFC."
+      "notes": "rules-engine#150: digits are folded to ASCII before matching, one character for one. The Python SDK masked nine digits as a TAX_ID and left the tenth; the TypeScript SDK left all ten. The detection reports the digits as written."
     },
     {
       "id": "email-between-a-composition-and-an-expansion",

@@ -38,6 +38,10 @@ narrative lives. Sections here use that vocabulary
     length. A composition (one shorter) and an expansion such as U+0958 (one
     longer) cancel out, and every mask between them landed one character
     early, leaving the last character of an e-mail visible.
+  - **A detection's text is the document's.** It was the normalised form, so
+    a phone in full-width digits reported `0612345678` and a decomposed
+    accent its composed form; it is now the text at the detection's offsets,
+    which `make sweep` checks on every corpus document.
 - **Quadratic time on text dense with numbers** *(rules-engine#150)*. Three
   per-candidate scans: the fragment test walked back through every rejected
   span, and the account-run and column-header suppressors re-read the

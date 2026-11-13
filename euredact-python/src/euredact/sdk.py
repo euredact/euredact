@@ -854,20 +854,23 @@ class EuRedact:
         if context is not None:
             context.add(evidence, chunk_offset)
 
-        # Map offsets back to original text if normalization changed length
-        if offset_mapping is not None:
-            # replace() rather than a field-by-field rebuild: this listed every
-            # field explicitly and so silently dropped any new one, which is
-            # how out_of_scope and country_confidence would have been lost on
+        # Map offsets back to the original text, and report what it says there:
+        # a detection's text is the document's, full-width digits and NFD
+        # included, not the normalised form the patterns read (rules-engine#150).
+        if normalized_text != text:
+            # replace() rather than a field-by-field rebuild, which silently
+            # dropped any new field (out_of_scope, country_confidence) on
             # exactly the inputs that need normalising.
-            detections = [
-                replace(
-                    d,
-                    start=map_offset_to_original(d.start, offset_mapping),
-                    end=map_offset_to_original(d.end, offset_mapping),
-                )
-                for d in detections
-            ]
+            if offset_mapping is not None:
+                detections = [
+                    replace(
+                        d,
+                        start=map_offset_to_original(d.start, offset_mapping),
+                        end=map_offset_to_original(d.end, offset_mapping),
+                    )
+                    for d in detections
+                ]
+            detections = [replace(d, text=text[d.start:d.end]) for d in detections]
 
         # Filter date types unless opted in
         if not detect_dates:

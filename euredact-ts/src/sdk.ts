@@ -974,12 +974,18 @@ export class EuRedact {
     if (context !== null) context.add(evidence, chunkOffset);
     let detections = rawDetections;
 
-    if (offsetMapping !== null) {
-      detections = detections.map(d => ({
-        ...d,
-        start: mapOffsetToOriginal(d.start, offsetMapping),
-        end: mapOffsetToOriginal(d.end, offsetMapping),
-      }));
+    // Map offsets back to the original text, and report what it says there: a
+    // detection's text is the document's, full-width digits and NFD included,
+    // not the normalised form the patterns read (rules-engine#150).
+    if (normalizedText !== text) {
+      if (offsetMapping !== null) {
+        detections = detections.map(d => ({
+          ...d,
+          start: mapOffsetToOriginal(d.start, offsetMapping),
+          end: mapOffsetToOriginal(d.end, offsetMapping),
+        }));
+      }
+      detections = detections.map(d => ({ ...d, text: text.slice(d.start, d.end) }));
     }
 
     if (!detectDates) {
