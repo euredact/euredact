@@ -11,9 +11,10 @@
  */
 
 import assert from "node:assert/strict";
-import { EuRedact, restore } from "../sdk.js";
+import { EuRedact, domainOf, restore } from "../sdk.js";
 import { redact } from "../index.js";
 import { configure, reset } from "../cloud/config.js";
+import { isRegisteredBic, setBicRegistry } from "../rules/bicRegistry.js";
 import { EntityType, type RedactResult } from "../types.js";
 
 const DOC = "Contact jan@example.com or piet@example.com at ACME NV; ACME NV pays IBAN NL91 ABNA 0417 1643 00.";
@@ -182,6 +183,29 @@ async function withCloud(fn: () => Promise<void>): Promise<void> {
     reset();
   }
 }
+
+test("a URL's domain is its host, not what follows an @ in its query", () => {
+  // allowlistDomains: ["euredact.be"] exempted a cloud URL span whole, the
+  // number in its query included (rules-engine#152).
+  assert.equal(domainOf(EntityType.URL, "https://crm.example.com/c?ssn=1&contact=support@euredact.be"), "crm.example.com");
+  assert.equal(domainOf(EntityType.URL, "https://jan@crm.example.com/x"), "crm.example.com");
+  assert.equal(domainOf(EntityType.EMAIL, "support@euredact.be"), "euredact.be");
+});
+
+test("a BIC registry that throws leaves the BIC masked", () => {
+  // Fail closed: it fell back to the seed list, which does not know this one,
+  // and the BIC was suppressed (rules-engine#152).
+  assert.equal(isRegisteredBic("ZQXWBEBB"), false);
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    setBicRegistry(() => { throw new Error("registry timeout"); });
+    assert.equal(isRegisteredBic("ZQXWBEBB"), true);
+  } finally {
+    console.warn = warn;
+    setBicRegistry(null);
+  }
+});
 
 testAsync("the allowlisted value is put back from the service spans", () =>
   withCloud(async () => {

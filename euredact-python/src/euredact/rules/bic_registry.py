@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import functools
 import threading
+import warnings
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -215,6 +216,20 @@ def registry_generation() -> int:
     return _generation
 
 
+_provider_warned = False
+
+
+def _warn_provider_failed(exc: Exception) -> None:
+    """Warn once per process that the installed BIC registry raised."""
+    global _provider_warned
+    if not _provider_warned:
+        _provider_warned = True
+        warnings.warn(
+            f"the BIC registry installed with set_bic_registry raised {exc!r}; "
+            "BICs it could not answer for are treated as registered and masked",
+            RuntimeWarning, stacklevel=3)
+
+
 def set_bic_registry(
     registry: BicRegistryProvider | Iterable[str] | str | Path | None,
 ) -> None:
@@ -283,8 +298,12 @@ def is_registered_bic(candidate: str) -> bool:
         try:
             if provider(clean) or provider(prefix):
                 return True
-        except Exception:  # noqa: BLE001 - a broken provider must not break detection
-            pass
+        except Exception as exc:  # noqa: BLE001 - a broken provider must not break detection
+            # Fail closed: the seed list would answer instead, and a BIC it
+            # does not know was then suppressed with no word of why
+            # (rules-engine#152). Unanswered, the BIC stays masked.
+            _warn_provider_failed(exc)
+            return True
 
     return prefix in SEED_BIC6_PREFIXES
 

@@ -2,6 +2,7 @@ import { EntityType, type PatternDef } from "../types.js";
 import { isKnownInstitution, isRegisteredBic } from "./bicRegistry.js";
 import { DE_DISTRICT_CODES } from "./deDistricts.js";
 import { cpAfter, cpBefore } from "./codepoints.js";
+import { VALIDATORS } from "./validators.js";
 
 const CONTEXT_CHARS = 150;
 
@@ -24,14 +25,18 @@ const _UWB = "(?![a-zA-Z\\u00C0-\\u024F\\u0400-\\u04FF])";
 // bare "\b" here and so could never match "1163 €," at all; this port used the
 // lookahead below and did not have that defect. Kept split so the difference
 // cannot come back.
-const CURRENCY_SYMBOL = "€|\\$|£|¥|₺|zł|Kč|лв|kn|Ft|₽";
+// The letter symbols need word boundaries: "Kn" started "Knud" and "ft" ended
+// "Kraft" (rules-engine#152).
+const CURRENCY_SYMBOL = "€|\\$|£|¥|₺|₽|(?<!\\p{L})(?:zł|Kč|лв|kn|Ft)(?!\\p{L})";
 const CURRENCY_WORD =
   "EUR|USD|GBP|CHF|ISK|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|HRK|" +
   "euro|euros|dollar|dollars|pond|kronor|kroner|kronur|kr|" +
   "złoty|korun|forint|lei|leva";
-const CURRENCY_AFTER = new RegExp(`^\\s*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "i");
-const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}\\s*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "i");
-const CURRENCY_BEFORE = new RegExp(`(?:(?:${CURRENCY_SYMBOL})|\\b(?:${CURRENCY_WORD}))\\s*$`, "i");
+// On the number's own line: across a break the next line's first word was the
+// amount's currency (rules-engine#152, as #51 did for units).
+const CURRENCY_AFTER = new RegExp(`^[ \\t]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
+const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}[ \\t]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
+const CURRENCY_BEFORE = new RegExp(`(?:(?:${CURRENCY_SYMBOL})|\\b(?:${CURRENCY_WORD}))[ \\t]*$`, "iu");
 const AMOUNT_LABEL_BEFORE =
   /\b(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|Upphæð|Importe|Importo|Valore|Wartość|Kwota|Částka|Összeg|Sum|Beloop|Prix|Preis|Price|Loyer|Miete|Huur|Rent|Betrag)(?:\s+\w+)?\s*:?\s*$/i; // second word separate: not "Rent"+"enversicherungsnummer" (rules-engine#111)
 
@@ -47,6 +52,8 @@ const REFERENCE_BEFORE = /\b(?:dossier|ref\.?|referentie|reference|référence|f
 // "#" before a number marks a reference in every language in scope — a ticket,
 // an order, a line item — and never a postcode or a national identifier.
 const HASH_BEFORE = /#\s*$/;
+/** Checks a random number passes at most once in 97 (rules-engine#152). */
+const STRONG_CHECKSUMS = new Set(["iban", "belgian_nn", "belgian_vat", "french_nir"]);
 
 // A short uppercase tag hyphenated to the number: "IR-43433", "INC-2024".
 const REF_PREFIX_BEFORE = /(?:^|[\s([])[A-Z]{2,5}-$/;
@@ -61,11 +68,24 @@ const POSTAL_PREFIX_COUNTRIES = new Set([
   "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK", "UK",
 ]);
 
-const LEGAL_BEFORE = /(?:Art(?:ikel|icle|\.)|§|Artikel|Section|Sectie|Afdeling|paragraaf|Absatz|alinéa|punt|point|Punkt|lid)\s*$/i;
+// Each word starts a word: "lid" ended "Gezinslid" (rules-engine#152).
+const LEGAL_BEFORE = /(?:§|(?<!\p{L})(?:Art(?:ikel|icle|\.)|Artikel|Section|Sectie|Afdeling|paragraaf|Absatz|alinéa|punt|point|Punkt|lid))\s*$/iu;
 
 // An operator on the same line only: a bullet or "---" on the next line is not a minus sign (rules-engine#91).
 const MATH_BEFORE = /[=+\-×÷*/][^\S\r\n]*$/;
 const MATH_AFTER = /^[^\S\r\n]*[=+\-×÷*/]/;
+/**
+ * An operator with a number (or an amount word) on its other side: arithmetic.
+ * Any operator next to the value used to count, so "BSN=111222333", a bullet,
+ * "Jan Jansen - 0612345678" and the slash between two phone numbers dropped the
+ * value (rules-engine#152). For an identifier "/" and "-" count only glued to a
+ * letter or digit, joining a longer token ("PV-LS-2026-652314").
+ */
+const OPERAND_OPERATOR_BEFORE =
+  /(?:[\d)]|(?<!\p{L})(?:total|totaal|sum|som|summe|summa|somme|result|resultaat|ergebnis))[^\S\r\n]*[=+×÷*][^\S\r\n]*$/iu;
+const OPERATOR_OPERAND_AFTER = /^[^\S\r\n]*[=+×÷*][^\S\r\n]*[\d(]/;
+const GLUED_JOIN_BEFORE = /[\p{L}\p{N}][/\-]$/u;
+const GLUED_JOIN_AFTER = /^[/\-][\p{L}\p{N}]/u;
 
 // "A-1010", "B-2000", "L-1234", "CH-8000", "D-10115": a country prefix on a
 // postal code, not a minus sign.
@@ -280,10 +300,14 @@ const COMPOUND = new RegExp(String.raw`^` + COMPOUND_PART + String.raw`(?:-` + C
 const NAME_PAIR = /^[A-ZÀ-Þ][a-zß-ÿ]{2,}-[A-ZÀ-Þ][a-zß-ÿ]{2,}$/;
 const CONNECTION_WITH_REFERENCE = /^[a-z]+:\/\/[^\s:@]+:\$\{[^}]*\}@/;
 
-function suppressSecretNotASecret(_text: string, match: RawMatch): boolean {
+function suppressSecretNotASecret(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.SECRET) return false;
   const bare = coreToken(match.text);
   if (TIMESTAMP_FRAGMENT.test(bare)) return true;
+  // Under a key whose last word names a credential the key says what the value
+  // is: a passphrase of words ("Correct-Horse-Battery") was dropped for its
+  // shape (rules-engine#152). A reference to where a secret is kept still is not one.
+  if (underACredentialKey(text, match)) return bare.startsWith("${") || CONNECTION_WITH_REFERENCE.test(bare);
   if (NOT_A_SECRET.test(bare)) return true;
   if (URL_LIKE.test(bare) && !URL_WITH_CREDENTIALS.test(bare)) return true;
   if (LDAP_DN.test(bare)) return true;
@@ -329,6 +353,9 @@ function suppressTaxidAsIpAddress(_text: string, match: RawMatch): boolean {
 function suppressPhoneAsNumberRange(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.PHONE) return false;
   if (YEAR_RANGE.test(match.text.trim())) return true;
+  // A fraction is unsigned and short: "+31612345678" after "1017," in a CSV row
+  // is a field (rules-engine#152).
+  if (match.text.startsWith("+") || (match.text.match(/\d/g) ?? []).length > 8) return false;
   return DECIMAL_TAIL_BEFORE.test(cpBefore(text, match.start, 2));
 }
 
@@ -344,8 +371,16 @@ function suppressCurrency(text: string, match: RawMatch): boolean {
 function suppressUnits(text: string, match: RawMatch): boolean {
   if (!NUMERIC_TYPES.has(match.patternDef.entityType)) return false;
   const [, after] = getContext(text, match.start, match.end);
-  return UNIT_AFTER.test(after);
+  return UNIT_AFTER.test(after) || SINGLE_LETTER_UNIT_AFTER.test(after);
 }
+
+/**
+ * A bare metre, gram or litre: lower case, and not an initial or an elision
+ * ("M. de Vries", "G. Jansen" are names). The Python list had these and this
+ * one did not; written case-insensitively there, they took initials for units
+ * and dropped the number before them (rules-engine#152).
+ */
+const SINGLE_LETTER_UNIT_AFTER = /^[ \t]*[mgl](?![\p{L}\p{N}_.'’])/u;
 
 /**
  * Suppress numbers preceded by reference/invoice/dossier keywords.
@@ -367,6 +402,10 @@ const LEGAL_TYPES = new Set<EntityType | string>([EntityType.PHONE, EntityType.N
 function suppressReference(text: string, match: RawMatch): boolean {
   const applicable = REFERENCE_TYPES;
   if (!applicable.has(match.patternDef.entityType)) return false;
+  // A mod-97 checksum outranks a reference word: "Pay invoice:
+  // NL91ABNA0417164300", "Patiënt #85031928479" (rules-engine#152).
+  const v = match.patternDef.validator;
+  if (v !== null && STRONG_CHECKSUMS.has(v) && VALIDATORS[v](match.text)) return false;
   const [before] = getContext(text, match.start, match.end);
   if (REFERENCE_BEFORE.test(before)) return true;
   const adjacent = cpBefore(text, match.start, 8);
@@ -403,7 +442,11 @@ function suppressMath(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType === EntityType.POSTAL_CODE && COUNTRY_PREFIX_HYPHEN.test(before)) {
     return false;
   }
-  return MATH_BEFORE.test(before) || MATH_AFTER.test(after);
+  if (match.patternDef.entityType === EntityType.POSTAL_CODE) return MATH_BEFORE.test(before) || MATH_AFTER.test(after);
+  // An international number is never part of a reference: in
+  // "+49 171 2345678-62657" the glued tail is an extension.
+  return OPERAND_OPERATOR_BEFORE.test(before) || OPERATOR_OPERAND_AFTER.test(after)
+    || (!match.text.startsWith("+") && (GLUED_JOIN_BEFORE.test(before) || GLUED_JOIN_AFTER.test(after)));
 }
 
 function suppressSequential(_text: string, match: RawMatch): boolean {
@@ -600,8 +643,10 @@ const EXTENSION_BEFORE =
  */
 const COUNT_LABEL_BEFORE =
   /(?<![A-Za-z0-9_])(?:employees|headcount|staff|mitarbeiter(?:innen)?|beschäftigte|werknemers|medewerkers|employés|salariés|effectifs?|dipendenti|empleados|pracowników|zaměstnanců)\s*[:=]?\s*$/i;
+// The model-name branch ("OptiPlex 7090") is same-line and skips surnames:
+// "Sean McCarthy\n1000 Bruxelles" lost its postcode (rules-engine#152).
 const NOT_POSTAL_BEFORE =
-  /(?<![A-Za-z0-9_])(?:(?:ISO(?:\/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*|[A-Za-z]*[a-z][A-Z][A-Za-z]*\s+)$/;
+  /(?<![A-Za-z0-9_])(?:(?:ISO(?:\/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*|(?!(?:Mc|Mac|De|Di|Da|Du|Le|La|Van|Von|O)[A-Z])[A-Za-z]*[a-z][A-Z][A-Za-z]*[ \t]+)$/;
 
 /**
  * What else a number is, by what touches it (rules-engine#126): a build,
@@ -855,10 +900,13 @@ function suppressDePlateUnknownDistrict(text: string, match: RawMatch): boolean 
   return true;
 }
 
-function suppressNatidAsPassport(text: string, match: RawMatch): boolean {
-  if (match.patternDef.entityType !== EntityType.NATIONAL_ID) return false;
-  const [before] = getContext(text, match.start, match.end);
-  return PASSPORT_CONTEXT_BEFORE.test(before);
+/**
+ * A passport label right before `start`: the engine relabels a NATIONAL_ID
+ * there as PASSPORT. As a suppressor it dropped the value: "Passport:
+ * 85031928479" passes the Belgian check and was printed in full (rules-engine#152).
+ */
+export function labelledAPassport(text: string, start: number): boolean {
+  return PASSPORT_CONTEXT_BEFORE.test(cpBefore(text, start, CONTEXT_CHARS));
 }
 
 function suppressSeNatidAsOrg(text: string, match: RawMatch): boolean {
@@ -1225,7 +1273,9 @@ function bicShapedWord(text: string, start: number, end: number, token: string):
 // An identifier cue that is really a postal label -- see the use below.
 const POSTAL_LABEL_CUE = /^post/i;
 
-const ID_CUE_BEFORE = /(?:[\w\-]*(?:Nr|N[°ºo]|Nummer|Numero|Numéro)|No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen)\.?\s*:?\s*$/i;
+// A compound ends in "N°", not "no" ("Bruno"), and the short words start a
+// word ("Díaz") (rules-engine#152).
+const ID_CUE_BEFORE = /(?:[\w\-]*(?:Nr|N[°º]|Nummer|Numero|Numéro)|(?<!\p{L})(?:No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen))\.?\s*:?\s*$/iu;
 
 // An international dialling prefix earlier on the same line, with nothing but
 // number punctuation in between: these digits belong to the phone detector.
@@ -1388,6 +1438,16 @@ const ASSIGNMENT_KEY = /[\n,;{}()[\]|:=]([^\n,;{}()[\]|:=]{1,48}?)["'`]?\]?[ \t]
 const KEY_SEPARATORS = /[\s_\-.:"'`$[\]{}()/\\,;|@#]+/g;
 /** Credential words that name a credential only as a key: `pass=`, `pwd:`, `"pin":`. */
 const CREDENTIAL_KEY_WORDS = ["pass", "pwd", "pw", "pin", "otp", "passphrase", "authorization", "authentication", "mdp"];
+
+/** The value is assigned to a key whose last word names a credential:
+ *  `password=`, `client_secret =`; not `Passwort-Richtlinie`, `secret_name`. */
+function underACredentialKey(text: string, match: RawMatch): boolean {
+  const keywords = match.patternDef.contextKeywords;
+  const key = keywords.length > 0 ? assignmentKey(text, match.start) : null;
+  if (key === null) return false;
+  const words = keyWords(key).trim().split(" ");
+  return words.length > 0 && words[0] !== "" && namesACredential(words[words.length - 1], keywords);
+}
 
 function assignmentKey(text: string, start: number): string | null {
   const lo = Math.max(0, start - 60);
@@ -1618,13 +1678,16 @@ function suppressCardInsideDigitRun(text: string, match: RawMatch): boolean {
   if (!sep) return false;
   const s = sep.replace(/[-\\^$.*+?()[\]{}|]/g, "\\$&");
   const before = cpBefore(text, match.start, 6);
-  const after = cpAfter(text, match.end, 6);
-  return new RegExp(`(?<!\\d)\\d{4}${s}$`).test(before) || new RegExp(`^${s}\\d{4}(?!\\d)`).test(after);
+  const after = cpAfter(text, match.end, 11);
+  // After the card a run means two more groups: one is its own expiry
+  // ("4111 1111 1111 1111 1225 123"), and dropping the card left eight of its
+  // digits to a phone and the rest in the clear (rules-engine#152).
+  return new RegExp(`(?<!\\d)\\d{4}${s}$`).test(before) || new RegExp(`^${s}\\d{4}${s}\\d{4}(?!\\d)`).test(after);
 }
 
 const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneServiceNumber, suppressPhoneInsideAccountRun, suppressPhoneDateOverlap, suppressPhoneAsNumberRange],
-  [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressNatidAsPassport, suppressSeNatidAsOrg],
+  [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressSeNatidAsOrg],
   [EntityType.SSN]: [suppressCurrency, suppressUnits, suppressReference, suppressMath],
   [EntityType.TAX_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressTaxidAsIpAddress],
   [EntityType.POSTAL_CODE]: [suppressCurrency, suppressUnits, suppressMath, suppressLegal, suppressYearAsPostal, suppressPostalAfterDisqualifyingWord, suppressPostalInsideIban, suppressPostalAsHouseNumber, suppressPostalInLongerIdentifier, suppressReference],

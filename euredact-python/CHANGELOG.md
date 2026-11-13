@@ -72,6 +72,56 @@ narrative lives. Sections here use that vocabulary
   `passport`, `numéro de passeport`), where every other country and the
   TypeScript SDK use the shared multilingual list: "Document de voyage :
   12AB34567" was a passport in TypeScript only.
+- **Suppressors that dropped real values** *(rules-engine#152)*. A
+  suppressor removes a detection, and the value stays in the text with
+  nothing reported, so one broader than its stated condition is a leak. From
+  a review of each against its comment:
+  - **Maths.** Any operator next to the value counted: `BSN=111222333`, a
+    `- ` bullet, `Jan Jansen - 0612345678`, `0612345678 / 0687654321`. For an
+    identifier, an operator now counts with a number (or an amount word,
+    `total = …`) on its other side, and `-` or `/` only glued to a letter or
+    digit, joining a longer token (`PV-LS-2026-652314`). A bare postcode keeps
+    the old rule (`12/2024`, `2024-2025`).
+  - **Currency.** The windows crossed lines and the letter symbols had no
+    boundary: `Knud` on the next line was kuna, `Kraft` forint. Same line
+    only, and word boundaries around `zł`, `Kč`, `лв`, `kn`, `Ft`.
+  - **Units.** `m`, `g` and `l` matched case-insensitively and took initials
+    for units (`M. de Vries`, `G. Jansen`). Lower case only, and not before a
+    full stop or apostrophe.
+  - **Passport label.** A national number behind a passport label was
+    dropped (`Passport: 85031928479` passes the Belgian check); it is now
+    relabelled `PASSPORT`, as #53 intended.
+  - **Legal words** start a word: `lid` ended `Gezinslid`.
+  - **Decimal tail.** `1017,+31612345678` in a CSV row read as the decimals
+    of 1017; a fraction is now unsigned and at most eight digits.
+  - **Card numbers.** A card followed by its expiry was dropped as part of a
+    longer digit run, and a phone took eight of its digits. After the card,
+    a run now means two more groups.
+  - **Passphrases.** Under a key whose last word names a credential
+    (`password=`, `client_secret =`), a value is a secret whatever its shape:
+    `Correct-Horse-Battery` was dropped as a compound word. A key using the
+    word as a modifier (`Passwort-Richtlinie`, `secret_name`) does not count.
+  - **Identifier labels before a postcode.** `No`, `Az`, `num` were matched
+    at the end of any word, so `Bruno`, `Moreno`, `Díaz` were labels and the
+    postcode on the next line was dropped. They start a word now, and a
+    compound ends in `N°`, not `no`.
+  - **Model names before a postcode.** The inner-capital branch (`OptiPlex
+    7090`) is same-line and skips `Mc`/`Mac`/`De`/… surnames: `McCarthy`.
+  - **References.** A word like "invoice" or a `#` dropped values with a
+    mod-97 checksum (IBAN, Belgian national number and VAT, French NIR):
+    `Pay invoice: NL91ABNA0417164300`. Those now stay; a weaker check (an
+    11-proof number behind `Factuurnummer:`) still yields to the reference.
+  - **International numbers with a glued extension.** `+49 171 2345678-62657`
+    fails E.164 whole, and the German number inside it was dropped as a
+    fragment; a shorter `+` number of the same type from the same offset is
+    kept.
+  - **BIC registry errors.** A registry that raised fell back to the seed
+    list, and a BIC the seed list does not know was suppressed silently. It
+    now counts as registered (masked), with one warning.
+  - **URL domains.** `allowlist_domains` read a URL's domain after its last
+    `@`, which can be in the query: a cloud URL span with
+    `contact=support@euredact.be` in it was exempted whole. It reads the host.
+  - 22 conformance vectors, all failing on 0.8.0.
 
 ## 0.8.0 (2026-10-31)
 
