@@ -399,3 +399,24 @@ class TestPolishIdCardAndRegon:
     ])
     def test_invalid_regon(self, value: str) -> None:
         assert not VALIDATORS["polish_regon"](value)
+
+
+class TestValidIdentifiersTheValidatorsRejected:
+    """rules-engine#150."""
+
+    def test_a_portuguese_nif_of_a_non_resident_starts_with_45(self):
+        from euredact.rules.validators import validate_portuguese_nif
+        assert validate_portuguese_nif("455200122") is True
+        assert validate_portuguese_nif("412345678") is False
+
+    def test_a_czech_birth_number_up_to_1985_may_carry_check_digit_0(self):
+        # 720610758 % 11 == 10: before 1986 written with check digit 0, so the
+        # whole number is not divisible by 11 and is still valid.
+        assert validate_czech_birth_number("7206107580") is True
+        assert validate_czech_birth_number("8711104920") is False  # 1987: no exception
+
+    def test_an_omocodic_italian_codice_fiscale(self):
+        from euredact.rules.validators import validate_italian_cf
+        assert validate_italian_cf("TSTTST80A01H501G") is True
+        assert validate_italian_cf("TSTTST80A01H5LMJ") is True
+        assert validate_italian_cf("TSTTST80A01H5LMK") is False

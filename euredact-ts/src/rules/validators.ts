@@ -360,7 +360,9 @@ export function validateSwissAhv(candidate: string): boolean {
 export function validateItalianCf(candidate: string): boolean {
   const c = candidate.toUpperCase().trim();
   if (c.length !== 16) return false;
-  if (!/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(c)) return false;
+  // Digits may be replaced by L-V when two codes collide ("omocodia"); the check
+  // letter is computed over the replaced code (rules-engine#150).
+  if (!/^[A-Z]{6}[\dLMNPQRSTUV]{2}[A-Z][\dLMNPQRSTUV]{2}[A-Z][\dLMNPQRSTUV]{3}[A-Z]$/.test(c)) return false;
   const oddMap: Record<string, number> = {
     "0":1,"1":0,"2":5,"3":7,"4":9,"5":13,"6":15,"7":17,"8":19,"9":21,
     A:1,B:0,C:5,D:7,E:9,F:13,G:15,H:17,I:19,J:21,K:2,L:4,M:18,N:20,O:11,
@@ -396,7 +398,8 @@ export function validateSpanishNie(candidate: string): boolean {
 
 export function validatePortugueseNif(candidate: string): boolean {
   const c = clean(candidate);
-  if (c.length !== 9 || !/^\d{9}$/.test(c) || "04".includes(c[0])) return false;
+  // Never 0, and 4 only as 45, a non-resident individual's NIF (rules-engine#150).
+  if (c.length !== 9 || !/^\d{9}$/.test(c) || c[0] === "0" || (c[0] === "4" && c[1] !== "5")) return false;
   const weights = [9,8,7,6,5,4,3,2];
   let total = 0; for (let i = 0; i < 8; i++) total += parseInt(c[i]) * weights[i];
   const remainder = total % 11;
@@ -508,7 +511,12 @@ export function validateCzechBirthNumber(candidate: string): boolean {
   if (month === null) return false;
   const day = parseInt(c.slice(4, 6), 10);
   if (day < 1 || day > RC_DAYS[month - 1]) return false;
-  if (c.length === 10) return parseInt(c) % 11 === 0;
+  if (c.length === 10) {
+    if (parseInt(c) % 11 === 0) return true;
+    // Up to 1985 a remainder of 10 was written as check digit 0 (rules-engine#150).
+    const yy = parseInt(c.slice(0, 2), 10);
+    return yy >= 54 && yy <= 85 && parseInt(c.slice(0, 9)) % 11 === 10 && c[9] === "0";
+  }
   return true;
 }
 

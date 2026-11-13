@@ -7,6 +7,7 @@
  */
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { EuRedact } from "../sdk.js";
 import { EntityType, LEGACY_TYPE_ALIASES } from "../types.js";
 import { setBicRegistry } from "../rules/bicRegistry.js";
@@ -369,6 +370,58 @@ test("referential integrity is not served from a plain cache hit", () => {
   assert.equal(plain.redactedText, "Email: [EMAIL] en [EMAIL]");
   assert.ok(labelled.redactedText.includes("EMAIL_1"));
   assert.ok(labelled.redactedText.includes("EMAIL_2"));
+});
+
+// ── Cached results are the caller's own (rules-engine#150) ─────────────
+
+test("mutating a cached result does not change the next one", () => {
+  const sdk = new EuRedact();
+  const first = sdk.redact("Mail piet@example.be", { countries: ["BE"] });
+  first.detections.length = 0;
+  const again = sdk.redact("Mail piet@example.be", { countries: ["BE"] });
+  assert.deepEqual(again.detections.map(d => d.text), ["piet@example.be"]);
+});
+
+test("an NFC spelling is not answered with the cached NFD result", () => {
+  const sdk = new EuRedact();
+  const nfd = "Ré: jan@example.be".normalize("NFD");
+  const nfc = nfd.normalize("NFC");
+  sdk.redact(nfd, { countries: ["BE"] });
+  const r = sdk.redact(nfc, { countries: ["BE"] });
+  assert.equal(r.redactedText, "Ré: [EMAIL]");
+  assert.equal(nfc.slice(r.detections[0].start, r.detections[0].end), "jan@example.be");
+});
+
+test("a new BIC registry is not answered from the cache", () => {
+  const sdk = new EuRedact();
+  const before = sdk.redact("BIC GEBABEBB", { countries: ["BE"] });
+  try {
+    setBicRegistry(["GEBABEBB"]);
+    const after = sdk.redact("BIC GEBABEBB", { countries: ["BE"] });
+    // Computed afresh rather than served: a different object with its own detections.
+    assert.notEqual(after.detections, before.detections);
+    assert.equal((sdk as unknown as { cache: { store: Map<string, unknown> } }).cache.store.size, 2);
+  } finally {
+    setBicRegistry(null);
+  }
+});
+
+// ── A custom pattern that can match empty text (rules-engine#151) ───────
+
+test("an empty-matching custom pattern next to an emoji does not hang", () => {
+  // Under the u flag lastIndex++ before an emoji snapped back to the start of
+  // its surrogate pair, and the empty match repeated until the heap ran out.
+  // A child process, so a regression fails here instead of hanging the suite.
+  const script = [
+    'import { EuRedact } from "./src/index.ts";',
+    "const e = new EuRedact();",
+    'e.addCustomPattern("ORDER_REF", "(?:ORD-)?\\\\d*");',
+    'console.log(e.redact("order ORD-123 ok \u{1F44D}", { cache: false }).redactedText);',
+  ].join("\n");
+  const run = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script],
+    { encoding: "utf8", timeout: 20000, cwd: new URL("../..", import.meta.url).pathname });
+  assert.equal(run.signal, null, "timed out");
+  assert.equal(run.stdout.trim(), "order [ORDER_REF] ok \u{1F44D}");
 });
 
 // ── Report ─────────────────────────────────────────────────────────────

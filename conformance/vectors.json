@@ -7867,6 +7867,437 @@
         ]
       },
       "notes": "rules-engine#136: guard; the line before the value names the credential before its key."
+    },
+    {
+      "id": "phone-fr-grouped-with-no-break-spaces",
+      "text": "Tél : 06 12 34 56 78",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "06 12 34 56 78"
+        ]
+      },
+      "expectRedactedText": "Tél : [PHONE]",
+      "notes": "rules-engine#150: French digit grouping uses no-break spaces. With [fast] (re2) the prefilter read \\s as ASCII and skipped the pattern."
+    },
+    {
+      "id": "phone-fr-grouped-with-narrow-no-break-spaces",
+      "text": "Tél : 06 12 34 56 78",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "06 12 34 56 78"
+        ]
+      },
+      "expectRedactedText": "Tél : [PHONE]",
+      "notes": "rules-engine#150"
+    },
+    {
+      "id": "iban-grouped-with-no-break-spaces",
+      "text": "IBAN NL91 ABNA 0417 1643 00",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "BANK_ACCOUNT": [
+          "NL91 ABNA 0417 1643 00"
+        ]
+      },
+      "expectRedactedText": "IBAN [BANK_ACCOUNT]",
+      "notes": "rules-engine#150"
+    },
+    {
+      "id": "phone-in-full-width-digits",
+      "text": "Tel ０６１２３４５６７８",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "０６１２３４５６７８"
+        ]
+      },
+      "mustNotDetect": [
+        "TAX_ID"
+      ],
+      "expectRedactedText": "Tel [PHONE]",
+      "notes": "rules-engine#150: digits are folded to ASCII before matching, one character for one. The Python SDK masked nine digits as a TAX_ID and left the tenth; the TypeScript SDK left all ten. The detection reports the digits as written."
+    },
+    {
+      "id": "email-between-a-composition-and-an-expansion",
+      "text": "Café jan.peeters@example.be क़ ok",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "EMAIL": [
+          "jan.peeters@example.be"
+        ]
+      },
+      "expectRedactedText": "Café [EMAIL] क़ ok",
+      "notes": "rules-engine#150: NFC shortens e+U+0301 by one and lengthens U+0958 by one, so the length is unchanged and the offset mapping was skipped; the mask landed one character early and left the last one visible."
+    },
+    {
+      "id": "national-id-italian-codice-fiscale-omocodic",
+      "text": "Codice fiscale: TSTTST80A01H5LMJ",
+      "countries": [
+        "IT"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "TSTTST80A01H5LMJ"
+        ]
+      },
+      "expectRedactedText": "Codice fiscale: [NATIONAL_ID]",
+      "notes": "rules-engine#150: an omocodic code replaces digits from the right with L-V."
+    },
+    {
+      "id": "national-id-czech-birth-number-check-digit-zero-before-1986",
+      "text": "Rodné číslo: 720610/7580",
+      "countries": [
+        "CZ"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "720610/7580"
+        ]
+      },
+      "expectRedactedText": "Rodné číslo: [NATIONAL_ID]",
+      "notes": "rules-engine#150: the first nine digits leave remainder 10, written as check digit 0 up to 1985."
+    },
+    {
+      "id": "national-id-portuguese-nif-of-a-non-resident",
+      "text": "Contribuinte n.º 455200122",
+      "countries": [
+        "PT"
+      ],
+      "mustDetect": {
+        "NATIONAL_ID": [
+          "455200122"
+        ]
+      },
+      "expectRedactedText": "Contribuinte n.º [NATIONAL_ID]",
+      "notes": "rules-engine#150: 45 is the non-resident individuals' prefix; the patterns and the validator admitted no NIF starting with 4, so it was left in the text."
+    },
+    {
+      "id": "allowlist-separator-folding-is-for-identifiers-only",
+      "text": "DB_PASSWORD=Xk92!mQz7Lp4w",
+      "countries": [
+        "DE"
+      ],
+      "options": {
+        "allowlist": [
+          "Xk92! mQz7Lp4w"
+        ]
+      },
+      "mustDetect": {
+        "SECRET": [
+          "Xk92!mQz7Lp4w"
+        ]
+      },
+      "expectRedactedText": "DB_PASSWORD=[SECRET]",
+      "notes": "rules-engine#150: folded allowlist keys shared the exact keys' space, so folding applied to every type."
+    },
+    {
+      "id": "social-handle-ending-in-an-accented-letter",
+      "text": "Volg @José op Instagram",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@José"
+        ]
+      },
+      "expectRedactedText": "Volg [SOCIAL_HANDLE] op Instagram",
+      "notes": "rules-engine#151: JS's \\b is ASCII, so the TypeScript SDK cut the handle before the é and left it visible."
+    },
+    {
+      "id": "social-handle-with-accents-and-an-underscore",
+      "text": "volg @maría_josé nu",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@maría_josé"
+        ]
+      },
+      "expectRedactedText": "volg [SOCIAL_HANDLE] nu",
+      "notes": "rules-engine#151"
+    },
+    {
+      "id": "social-handle-in-greek",
+      "text": "Γράψε στην @Ελένη τώρα",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@Ελένη"
+        ]
+      },
+      "expectRedactedText": "Γράψε στην [SOCIAL_HANDLE] τώρα",
+      "notes": "rules-engine#151: an all-Greek handle had no ASCII word boundary to end on in the TypeScript SDK."
+    },
+    {
+      "id": "social-handle-does-not-take-a-trailing-full-stop",
+      "text": "Volg @jan.peeters.",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@jan.peeters"
+        ]
+      },
+      "expectRedactedText": "Volg [SOCIAL_HANDLE].",
+      "notes": "rules-engine#151: guard; the boundary after a word character, not any non-letter."
+    },
+    {
+      "id": "dob-danish-maj",
+      "text": "Født: 4. maj 1948",
+      "countries": [
+        "DK"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "4. maj 1948"
+        ]
+      },
+      "expectRedactedText": "Født: [DOB]",
+      "notes": "rules-engine#151: 'maj' (da/sv/no, sl/hr) was missing from the TypeScript month list."
+    },
+    {
+      "id": "email-with-a-non-ascii-tld-is-not-cut",
+      "text": "Mail jan@example.café nu",
+      "countries": null,
+      "mustNotDetect": [
+        "EMAIL"
+      ],
+      "expectRedactedText": "Mail jan@example.café nu",
+      "notes": "rules-engine#151: parity with Python, whose TLD is ASCII; the TypeScript SDK masked all but the é ('[EMAIL]é'). Internationalised TLDs are not detected by either SDK."
+    },
+    {
+      "id": "passport-context-is-measured-in-code-points",
+      "text": "Passport 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 AB123456",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "AB123456"
+        ]
+      },
+      "notes": "rules-engine#151: each emoji is two UTF-16 units, so the TypeScript window of 150 reached half as far back as Python's 150 code points."
+    },
+    {
+      "id": "passport-fr-document-de-voyage",
+      "text": "Document de voyage : 12AB34567",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "12AB34567"
+        ]
+      },
+      "expectRedactedText": "Document de voyage : [PASSPORT]",
+      "notes": "rules-engine#151: the French passport pattern in Python had three keywords of its own instead of the shared list the TypeScript SDK uses."
+    },
+    {
+      "id": "phone-a-slash-between-two-numbers-is-no-division",
+      "text": "Tel: 0612345678 / 0687654321",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Tel: [PHONE] / [PHONE]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-after-a-key-and-equals-sign",
+      "text": "BSN=111222333",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "BSN=[NATIONAL_ID]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-list-with-dash-bullets",
+      "text": "- 0612345678\n- 0687654321",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "- [PHONE]\n- [PHONE]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-after-a-name-and-a-spaced-dash",
+      "text": "Jan Jansen - 0612345678",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Jan Jansen - [PHONE]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-a-slash-and-a-short-number-after-it",
+      "text": "Tel 06 12 34 56 78 / 2",
+      "countries": [
+        "FR"
+      ],
+      "expectRedactedText": "Tel [PHONE] / 2",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-dk-next-line-starting-kn-is-no-kuna",
+      "text": "Telefon: 20 12 34 56\nKnud Hansen",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Telefon: [PHONE]\nKnud Hansen",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-de-next-line-starting-kn-is-no-kuna",
+      "text": "Tel.: 030 12345678\nKnut Meyer",
+      "countries": [
+        "DE"
+      ],
+      "expectRedactedText": "Tel.: [PHONE]\nKnut Meyer",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-next-line-starting-kn",
+      "text": "BSN: 111222333\nKnoopstraat 4",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "BSN: [NATIONAL_ID]\nKnoopstraat 4",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "postcode-after-a-name-ending-ft-is-no-forint",
+      "text": "Adresse: Hans Kraft\n10115 Berlin",
+      "countries": [
+        "DE"
+      ],
+      "expectRedactedText": "Adresse: Hans Kraft\n[POSTAL_CODE] Berlin",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-before-an-initial-m",
+      "text": "Tel 0612345678 M. de Vries",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Tel [PHONE] M. de Vries",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-before-an-initial-g",
+      "text": "BSN 111222333 G. Jansen",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "BSN [NATIONAL_ID] G. Jansen",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-fr-before-the-title-m",
+      "text": "Tél : 06 12 34 56 78 M. Dupont",
+      "countries": [
+        "FR"
+      ],
+      "expectRedactedText": "Tél : [PHONE] M. Dupont",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "passport-label-relabels-a-national-number",
+      "text": "Passport: 85031928479",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "Passport: [PASSPORT]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-after-a-compound-ending-in-lid",
+      "text": "Gezinslid 85031928479",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "Gezinslid [NATIONAL_ID]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-in-a-csv-field-after-a-number",
+      "text": "id,telefoon\n1017,+31612345678",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "id,telefoon\n1017,[PHONE]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "credit-card-followed-by-its-expiry",
+      "text": "Card: 4111 1111 1111 1111 1225 123",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Card: [CREDIT_CARD] 1225 123",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "secret-a-passphrase-of-words-under-a-password-key",
+      "text": "password=Correct-Horse-Battery",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "password=[SECRET]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "postcode-after-a-surname-ending-in-no",
+      "text": "Indirizzo: Mario Bruno\n20121 Milano",
+      "countries": [
+        "IT"
+      ],
+      "expectRedactedText": "Indirizzo: Mario Bruno\n[POSTAL_CODE] Milano",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "postcode-after-a-surname-with-an-inner-capital",
+      "text": "Adresse: Sean McCarthy\n1000 Bruxelles",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "Adresse: Sean McCarthy\n[POSTAL_CODE] Bruxelles",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "iban-after-an-invoice-word",
+      "text": "Pay invoice: NL91ABNA0417164300",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Pay invoice: [BANK_ACCOUNT]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-after-a-hash",
+      "text": "Patiënt #85031928479",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "Patiënt #[NATIONAL_ID]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-international-with-a-glued-extension",
+      "text": "Tel: +49 171 2345678-62657",
+      "countries": [
+        "DE"
+      ],
+      "expectRedactedText": "Tel: [PHONE]-62657",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
     }
   ]
 }

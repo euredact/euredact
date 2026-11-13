@@ -11,6 +11,123 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **Values written with Unicode spaces and digits** *(rules-engine#150)*.
+  - **Digits in other scripts** are folded to ASCII before matching, one
+    character for one so offsets do not move: full-width, Arabic-Indic,
+    Devanagari and the other decimal digits of the Basic Multilingual Plane,
+    from one table both SDKs carry. A phone in full-width digits was masked
+    as `[TAX_ID]８` in Python and not at all in TypeScript.
+  - **NFC offsets.** The offset mapping was built only when NFC changed the
+    length. A composition (one shorter) and an expansion such as U+0958 (one
+    longer) cancel out, and every mask between them landed one character
+    early, leaving the last character of an e-mail visible.
+  - **A detection's text is the document's.** It was the normalised form, so
+    a phone in full-width digits reported `0612345678` and a decomposed
+    accent its composed form; it is now the text at the detection's offsets,
+    which `make sweep` checks on every corpus document.
+- **Quadratic time on text dense with numbers** *(rules-engine#150)*. Three
+  per-candidate scans: the fragment test walked back through every rejected
+  span, and the account-run and column-header suppressors re-read the
+  candidate's whole line (in TypeScript also its line start, by
+  `lastIndexOf`). 117 KB of phone numbers took 115 s and now takes 3 s, 125 KB
+  on one line 127 s and now 3.5 s; the output is byte-for-byte the same.
+- **Result cache** *(rules-engine#150)*. Keyed on the normalised text, an
+  NFC document was answered with the cached result of its NFD spelling, its
+  redacted text and offsets; it is now keyed on the text as given. A cached
+  result was handed out as is, so emptying `detections` emptied them for
+  every later call; callers now get their own copy. A new BIC registry
+  (`setBicRegistry`) is part of the key.
+- **Allowlist separator folding** applied to every type: folded keys shared
+  the exact keys' space, so `allowlist=["Xk92! mQz7Lp4w"]` exempted the SECRET
+  `Xk92!mQz7Lp4w`. Folding is again for the identifier types only.
+  *(rules-engine#150)*
+- **Valid identifiers rejected** *(rules-engine#150)*: a Portuguese NIF of a
+  non-resident (prefix 45, refused by the patterns and the validator), a Czech
+  birth number up to 1985 whose remainder 10 is written as check digit 0, and
+  an omocodic Italian codice fiscale (digits replaced by L-V when two codes
+  collide).
+
+- **Parity with the Python SDK on Unicode text** *(rules-engine#151)*.
+  - **A custom pattern that can match empty text hung on an emoji.** After
+    an empty match the scan moved on with `lastIndex++`; under the `u` flag an
+    index inside a surrogate pair snaps back to its start, so the same empty
+    match repeated until the heap ran out (`addCustomPattern("ORDER_REF",
+    "(?:ORD-)?\d*")`, then any text with 👍). The scan now steps a whole code
+    point.
+  - **Social handles.** The pattern ended in `\b`, which JavaScript reads as
+    ASCII: `@José` became `[SOCIAL_HANDLE]é` and `@Ελένη` was not found. It
+    ends in Python's Unicode boundary now.
+  - **`maj`**, the month in Danish, Swedish, Norwegian, Slovene and Croatian,
+    was missing from the month list: `Født: 4. maj 1948` was a date of birth
+    in Python only.
+  - **E-mail top-level domain.** `\p{L}{2,}\b` masked `jan@example.café`
+    as `[EMAIL]é`; Python's TLD is ASCII, and an address with a non-ASCII TLD
+    is now detected by neither SDK rather than cut.
+  - **Windows in code points.** The keyword window (150), the label window
+    (44) and the short look-behinds and look-aheads of the suppressors counted
+    UTF-16 units, so every emoji counted twice: "Passport" fifty emoji before
+    a passport number was its label in Python and out of reach here.
+  - **`cutAllowlisted`** searched a copy of the span, so its look-behind
+    could not see the character before it.
+  - **Custom patterns:** `\w`, `\d` and `\b` are ASCII in JavaScript and
+    Unicode in Python; the README says so and how to write a pattern both read
+    alike.
+- **Suppressors that dropped real values** *(rules-engine#152)*. A
+  suppressor removes a detection, and the value stays in the text with
+  nothing reported, so one broader than its stated condition is a leak. From
+  a review of each against its comment:
+  - **Maths.** Any operator next to the value counted: `BSN=111222333`, a
+    `- ` bullet, `Jan Jansen - 0612345678`, `0612345678 / 0687654321`. For an
+    identifier, an operator now counts with a number (or an amount word,
+    `total = …`) on its other side, and `-` or `/` only glued to a letter or
+    digit, joining a longer token (`PV-LS-2026-652314`). A bare postcode keeps
+    the old rule (`12/2024`, `2024-2025`).
+  - **Currency.** The windows crossed lines and the letter symbols had no
+    boundary: `Knud` on the next line was kuna, `Kraft` forint. Same line
+    only, and word boundaries around `zł`, `Kč`, `лв`, `kn`, `Ft`.
+  - **Units.** The Python list had bare `m`, `g` and `l`, case-insensitive,
+    and took initials for units (`M. de Vries`); this one lacked them. Both
+    now have them in lower case only, and not before a full stop or
+    apostrophe.
+  - **Passport label.** A national number behind a passport label was
+    dropped (`Passport: 85031928479` passes the Belgian check); it is now
+    relabelled `PASSPORT`, as #53 intended.
+  - **Legal words** start a word: `lid` ended `Gezinslid`.
+  - **Decimal tail.** `1017,+31612345678` in a CSV row read as the decimals
+    of 1017; a fraction is now unsigned and at most eight digits.
+  - **Card numbers.** A card followed by its expiry was dropped as part of a
+    longer digit run, and a phone took eight of its digits. After the card,
+    a run now means two more groups.
+  - **Passphrases.** Under a key whose last word names a credential
+    (`password=`, `client_secret =`), a value is a secret whatever its shape:
+    `Correct-Horse-Battery` was dropped as a compound word. A key using the
+    word as a modifier (`Passwort-Richtlinie`, `secret_name`) does not count.
+  - **Identifier labels before a postcode.** `No`, `Az`, `num` were matched
+    at the end of any word, so `Bruno`, `Moreno`, `Díaz` were labels and the
+    postcode on the next line was dropped. They start a word now, and a
+    compound ends in `N°`, not `no`.
+  - **Model names before a postcode.** The inner-capital branch (`OptiPlex
+    7090`) is same-line and skips `Mc`/`Mac`/`De`/… surnames: `McCarthy`.
+  - **References.** A word like "invoice" or a `#` dropped values with a
+    mod-97 checksum (IBAN, Belgian national number and VAT, French NIR):
+    `Pay invoice: NL91ABNA0417164300`. Those now stay; a weaker check (an
+    11-proof number behind `Factuurnummer:`) still yields to the reference.
+  - **International numbers with a glued extension.** `+49 171 2345678-62657`
+    fails E.164 whole, and the German number inside it was dropped as a
+    fragment; a shorter `+` number of the same type from the same offset is
+    kept.
+  - **BIC registry errors.** A registry that threw fell back to the seed
+    list, and a BIC the seed list does not know was suppressed silently. It
+    now counts as registered (masked), with one warning.
+  - **URL domains.** `allowlistDomains` read a URL's domain after its last
+    `@`, which can be in the query: a cloud URL span with
+    `contact=support@euredact.be` in it was exempted whole. It reads the host.
+  - 22 conformance vectors, all failing on 0.8.0.
+
 ## 0.8.0 (2026-10-31)
 
 ### Added

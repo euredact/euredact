@@ -73,3 +73,33 @@ def test_detect_loses_nothing_while_patterns_are_registered() -> None:
         f"{len(missing)} scan(s) lost spans that a quiet engine finds; "
         f"first loss: {sorted(missing[0])[:5]}"
     )
+
+
+def test_concurrent_referential_labels_are_never_shared() -> None:
+    """aredact labels from pool threads. Without a lock two new values could
+    read the same counter and get the same label, which says they are one
+    value: 11,656 duplicates over 30 runs before the fix (rules-engine#150)."""
+    import sys
+
+    from euredact.sdk import ReferentialMapper
+    from euredact.types import EntityType
+
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        for _ in range(5):
+            mapper = ReferentialMapper()
+
+            def work(k: int) -> None:
+                for i in range(300):
+                    mapper.get_label(f"v{k}-{i}@example.be", EntityType.EMAIL)
+
+            threads = [threading.Thread(target=work, args=(k,)) for k in range(8)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            labels = list(mapper._mapping.values())
+            assert len(labels) == len(set(labels)) == 2400
+    finally:
+        sys.setswitchinterval(interval)

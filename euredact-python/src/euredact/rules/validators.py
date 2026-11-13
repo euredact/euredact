@@ -591,8 +591,13 @@ def validate_italian_cf(candidate: str) -> bool:
     clean = candidate.upper().strip()
     if len(clean) != 16:
         return False
-    # Format: 6 letters + 2 digits + 1 letter + 2 digits + 1 letter + 3 digits + 1 letter
-    if not re.match(r"^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$", clean):
+    # Format: 6 letters + 2 digits + 1 letter + 2 digits + 1 letter + 3 digits
+    # + 1 letter. When two people's codes collide, the Agenzia delle Entrate
+    # replaces digits from the right with L-V ("omocodia"); the check letter is
+    # computed over the replaced code, so the tables below already cover it.
+    # Rejecting the letters rejected valid codes (rules-engine#150).
+    if not re.match(r"^[A-Z]{6}[\dLMNPQRSTUV]{2}[A-Z][\dLMNPQRSTUV]{2}[A-Z]"
+                    r"[\dLMNPQRSTUV]{3}[A-Z]$", clean):
         return False
 
     odd_map = {
@@ -645,8 +650,9 @@ def validate_portuguese_nif(candidate: str) -> bool:
     clean = re.sub(r"[\s.\-]", "", candidate)
     if len(clean) != 9 or not clean.isdigit():
         return False
-    # First digit must be 1,2,3,5,6,7,8,9 (not 0 or 4)
-    if clean[0] in "04":
+    # Never 0, and 4 only as 45, a non-resident individual's NIF: rejecting
+    # every 4 rejected those (rules-engine#150).
+    if clean[0] == "0" or (clean[0] == "4" and clean[1] != "5"):
         return False
     weights = [9, 8, 7, 6, 5, 4, 3, 2]
     total = sum(int(d) * w for d, w in zip(clean[:8], weights))
@@ -762,7 +768,12 @@ def validate_czech_birth_number(candidate: str) -> bool:
     if not 1 <= day <= _RC_DAYS[month - 1]:
         return False
     if len(clean) == 10:
-        return int(clean) % 11 == 0
+        if int(clean) % 11 == 0:
+            return True
+        # Up to 1985 a remainder of 10 was written as check digit 0, so the
+        # number is not divisible by 11 and is still valid (rules-engine#150).
+        return (54 <= int(clean[:2]) <= 85 and int(clean[:9]) % 11 == 10
+                and clean[9] == "0")
     return True  # 9-digit (pre-1954) has no checksum
 
 

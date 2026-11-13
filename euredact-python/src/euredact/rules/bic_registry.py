@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import functools
 import threading
+import warnings
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -204,6 +205,29 @@ BicRegistryProvider = Callable[[str], bool]
 
 _lock = threading.Lock()
 _provider: BicRegistryProvider | None = None
+#: Bumped by every set_bic_registry call. A BIC's validity depends on the
+#: registry, so cached results key on it: a cached result from before a new
+#: registry was installed is not served after (rules-engine#150).
+_generation = 0
+
+
+def registry_generation() -> int:
+    """How many times :func:`set_bic_registry` has been called."""
+    return _generation
+
+
+_provider_warned = False
+
+
+def _warn_provider_failed(exc: Exception) -> None:
+    """Warn once per process that the installed BIC registry raised."""
+    global _provider_warned
+    if not _provider_warned:
+        _provider_warned = True
+        warnings.warn(
+            f"the BIC registry installed with set_bic_registry raised {exc!r}; "
+            "BICs it could not answer for are treated as registered and masked",
+            RuntimeWarning, stacklevel=3)
 
 
 def set_bic_registry(
@@ -222,11 +246,12 @@ def set_bic_registry(
     Entries may be full BIC8/BIC11 codes or bare BIC6 prefixes; both are
     matched. Lookups are case-insensitive and ignore spaces.
     """
-    global _provider
+    global _provider, _generation
 
     if registry is None:
         with _lock:
             _provider = None
+            _generation += 1
         return
 
     if callable(registry):
@@ -246,6 +271,7 @@ def set_bic_registry(
 
     with _lock:
         _provider = provider
+        _generation += 1
 
 
 def get_bic_registry() -> BicRegistryProvider | None:
@@ -272,8 +298,12 @@ def is_registered_bic(candidate: str) -> bool:
         try:
             if provider(clean) or provider(prefix):
                 return True
-        except Exception:  # noqa: BLE001 - a broken provider must not break detection
-            pass
+        except Exception as exc:  # noqa: BLE001 - a broken provider must not break detection
+            # Fail closed: the seed list would answer instead, and a BIC it
+            # does not know was then suppressed with no word of why
+            # (rules-engine#152). Unanswered, the BIC stays masked.
+            _warn_provider_failed(exc)
+            return True
 
     return prefix in SEED_BIC6_PREFIXES
 

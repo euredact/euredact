@@ -14,16 +14,18 @@ class PTConfig(CountryConfig):
         self.name = "Portugal"
         self.patterns = [
             # --- NIF (Tax ID, 9 digits, mod-11) ---
+            # Never 0, and 4 only as 45, a non-resident individual's NIF: the
+            # patterns admitted no 4 at all (rules-engine#150).
             PatternDef(
                 entity_type=EntityType.NATIONAL_ID,
-                pattern=r"\b[1-35-9]\d{8}\b",
+                pattern=r"\b(?:[1-35-9]\d|45)\d{7}\b",
                 validator="portuguese_nif",
                 description="Portuguese NIF — 9 digits compact",
             ),
             # NIF with spaces: XXX XXX XXX
             PatternDef(
                 entity_type=EntityType.NATIONAL_ID,
-                pattern=r"\b[1-35-9]\d{2}[\s.]\d{3}[\s.]\d{3}\b",
+                pattern=r"\b(?:[1-35-9]\d|45)\d[\s.]\d{3}[\s.]\d{3}\b",
                 validator="portuguese_nif",
                 description="Portuguese NIF — spaced (XXX XXX XXX)",
             ),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from euredact.rules.countries._base import CountryConfig, PatternDef
+from euredact.rules.countries._shared import PASSPORT_CONTEXT
 from euredact.types import EntityType
 
 
@@ -82,9 +83,10 @@ class FRConfig(CountryConfig):
                 pattern=r"\b\d{2}[A-Z]{2}\d{5}\b",
                 validator=None,
                 description="French passport — 2 digits + 2 letters + 5 digits",
-                context_keywords=[
-                    "passeport", "passport", "numéro de passeport",
-                ],
+                # The shared list, as every other country's passport and the
+                # TypeScript SDK use: three words of its own missed "document de
+                # voyage" and every other language's label (rules-engine#151).
+                context_keywords=PASSPORT_CONTEXT,
                 requires_context=True,
             ),
             # --- License Plate (since 2009: AA-123-AA) ---

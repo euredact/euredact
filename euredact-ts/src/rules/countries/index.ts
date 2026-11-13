@@ -211,7 +211,7 @@ const SHARED: CountryConfig = {
     // The second lookbehind refuses to start a match after `<word-char>'`,
     // which is a match already in progress; without it every apostrophe was a
     // fresh start offset and the scan went quadratic. Mirrors Python.
-    p(EntityType.EMAIL, String.raw`(?<![\p{L}\p{N}._%+\-])(?<![\p{L}\p{N}._%+\-]')[\p{L}\p{N}._%+\-]+(?:'[\p{L}\p{N}._%+\-]+)*@(?:[\p{L}\p{N}\-]+\.)+\p{L}{2,}\b`),
+    p(EntityType.EMAIL, String.raw`(?<![\p{L}\p{N}._%+\-])(?<![\p{L}\p{N}._%+\-]')[\p{L}\p{N}._%+\-]+(?:'[\p{L}\p{N}._%+\-]+)*@(?:[\p{L}\p{N}\-]+\.)+[a-zA-Z]{2,}(?![\p{L}\p{N}_])`),
     // IBAN (any country) — structure + mod-97 only. Country-specific IBAN
     // patterns still exist and win on identical spans; this one guarantees an
     // IBAN is never missed just because its country was not requested.
@@ -267,7 +267,9 @@ const SHARED: CountryConfig = {
     p(EntityType.IMEI, String.raw`\b\d{14,16}\b`, null, "IMEI / IMEISV — behind its label", ["IMEI"], true),
     p(EntityType.GPS_COORDINATES, String.raw`-?(?:[1-8]?\d(?:\.\d{4,})|90(?:\.0{4,}))\s*[,;/]\s*-?(?:1[0-7]\d(?:\.\d{4,})|180(?:\.0{4,})|\d{1,2}(?:\.\d{4,}))`),
     p(EntityType.UUID, String.raw`\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b`),
-    p(EntityType.SOCIAL_HANDLE, String.raw`(?<![\p{L}\p{N}_])@\p{L}[\p{L}\p{N}_.]{1,29}\b`),
+    // The trailing boundary is Python's Unicode \b after a word character; JS's
+    // \b is ASCII, so "@José" was cut to "[SOCIAL_HANDLE]é" and "@Ελένη" missed (rules-engine#151).
+    p(EntityType.SOCIAL_HANDLE, String.raw`(?<![\p{L}\p{N}_])@\p{L}[\p{L}\p{N}_.]{1,29}(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])`),
     // --- Secret / API Key (known prefixes — always active) ---
     p(EntityType.SECRET, String.raw`\bAKIA[A-Z0-9]{16}\b`, null, "AWS Access Key ID"),
     p(EntityType.SECRET, String.raw`\bgh[poas]_[a-zA-Z0-9]{36,}\b`, null, "GitHub token"),
@@ -555,7 +557,7 @@ const IT: CountryConfig = {
   code: "IT",
   name: "Italy",
   patterns: [
-    p(EntityType.NATIONAL_ID, String.raw`\b[A-Z]{6}\d{2}[ABCDEHLMPRST]\d{2}[A-Z]\d{3}[A-Z]\b`, "italian_cf"),
+    p(EntityType.NATIONAL_ID, String.raw`\b[A-Z]{6}[\dLMNPQRSTUV]{2}[ABCDEHLMPRST][\dLMNPQRSTUV]{2}[A-Z][\dLMNPQRSTUV]{3}[A-Z]\b`, "italian_cf"),
     p(EntityType.IBAN, String.raw`\bIT\d{2}\s?[A-Z]\d{3}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{3}\b`, "iban"),
     p(EntityType.IBAN, String.raw`\bIT\d{2}[A-Z]\d{22}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bIT[\s.]?\d{11}\b`),
@@ -596,8 +598,8 @@ const PT: CountryConfig = {
   code: "PT",
   name: "Portugal",
   patterns: [
-    p(EntityType.NATIONAL_ID, String.raw`\b[1-35-9]\d{8}\b`, "portuguese_nif"),
-    p(EntityType.NATIONAL_ID, String.raw`\b[1-35-9]\d{2}[\s.]\d{3}[\s.]\d{3}\b`, "portuguese_nif"),
+    p(EntityType.NATIONAL_ID, String.raw`\b(?:[1-35-9]\d|45)\d{7}\b`, "portuguese_nif"),
+    p(EntityType.NATIONAL_ID, String.raw`\b(?:[1-35-9]\d|45)\d[\s.]\d{3}[\s.]\d{3}\b`, "portuguese_nif"),
     p(EntityType.IBAN, String.raw`\bPT\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{5}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bPT[\s.]?\d{9}\b`),
     p(EntityType.PHONE, String.raw`\b[29]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b`),

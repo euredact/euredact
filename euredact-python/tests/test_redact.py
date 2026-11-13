@@ -119,3 +119,12 @@ class TestEmptyInput:
         result = euredact.redact("Dit is een gewone zin.", countries=["NL"])
         assert result.redacted_text == "Dit is een gewone zin."
         assert result.detections == []
+
+
+def test_an_empty_matching_custom_pattern_next_to_an_emoji():
+    """The TypeScript SDK hung on this input (rules-engine#151); both SDKs
+    must answer it the same way."""
+    from euredact import EuRedact
+    sdk = EuRedact()
+    sdk.add_custom_pattern("ORDER_REF", r"(?:ORD-)?\d*")
+    assert sdk.redact("order ORD-123 ok \U0001F44D", cache=False).redacted_text == "order [ORDER_REF] ok \U0001F44D"

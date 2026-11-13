@@ -1,3 +1,4 @@
+import { nextCodePoint } from "./codepoints.js";
 import type { CountryConfig, PatternDef } from "../types.js";
 import { VALIDATORS } from "./validators.js";
 import type { RawMatch } from "./suppressors.js";
@@ -59,8 +60,11 @@ export class MultiPatternMatcher {
           patternDef,
           countryCode,
         });
-        // Prevent infinite loops on zero-length matches
-        if (m[0].length === 0) regex.lastIndex++;
+        // Step past a zero-length match by a whole code point. Under the u
+        // flag an index inside a surrogate pair snaps back to its start, so
+        // lastIndex++ before an emoji repeated the same empty match until the
+        // process ran out of memory (rules-engine#151).
+        if (m[0].length === 0) regex.lastIndex = nextCodePoint(text, regex.lastIndex);
       }
     }
     return matches;

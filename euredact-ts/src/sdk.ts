@@ -5,6 +5,7 @@ import { normalize, mapOffsetToOriginal } from "./normalizer.js";
 import { RuleEngine } from "./rules/engine.js";
 import { DocumentContext } from "./rules/context.js";
 import { weightsToRanking } from "./rules/evidence.js";
+import { registryGeneration } from "./rules/bicRegistry.js";
 import { EntityType, canonicalType, type Detection, type Exemption, type RedactResult } from "./types.js";
 
 const DATE_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
@@ -346,9 +347,14 @@ function allowlistKey(value: string): string {
   return value.normalize("NFC").trim().toLowerCase();
 }
 
-/** `allowlistKey` with presentational separators removed. */
+/**
+ * `allowlistKey` with presentational separators removed, prefixed so it
+ * shares no key with an unfolded entry: in one keyspace an exact lookup found
+ * other entries' folded forms, and folding applied to every type
+ * (rules-engine#150).
+ */
 function foldedKey(value: string): string {
-  return allowlistKey(value).replace(SEPARATORS, "");
+  return "\u0000" + allowlistKey(value).replace(SEPARATORS, "");
 }
 
 /** Comparison key -> the entry as the caller wrote it (for reporting). */
@@ -375,10 +381,19 @@ function normalizeDomains(values: string[] | null | undefined): Map<string, stri
   return out;
 }
 
-/** The domain an exemption rule would apply to, or null. */
-function domainOf(entityType: EntityType | string, value: string): string | null {
+/** The domain an exemption rule would apply to, or null. @internal Exported for tests. */
+export function domainOf(entityType: EntityType | string, value: string): string | null {
   if (!DOMAIN_BEARING.has(entityType)) return null;
   let v = allowlistKey(value);
+  if (v.includes("://")) {
+    // A URL's host, not whatever follows its last "@" (in the query, that
+    // exempted the whole URL and the number in it) (rules-engine#152).
+    try {
+      return new URL(v).hostname || null;
+    } catch {
+      return null;
+    }
+  }
   if (v.includes("@")) return v.slice(v.lastIndexOf("@") + 1).replace(/^[<[(]+|[>\])(),;:"']+$/g, "") || null;
   v = v.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
   return v.split("/")[0].split(":")[0].replace(/^[<[(]+|[>\])(),;:"']+$/g, "") || null;
@@ -458,12 +473,17 @@ function cutAllowlisted(
   const kept: Detection[] = [];
   const exempted: Exemption[] = [];
   for (const d of detections) {
-    const span = text.slice(d.start, d.end);
+    // The text up to the span's end, searched from its start: as Python's
+    // finditer(text, start, end), the lookbehind sees the character before the
+    // span and the lookahead nothing after it (rules-engine#151).
+    const upToEnd = text.slice(0, d.end);
     const cuts: Array<[number, number, string]> = [];
     for (const [entry, pattern] of patterns) {
-      for (const m of span.matchAll(pattern)) {
-        const s = d.start + m.index, e = s + m[0].length;
+      pattern.lastIndex = d.start;
+      for (let m = pattern.exec(upToEnd); m !== null; m = pattern.exec(upToEnd)) {
+        const s = m.index, e = s + m[0].length;
         if (!cuts.some(([cs, ce]) => s < ce && cs < e)) cuts.push([s, e, entry]);
+        if (m[0].length === 0) pattern.lastIndex++;
       }
     }
     if (cuts.length === 0) { kept.push(d); continue; }
@@ -938,11 +958,16 @@ export class EuRedact {
     const allowKey = (allowed.size ? JSON.stringify([...allowed.keys()].sort()) : "")
       + (domains.size ? "|dom=" + JSON.stringify([...domains.keys()].sort()) : "")
       + (excluded.size ? "|excl=" + JSON.stringify([...excluded].sort()) : "");
-    const cacheMode = `rules|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}|tok=${tokenize}|allow=${allowKey}`;
+    // The BIC registry decides which BICs are valid, so a new one must not be
+    // answered from results computed under the old (rules-engine#150).
+    const cacheMode = `rules|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}`
+      + `|tok=${tokenize}|allow=${allowKey}|bic=${registryGeneration()}`;
 
     let cacheKey: string | undefined;
     if (cache) {
-      cacheKey = this.cache.key(normalizedText, countriesTuple, cacheMode);
+      // The text as given, not as normalised: the result is built from it, so
+      // an NFD and an NFC spelling are two entries (rules-engine#150).
+      cacheKey = this.cache.key(text, countriesTuple, cacheMode);
       const cached = this.cache.get(cacheKey);
       if (cached !== null) return cached;
     }
@@ -958,12 +983,18 @@ export class EuRedact {
     if (context !== null) context.add(evidence, chunkOffset);
     let detections = rawDetections;
 
-    if (offsetMapping !== null) {
-      detections = detections.map(d => ({
-        ...d,
-        start: mapOffsetToOriginal(d.start, offsetMapping),
-        end: mapOffsetToOriginal(d.end, offsetMapping),
-      }));
+    // Map offsets back to the original text, and report what it says there: a
+    // detection's text is the document's, full-width digits and NFD included,
+    // not the normalised form the patterns read (rules-engine#150).
+    if (normalizedText !== text) {
+      if (offsetMapping !== null) {
+        detections = detections.map(d => ({
+          ...d,
+          start: mapOffsetToOriginal(d.start, offsetMapping),
+          end: mapOffsetToOriginal(d.end, offsetMapping),
+        }));
+      }
+      detections = detections.map(d => ({ ...d, text: text.slice(d.start, d.end) }));
     }
 
     if (!detectDates) {

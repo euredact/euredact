@@ -1,23 +1,48 @@
-"""Unicode NFC normalization for input text."""
+"""Unicode normalization for input text: NFC, and digits folded to ASCII."""
 
 from __future__ import annotations
 
 import unicodedata
 
+#: The zero of every run of decimal digits in the Basic Multilingual Plane
+#: outside ASCII (Unicode 16; each run is 0-9 in order). The TypeScript SDK
+#: carries the same list, so both fold the same characters whatever Unicode
+#: version their runtime has.
+_DIGIT_ZEROS = (
+    0x0660, 0x06F0, 0x07C0, 0x0966, 0x09E6, 0x0A66, 0x0AE6, 0x0B66, 0x0BE6,
+    0x0C66, 0x0CE6, 0x0D66, 0x0DE6, 0x0E50, 0x0ED0, 0x0F20, 0x1040, 0x1090,
+    0x17E0, 0x1810, 0x1946, 0x19D0, 0x1A80, 0x1A90, 0x1B50, 0x1BB0, 0x1C40,
+    0x1C50, 0xA620, 0xA8D0, 0xA900, 0xA9D0, 0xA9F0, 0xAA50, 0xABF0, 0xFF10,
+)
+
+#: Each of those digits to its ASCII digit: one character for one, so offsets
+#: do not move.
+_ASCII_DIGITS = {zero + k: 0x30 + k for zero in _DIGIT_ZEROS for k in range(10)}
+
 
 def normalize(text: str) -> tuple[str, list[int] | None]:
-    """Normalize text to NFC form before pattern matching.
+    """Normalize text to NFC form, digits to ASCII, before pattern matching.
 
     Returns the normalized text and an offset mapping from normalized positions
-    to original positions (None if no length change occurred).
+    to original positions (None when NFC left the text as it was).
+
+    The mapping is built whenever NFC changed the text, not only when it
+    changed its length: a composition (two characters to one) and an
+    expansion (U+0958 to two) cancel out in the length and still move every
+    character between them, and the masks landed one character off
+    (rules-engine#150).
+
+    Digits are folded to ASCII, one character for one, so offsets stay put.
+    The patterns are written with ASCII digits in mind: a phone number in
+    full-width digits ("０６１２３４５６７８") was left whole by the TypeScript
+    SDK, whose ``\\d`` is ASCII, and cut in two by the Python one, whose ``\\d``
+    is not but whose word boundaries are (rules-engine#150).
     """
     normalized = unicodedata.normalize("NFC", text)
-    if len(normalized) == len(text):
-        return normalized, None
-
-    # For most European text NFC does not change length. When it does, the
-    # mapping lets us translate detection offsets back to original positions.
-    return normalized, _build_offset_mapping(text, normalized)
+    mapping = None if normalized == text else _build_offset_mapping(text, normalized)
+    if not normalized.isascii():
+        normalized = normalized.translate(_ASCII_DIGITS)
+    return normalized, mapping
 
 
 def _build_offset_mapping(original: str, normalized: str) -> list[int]:
