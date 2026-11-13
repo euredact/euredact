@@ -7,6 +7,7 @@
  */
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { EuRedact } from "../sdk.js";
 import { EntityType, LEGACY_TYPE_ALIASES } from "../types.js";
 import { setBicRegistry } from "../rules/bicRegistry.js";
@@ -403,6 +404,24 @@ test("a new BIC registry is not answered from the cache", () => {
   } finally {
     setBicRegistry(null);
   }
+});
+
+// ── A custom pattern that can match empty text (rules-engine#151) ───────
+
+test("an empty-matching custom pattern next to an emoji does not hang", () => {
+  // Under the u flag lastIndex++ before an emoji snapped back to the start of
+  // its surrogate pair, and the empty match repeated until the heap ran out.
+  // A child process, so a regression fails here instead of hanging the suite.
+  const script = [
+    'import { EuRedact } from "./src/index.ts";',
+    "const e = new EuRedact();",
+    'e.addCustomPattern("ORDER_REF", "(?:ORD-)?\\\\d*");',
+    'console.log(e.redact("order ORD-123 ok \u{1F44D}", { cache: false }).redactedText);',
+  ].join("\n");
+  const run = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script],
+    { encoding: "utf8", timeout: 20000, cwd: new URL("../..", import.meta.url).pathname });
+  assert.equal(run.signal, null, "timed out");
+  assert.equal(run.stdout.trim(), "order [ORDER_REF] ok \u{1F44D}");
 });
 
 // ── Report ─────────────────────────────────────────────────────────────

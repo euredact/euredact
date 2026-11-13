@@ -8001,6 +8001,105 @@
       },
       "expectRedactedText": "DB_PASSWORD=[SECRET]",
       "notes": "rules-engine#150: folded allowlist keys shared the exact keys' space, so folding applied to every type."
+    },
+    {
+      "id": "social-handle-ending-in-an-accented-letter",
+      "text": "Volg @José op Instagram",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@José"
+        ]
+      },
+      "expectRedactedText": "Volg [SOCIAL_HANDLE] op Instagram",
+      "notes": "rules-engine#151: JS's \\b is ASCII, so the TypeScript SDK cut the handle before the é and left it visible."
+    },
+    {
+      "id": "social-handle-with-accents-and-an-underscore",
+      "text": "volg @maría_josé nu",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@maría_josé"
+        ]
+      },
+      "expectRedactedText": "volg [SOCIAL_HANDLE] nu",
+      "notes": "rules-engine#151"
+    },
+    {
+      "id": "social-handle-in-greek",
+      "text": "Γράψε στην @Ελένη τώρα",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@Ελένη"
+        ]
+      },
+      "expectRedactedText": "Γράψε στην [SOCIAL_HANDLE] τώρα",
+      "notes": "rules-engine#151: an all-Greek handle had no ASCII word boundary to end on in the TypeScript SDK."
+    },
+    {
+      "id": "social-handle-does-not-take-a-trailing-full-stop",
+      "text": "Volg @jan.peeters.",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@jan.peeters"
+        ]
+      },
+      "expectRedactedText": "Volg [SOCIAL_HANDLE].",
+      "notes": "rules-engine#151: guard; the boundary after a word character, not any non-letter."
+    },
+    {
+      "id": "dob-danish-maj",
+      "text": "Født: 4. maj 1948",
+      "countries": [
+        "DK"
+      ],
+      "mustDetect": {
+        "DOB": [
+          "4. maj 1948"
+        ]
+      },
+      "expectRedactedText": "Født: [DOB]",
+      "notes": "rules-engine#151: 'maj' (da/sv/no, sl/hr) was missing from the TypeScript month list."
+    },
+    {
+      "id": "email-with-a-non-ascii-tld-is-not-cut",
+      "text": "Mail jan@example.café nu",
+      "countries": null,
+      "mustNotDetect": [
+        "EMAIL"
+      ],
+      "expectRedactedText": "Mail jan@example.café nu",
+      "notes": "rules-engine#151: parity with Python, whose TLD is ASCII; the TypeScript SDK masked all but the é ('[EMAIL]é'). Internationalised TLDs are not detected by either SDK."
+    },
+    {
+      "id": "passport-context-is-measured-in-code-points",
+      "text": "Passport 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 AB123456",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "AB123456"
+        ]
+      },
+      "notes": "rules-engine#151: each emoji is two UTF-16 units, so the TypeScript window of 150 reached half as far back as Python's 150 code points."
+    },
+    {
+      "id": "passport-fr-document-de-voyage",
+      "text": "Document de voyage : 12AB34567",
+      "countries": [
+        "FR"
+      ],
+      "mustDetect": {
+        "PASSPORT": [
+          "12AB34567"
+        ]
+      },
+      "expectRedactedText": "Document de voyage : [PASSPORT]",
+      "notes": "rules-engine#151: the French passport pattern in Python had three keywords of its own instead of the shared list the TypeScript SDK uses."
     }
   ]
 }

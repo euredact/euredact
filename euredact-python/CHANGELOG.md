@@ -63,6 +63,12 @@ narrative lives. Sections here use that vocabulary
   an omocodic Italian codice fiscale (digits replaced by L-V when two codes
   collide).
 
+- **The French passport pattern uses the shared passport labels**
+  *(rules-engine#151)*. It had three keywords of its own (`passeport`,
+  `passport`, `numéro de passeport`), where every other country and the
+  TypeScript SDK use the shared multilingual list: "Document de voyage :
+  12AB34567" was a passport in TypeScript only.
+
 ## 0.8.0 (2026-10-31)
 
 ### Added

@@ -47,6 +47,32 @@ narrative lives. Sections here use that vocabulary
   an omocodic Italian codice fiscale (digits replaced by L-V when two codes
   collide).
 
+- **Parity with the Python SDK on Unicode text** *(rules-engine#151)*.
+  - **A custom pattern that can match empty text hung on an emoji.** After
+    an empty match the scan moved on with `lastIndex++`; under the `u` flag an
+    index inside a surrogate pair snaps back to its start, so the same empty
+    match repeated until the heap ran out (`addCustomPattern("ORDER_REF",
+    "(?:ORD-)?\d*")`, then any text with 👍). The scan now steps a whole code
+    point.
+  - **Social handles.** The pattern ended in `\b`, which JavaScript reads as
+    ASCII: `@José` became `[SOCIAL_HANDLE]é` and `@Ελένη` was not found. It
+    ends in Python's Unicode boundary now.
+  - **`maj`**, the month in Danish, Swedish, Norwegian, Slovene and Croatian,
+    was missing from the month list: `Født: 4. maj 1948` was a date of birth
+    in Python only.
+  - **E-mail top-level domain.** `\p{L}{2,}\b` masked `jan@example.café`
+    as `[EMAIL]é`; Python's TLD is ASCII, and an address with a non-ASCII TLD
+    is now detected by neither SDK rather than cut.
+  - **Windows in code points.** The keyword window (150), the label window
+    (44) and the short look-behinds and look-aheads of the suppressors counted
+    UTF-16 units, so every emoji counted twice: "Passport" fifty emoji before
+    a passport number was its label in Python and out of reach here.
+  - **`cutAllowlisted`** searched a copy of the span, so its look-behind
+    could not see the character before it.
+  - **Custom patterns:** `\w`, `\d` and `\b` are ASCII in JavaScript and
+    Unicode in Python; the README says so and how to write a pattern both read
+    alike.
+
 ## 0.8.0 (2026-10-31)
 
 ### Added

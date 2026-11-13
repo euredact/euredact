@@ -34,6 +34,7 @@ which both test suites run.
 - Text dense with phone numbers took quadratic time: 117 KB took 115 s, now 3 s, with identical output. *(rules-engine#150)*
 - The result cache answered an NFC spelling of a document with the result of its NFD spelling, handed out its stored result (a caller emptying `detections` emptied them for later calls) and kept results across a new BIC registry. `referential_integrity` labels could be shared by two values under `aredact` / `aredact_batch`. *(rules-engine#150)*
 - Allowlist separator folding applied to every type instead of the identifier types only. Valid identifiers were rejected: a Portuguese NIF of a non-resident (prefix 45), a Czech birth number before 1986 with check digit 0, an omocodic Italian codice fiscale. *(rules-engine#150)*
+- The TypeScript SDK and the Python one now detect the same spans on Unicode text: social handles ending in an accented letter or written in another script (`@José` was cut to `[SOCIAL_HANDLE]é`, `@Ελένη` missed), dates with `maj` (Danish, Swedish, Norwegian, Slovene, Croatian), an e-mail with a non-ASCII top-level domain (masked all but its last letter in TypeScript, not detected in Python, now not detected in either), and context windows measured in code points (an emoji counted twice in TypeScript). A custom pattern that can match empty text no longer hangs the TypeScript SDK on text with an emoji. The French passport pattern in Python uses the shared passport labels, as TypeScript did ("document de voyage"). *(rules-engine#151)*
 
 ## [0.8.0] - 2026-10-31
 

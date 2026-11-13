@@ -1,6 +1,7 @@
 import { EntityType, type PatternDef } from "../types.js";
 import { isKnownInstitution, isRegisteredBic } from "./bicRegistry.js";
 import { DE_DISTRICT_CODES } from "./deDistricts.js";
+import { cpAfter, cpBefore } from "./codepoints.js";
 
 const CONTEXT_CHARS = 150;
 
@@ -13,9 +14,7 @@ export interface RawMatch {
 }
 
 function getContext(text: string, start: number, end: number): [string, string] {
-  const ctxStart = Math.max(0, start - CONTEXT_CHARS);
-  const ctxEnd = Math.min(text.length, end + CONTEXT_CHARS);
-  return [text.slice(ctxStart, start), text.slice(end, ctxEnd)];
+  return [cpBefore(text, start, CONTEXT_CHARS), cpAfter(text, end, CONTEXT_CHARS)];
 }
 
 // Unicode-safe word boundary: negative lookahead for any letter (including accented)
@@ -113,7 +112,9 @@ export const MONTH_NAMES =
   // "desember" (nb/nn/is) was the one December spelling missing from a list
   // that already carried ten others — "1. desember 2025" was a Norwegian
   // postcode because of it.
-  "|marts|augusti|desember" +
+  // "maj" (da/sv/no, sl/hr) was the one month the Python list had and this
+  // one lacked: "Født: 4. maj 1948" was a DOB there only (rules-engine#151).
+  "|marts|maj|augusti|desember" +
   "|janúar|febrúar|apríl|maí|júní|júlí|ágúst|nóvember" +
   "|tammikuu|helmikuu|maaliskuu|huhtikuu|toukokuu|kesäkuu|heinäkuu|elokuu|syyskuu|lokakuu|marraskuu|joulukuu" +
   "|jaanuar|veebruar|aprill|juuni|juuli|oktoober|detsember" +
@@ -242,7 +243,7 @@ function suppressSecretOverStructured(text: string, match: RawMatch): boolean {
   const token = coreToken(match.text);
   if (EXACT_UUID.test(token) || EXACT_EMAIL.test(token)) return true;
   if (BIC_SHAPE.test(token)) {
-    return BIC_CUE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start));
+    return BIC_CUE_BEFORE.test(cpBefore(text, match.start, 24));
   }
   return false;
 }
@@ -306,7 +307,7 @@ function suppressSecretNotASecret(_text: string, match: RawMatch): boolean {
 function suppressPlateAsCurrencyAmount(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.LICENSE_PLATE) return false;
   if (CURRENCY_CODE_TAIL.test(match.text)) return true;
-  return CURRENCY_CODE_AFTER.test(text.slice(match.end, match.end + 12));
+  return CURRENCY_CODE_AFTER.test(cpAfter(text, match.end, 12));
 }
 
 /**
@@ -328,7 +329,7 @@ function suppressTaxidAsIpAddress(_text: string, match: RawMatch): boolean {
 function suppressPhoneAsNumberRange(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.PHONE) return false;
   if (YEAR_RANGE.test(match.text.trim())) return true;
-  return DECIMAL_TAIL_BEFORE.test(text.slice(Math.max(0, match.start - 2), match.start));
+  return DECIMAL_TAIL_BEFORE.test(cpBefore(text, match.start, 2));
 }
 
 function suppressCurrency(text: string, match: RawMatch): boolean {
@@ -368,7 +369,7 @@ function suppressReference(text: string, match: RawMatch): boolean {
   if (!applicable.has(match.patternDef.entityType)) return false;
   const [before] = getContext(text, match.start, match.end);
   if (REFERENCE_BEFORE.test(before)) return true;
-  const adjacent = text.slice(Math.max(0, match.start - 8), match.start);
+  const adjacent = cpBefore(text, match.start, 8);
   if (HASH_BEFORE.test(adjacent)) return true;
   if (!REF_PREFIX_BEFORE.test(adjacent)) return false;
   return !(
@@ -379,11 +380,11 @@ function suppressReference(text: string, match: RawMatch): boolean {
 
 /** "CH-8004 Zürich" on an address line, not the reference "IT-20431". */
 function isCountryPrefixedAddress(text: string, start: number, end: number): boolean {
-  const found = COUNTRY_PREFIX_OPENS_LINE.exec(text.slice(Math.max(0, start - 12), start));
+  const found = COUNTRY_PREFIX_OPENS_LINE.exec(cpBefore(text, start, 12));
   return (
     found !== null &&
     POSTAL_PREFIX_COUNTRIES.has(found[1]) &&
-    CITY_AFTER.test(text.slice(end, end + 24))
+    CITY_AFTER.test(cpAfter(text, end, 24))
   );
 }
 
@@ -466,7 +467,7 @@ const SENTENCE_BREAK_G = /[.!?][ \t\n]|\n/g;
 
 // The value's own sentence, bounded either side.
 function sentenceAround(text: string, start: number, end: number, reach = 160): string {
-  let before = text.slice(Math.max(0, start - reach), start);
+  let before = cpBefore(text, start, reach);
   let after = text.slice(end, end + reach);
   let lastEnd = -1;
   SENTENCE_BREAK_G.lastIndex = 0;
@@ -507,13 +508,13 @@ const ADDRESS_COMMA = /(?<!\S)(?:[A-ZÀ-Þ\d][^\s,]*|[^\s,]*\]),[ \t]*$/;
 const MASKED_VALUE = /\[[A-Z][A-Z_]*\]/g;
 
 function yearSitsInAddressStructure(text: string, start: number, end: number): boolean {
-  const before = text.slice(Math.max(0, start - 28), start);
+  const before = cpBefore(text, start, 28);
   // "Amsterdam, 2026" -- the comma of an address line.
   if (ADDRESS_COMMA.test(before)) return true;
   // "PLZ: 2011" -- a postal label with nothing but punctuation between.
   if (POSTAL_LABEL_TOUCHING.test(before)) return true;
   // A capitalised place name immediately after.
-  if (CITY_AFTER.test(text.slice(end, end + 24))) return true;
+  if (CITY_AFTER.test(cpAfter(text, end, 24))) return true;
   // An address word in the value's own sentence. "Te huur: Lange Nieuwstraat
   // 12, rustige ligging in 2018, vlakbij openbaar vervoer." is an Antwerp
   // postal code in prose; the false positives put the year and the address in
@@ -531,8 +532,8 @@ function suppressYearAsPostal(text: string, match: RawMatch): boolean {
   // and "Str." appear in the header of essentially every business letter.
   // Measured: 1,691 of 3,322 postal false positives were plausible years,
   // 1,636 of them literally "2025".
-  if (DATE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start))) return true;
-  if (DATE_AFTER.test(text.slice(match.end, match.end + 8))) return true;
+  if (DATE_BEFORE.test(cpBefore(text, match.start, 24))) return true;
+  if (DATE_AFTER.test(cpAfter(text, match.end, 8))) return true;
   if (!RECENT_YEAR.test(clean)) return false;
 
   const [before, after] = getContext(text, match.start, match.end);
@@ -639,18 +640,18 @@ const GROUP_AFTER = /^[,.]\d{3}(?!\d)/;
 /** Suppress a postal code the word in front of it rules out. */
 function suppressPostalAfterDisqualifyingWord(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
-  const before = text.slice(Math.max(0, match.start - 24), match.start);
+  const before = cpBefore(text, match.start, 24);
   if (EXTENSION_BEFORE.test(before) || COUNT_LABEL_BEFORE.test(before)
     || NOT_POSTAL_BEFORE.test(before)) return true;
-  if (GROUP_BEFORE.test(before) && GROUP_AFTER.test(text.slice(match.end, match.end + 5))) return true;
-  const after = text.slice(match.end, match.end + 24);
+  if (GROUP_BEFORE.test(before) && GROUP_AFTER.test(cpAfter(text, match.end, 5))) return true;
+  const after = cpAfter(text, match.end, 24);
   if (TECH_WORD_BEFORE.test(before) || TECH_SHAPE_BEFORE.test(before) || POSTAL_UNIT_AFTER.test(after)
     || STANDARD_LETTERS.test(match.text)) return true;
   if (PID_BEFORE.test(before) && after.startsWith("]")) return true;
   if (DATE_YEAR.test(match.text.trim()) && (YEAR_RANGE_BEFORE.test(before) || YEAR_RANGE_AFTER.test(after))) return true;
   return RECENT_YEAR.test(match.text.trim())
     && (YEAR_WORD_BEFORE.test(before) || YEAR_VERB_BEFORE.test(before))
-    && !TOWN_AFTER.test(text.slice(match.end, match.end + 3));
+    && !TOWN_AFTER.test(cpAfter(text, match.end, 3));
 }
 
 /** A group with a leading zero: "2.00.079.01" is a version, not an address. */
@@ -676,9 +677,9 @@ function suppressIpNotAHost(text: string, match: RawMatch): boolean {
   if (IP_LEADING_ZERO.test(ip) || DOCUMENTATION_NETS.some((n) => ip.startsWith(n))) return true;
   if (ip === "0.0.0.0" || ip.startsWith("127.")) return true;
   // Part of a longer dotted run: "urn:oid:1.2.250.1.71.4.2.1" is an OID.
-  if (/\d\.$/.test(text.slice(Math.max(0, match.start - 2), match.start))
-    || /^\.\d/.test(text.slice(match.end, match.end + 2))) return true;
-  const prefix = CIDR_PREFIX_AFTER.exec(text.slice(match.end, match.end + 4));
+  if (/\d\.$/.test(cpBefore(text, match.start, 2))
+    || /^\.\d/.test(cpAfter(text, match.end, 2))) return true;
+  const prefix = CIDR_PREFIX_AFTER.exec(cpAfter(text, match.end, 4));
   if (prefix !== null && Number(prefix[1]) < 32) {
     const value = ip.split(".").reduce((acc, o) => acc * 256 + Number(o), 0);
     return value % 2 ** (32 - Number(prefix[1])) === 0;
@@ -713,7 +714,7 @@ function suppressDummyValue(_text: string, match: RawMatch): boolean {
 /** An identifier given as a form's specimen, not anyone's (#126). */
 function suppressExampleValue(text: string, match: RawMatch): boolean {
   if (!EXAMPLE_TYPES.has(match.patternDef.entityType)) return false;
-  return EXAMPLE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start));
+  return EXAMPLE_BEFORE.test(cpBefore(text, match.start, 24));
 }
 
 /**
@@ -726,7 +727,7 @@ function suppressNotAnIdentifier(text: string, match: RawMatch): boolean {
   const value = match.text.trim();
   if (type === EntityType.PASSPORT) return !/\d/.test(value);
   if (type === EntityType.LICENSE_PLATE) {
-    return ALGORITHM.test(value) || /§\s*$/.test(text.slice(Math.max(0, match.start - 4), match.start));
+    return ALGORITHM.test(value) || /§\s*$/.test(cpBefore(text, match.start, 4));
   }
   if (type === EntityType.NATIONAL_ID) return EXACT_DOTTED_DATE.test(value);
   return false;
@@ -747,7 +748,7 @@ function suppressPhoneDateOverlap(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.PHONE) return false;
   const candidate = match.text.trim();
   if (DATE_PATTERN_FULL.test(candidate)) return true;
-  return DATE_THEN_HOUR.test(candidate) && MINUTES_AFTER.test(text.slice(match.end, match.end + 3));
+  return DATE_THEN_HOUR.test(candidate) && MINUTES_AFTER.test(cpAfter(text, match.end, 3));
 }
 
 // Standards and classification prefixes that are plate-shaped once a letter and
@@ -786,7 +787,7 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
   // Suppress currency + number misread as plate (e.g. "EUR 2")
   if (CURRENCY_PLATE.test(match.text)) return true;
   if (match.start >= 3) {
-    const before = text.slice(Math.max(0, match.start - 10), match.start);
+    const before = cpBefore(text, match.start, 10);
     if (/[A-Za-zÄÖÜäöüß]{2,}-$/.test(before)) return true;
   }
   // A plate is a token of its own: joined by a connector to more of an
@@ -795,7 +796,7 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
   if (joinedToMore(text, match.start, match.end)) return true;
   // After a reference marker ("Ref #FR-S2") it is a reference, unless a plate
   // cue says otherwise (rules-engine#81).
-  if (REFERENCE_MARK_BEFORE.test(text.slice(Math.max(0, match.start - 4), match.start))) {
+  if (REFERENCE_MARK_BEFORE.test(cpBefore(text, match.start, 4))) {
     const [b, a] = getContext(text, match.start, match.end);
     if (!PLATE_CUE_NEAR.test(b + a)) return true;
   }
@@ -815,7 +816,7 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
     if (/\d/.test(afterChar) || beforeChar === "-") return true;
     if (parts[0] === "WS" || parts[0] === "SS") return true;
     if (parts[0] === "IP") {
-      const afterTwo = text.slice(match.end, match.end + 2);
+      const afterTwo = cpAfter(text, match.end, 2);
       if (afterTwo.length >= 2 && afterTwo[0] === "." && /\d/.test(afterTwo[1])) return true;
     }
   }
@@ -970,9 +971,9 @@ function suppressPostalAsHouseNumber(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
   const clean = match.text.replace(/\s/g, "");
   if (clean.length > 3) return false;
-  const before = text.slice(Math.max(0, match.start - 30), match.start);
+  const before = cpBefore(text, match.start, 30);
   if (/[a-záéíóúýþæöðA-ZÁÉÍÓÚÝÞÆÖÐ]{3,}\s+$/.test(before)) {
-    const after = text.slice(match.end, match.end + 5);
+    const after = cpAfter(text, match.end, 5);
     if (!/^,?\s+[A-ZÁÉÍÓÚÝÞÆÖÐ]/.test(after)) return true;
   }
   return false;
@@ -1207,10 +1208,10 @@ const BIC_LABEL_BEFORE = /(?<![A-Za-z])(?:bic|swift)(?:[\s/\-]*(?:code|swift|bic
 function bicShapedWord(text: string, start: number, end: number, token: string): boolean {
   if ((start >= 2 && text[start - 1] === "-" && LETTER.test(text[start - 2])) ||
       (text[end] === "-" && end + 1 < text.length && LETTER.test(text[end + 1]))) return true;
-  if (TITLE_BEFORE.test(text.slice(Math.max(0, start - 8), start))) return true;
+  if (TITLE_BEFORE.test(cpBefore(text, start, 8))) return true;
   return /^[A-Za-z]+$/.test(token) && !(token.length === 11 && token.endsWith("XXX"))
     && !isKnownInstitution(token)
-    && !BIC_LABEL_BEFORE.test(text.slice(Math.max(0, start - 30), start));
+    && !BIC_LABEL_BEFORE.test(cpBefore(text, start, 30));
 }
 
 // ── Postal code: digits belonging to a longer identifier ────────────────
@@ -1261,7 +1262,7 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   const clean = match.text.trim();
   if (!/^\d+$/.test(clean)) {
     // A structured form glued on by a hyphen is the tail of a reference: "CPS-HR-2026-019" (#111).
-    const glued = text.slice(Math.max(0, match.start - 2), match.start);
+    const glued = cpBefore(text, match.start, 2);
     if (glued.length === 2 && glued[1] === "-" && /[A-Za-z0-9]/.test(glued[0])) {
       const m = COUNTRY_PREFIXED.exec(text.slice(0, match.start - 1));
       return !(m && m[1] in POSTAL_PREFIX_DIGITS);
@@ -1286,13 +1287,13 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   if ("._/".includes(afterChar) && /\d/.test(nextNext)) return true;
   if (afterChar === "-" && /\d/.test(nextNext)) return true;
   // A hyphenated chain goes on after it: "réf. : L-2025-HD-0412" is a reference (#111).
-  if (/^-[A-Za-z0-9]+-/.test(text.slice(match.end, match.end + 12))) return true;
+  if (/^-[A-Za-z0-9]+-/.test(cpAfter(text, match.end, 12))) return true;
   if (beforeChar === "-" && !countryPrefixed(text.slice(0, match.start - 1), clean)) return true;
 
   // A further digit group on the same line: "1268 040390", "1234 5678 925",
   // "+43 664 8213 907". Horizontal whitespace only — a digit on the *next*
   // line is a separate field, not a continuation.
-  if (/^[ \t]+\d/.test(text.slice(match.end, match.end + 4))) return true;
+  if (/^[ \t]+\d/.test(cpAfter(text, match.end, 4))) return true;
 
   // An identifier label introduces the digits: "DiNr. 4471", "Policen-Nr."
   // Unless the label is a *postal* one. ID_CUE_BEFORE matches any word ending
@@ -1302,7 +1303,7 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   // four- or five-digit code, so the isdigit() guard above lets this run and
   // the code was suppressed by its own label: `postnummer: 5020 Bergen`
   // produced nothing at all (rules-engine#41).
-  const before = text.slice(Math.max(0, match.start - 40), match.start);
+  const before = cpBefore(text, match.start, 40);
   const cue = ID_CUE_BEFORE.exec(before);
   if (cue !== null && !POSTAL_LABEL_CUE.test(cue[0].trimStart())) return true;
 
@@ -1616,8 +1617,8 @@ function suppressCardInsideDigitRun(text: string, match: RawMatch): boolean {
   const sep = [...match.text].find(c => !/\d/.test(c)) ?? "";
   if (!sep) return false;
   const s = sep.replace(/[-\\^$.*+?()[\]{}|]/g, "\\$&");
-  const before = text.slice(Math.max(0, match.start - 6), match.start);
-  const after = text.slice(match.end, match.end + 6);
+  const before = cpBefore(text, match.start, 6);
+  const after = cpAfter(text, match.end, 6);
   return new RegExp(`(?<!\\d)\\d{4}${s}$`).test(before) || new RegExp(`^${s}\\d{4}(?!\\d)`).test(after);
 }
 

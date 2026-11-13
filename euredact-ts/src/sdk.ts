@@ -464,12 +464,17 @@ function cutAllowlisted(
   const kept: Detection[] = [];
   const exempted: Exemption[] = [];
   for (const d of detections) {
-    const span = text.slice(d.start, d.end);
+    // The text up to the span's end, searched from its start: as Python's
+    // finditer(text, start, end), the lookbehind sees the character before the
+    // span and the lookahead nothing after it (rules-engine#151).
+    const upToEnd = text.slice(0, d.end);
     const cuts: Array<[number, number, string]> = [];
     for (const [entry, pattern] of patterns) {
-      for (const m of span.matchAll(pattern)) {
-        const s = d.start + m.index, e = s + m[0].length;
+      pattern.lastIndex = d.start;
+      for (let m = pattern.exec(upToEnd); m !== null; m = pattern.exec(upToEnd)) {
+        const s = m.index, e = s + m[0].length;
         if (!cuts.some(([cs, ce]) => s < ce && cs < e)) cuts.push([s, e, entry]);
+        if (m[0].length === 0) pattern.lastIndex++;
       }
     }
     if (cuts.length === 0) { kept.push(d); continue; }
