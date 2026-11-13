@@ -27,6 +27,14 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- With `[fast]` installed (google-re2), values written with Unicode spaces were left in the text: a French phone grouped with no-break spaces (`06\u00a012\u00a034\u00a056\u00a078`), an IBAN grouped the same way. The re2 prefilter read `\s`, `\d`, `\w` and `\b` as ASCII and skipped patterns Python would have matched; it now reads the text folded to ASCII stand-ins chosen by Python's own character classes, and matches exactly what the pure-Python install does. *(Python only)* *(rules-engine#150)*
+- Digits in other scripts (full-width `０６１２３４５６７８`, Arabic-Indic, Devanagari, …) are read as ASCII digits, one character for one; a phone written in full-width digits was cut in two (Python) or left whole (TypeScript). Masks over text whose NFC form has the same length but different characters (a composition and an expansion) landed one character off. *(rules-engine#150)*
+- Text dense with phone numbers took quadratic time: 117 KB took 115 s, now 3 s, with identical output. *(rules-engine#150)*
+- The result cache answered an NFC spelling of a document with the result of its NFD spelling, handed out its stored result (a caller emptying `detections` emptied them for later calls) and kept results across a new BIC registry. `referential_integrity` labels could be shared by two values under `aredact` / `aredact_batch`. *(rules-engine#150)*
+- Allowlist separator folding applied to every type instead of the identifier types only. Valid identifiers were rejected: a Portuguese NIF of a non-resident (prefix 45), a Czech birth number before 1986 with check digit 0, an omocodic Italian codice fiscale. *(rules-engine#150)*
+
 ## [0.8.0] - 2026-10-31
 
 ### Added

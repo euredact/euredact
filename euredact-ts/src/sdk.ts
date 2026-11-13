@@ -5,6 +5,7 @@ import { normalize, mapOffsetToOriginal } from "./normalizer.js";
 import { RuleEngine } from "./rules/engine.js";
 import { DocumentContext } from "./rules/context.js";
 import { weightsToRanking } from "./rules/evidence.js";
+import { registryGeneration } from "./rules/bicRegistry.js";
 import { EntityType, canonicalType, type Detection, type Exemption, type RedactResult } from "./types.js";
 
 const DATE_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
@@ -346,9 +347,14 @@ function allowlistKey(value: string): string {
   return value.normalize("NFC").trim().toLowerCase();
 }
 
-/** `allowlistKey` with presentational separators removed. */
+/**
+ * `allowlistKey` with presentational separators removed, prefixed so it
+ * shares no key with an unfolded entry: in one keyspace an exact lookup found
+ * other entries' folded forms, and folding applied to every type
+ * (rules-engine#150).
+ */
 function foldedKey(value: string): string {
-  return allowlistKey(value).replace(SEPARATORS, "");
+  return "\u0000" + allowlistKey(value).replace(SEPARATORS, "");
 }
 
 /** Comparison key -> the entry as the caller wrote it (for reporting). */
@@ -938,11 +944,16 @@ export class EuRedact {
     const allowKey = (allowed.size ? JSON.stringify([...allowed.keys()].sort()) : "")
       + (domains.size ? "|dom=" + JSON.stringify([...domains.keys()].sort()) : "")
       + (excluded.size ? "|excl=" + JSON.stringify([...excluded].sort()) : "");
-    const cacheMode = `rules|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}|tok=${tokenize}|allow=${allowKey}`;
+    // The BIC registry decides which BICs are valid, so a new one must not be
+    // answered from results computed under the old (rules-engine#150).
+    const cacheMode = `rules|dates=${detectDates}|hint=${hintKey}|ri=${referentialIntegrity}`
+      + `|tok=${tokenize}|allow=${allowKey}|bic=${registryGeneration()}`;
 
     let cacheKey: string | undefined;
     if (cache) {
-      cacheKey = this.cache.key(normalizedText, countriesTuple, cacheMode);
+      // The text as given, not as normalised: the result is built from it, so
+      // an NFD and an NFC spelling are two entries (rules-engine#150).
+      cacheKey = this.cache.key(text, countriesTuple, cacheMode);
       const cached = this.cache.get(cacheKey);
       if (cached !== null) return cached;
     }

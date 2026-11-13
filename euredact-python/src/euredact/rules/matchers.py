@@ -318,6 +318,118 @@ def _strip_lookarounds(pattern: str) -> str | None:
     return "".join(out)
 
 
+def _fold_char(ch: str) -> str:
+    """The ASCII stand-in the RE2 prefilter sees for one character.
+
+    Chosen from the predicates Python's ``re`` uses on ``str`` patterns, so
+    that RE2's ASCII ``\\s``, ``\\d``, ``\\w`` and ``\\b`` agree with Python's
+    Unicode ones on the folded text: whitespace becomes " ", a decimal digit
+    "0", any other word character "a". Anything else, and all of ASCII, is
+    left as it is.
+    """
+    if ch.isascii():
+        return ch
+    if ch.isspace():
+        return " "
+    if ch.isdecimal():
+        return "0"
+    if ch.isalnum():
+        return "a"
+    return ch
+
+
+class _FoldTable(dict):
+    """A ``str.translate`` table that fills itself in, one code point at a time."""
+
+    def __missing__(self, cp: int) -> str:
+        folded = self[cp] = _fold_char(chr(cp))
+        return folded
+
+
+_FOLD = _FoldTable()
+
+
+def _fold_for_re2(text: str) -> str:
+    """*text* as the RE2 prefilter reads it; see :func:`_fold_char`."""
+    return text if text.isascii() else text.translate(_FOLD)
+
+
+def _for_re2(pattern: str) -> str | None:
+    """*pattern* for the RE2 prefilter, which reads folded text.
+
+    RE2 reads ``\\d``, ``\\s``, ``\\w`` and ``\\b`` as ASCII; Python reads them as
+    Unicode. Given the source and the text unchanged, the prefilter matched
+    less than the pattern it filters for and skipped it: "06\\xa012\\xa034\\xa056\\xa078",
+    a French phone written with the no-break spaces of French digit grouping,
+    was redacted without ``[fast]`` and left in the text with it
+    (rules-engine#150). Spelling Python's classes out for RE2 instead made the
+    Set too large to compile.
+
+    So the prefilter reads folded text (:func:`_fold_for_re2`), on which RE2's
+    ASCII classes are Python's, and the pattern is folded the same way: a
+    non-ASCII literal becomes its stand-in, and a character class with a
+    non-ASCII member also accepts the stand-ins. Both only widen the match,
+    which is the safe direction for a prefilter. ``\\uXXXX`` and ``\\xXX`` escapes
+    are read as the character they name. Returns None for an escape it cannot
+    read, and that pattern always runs.
+    """
+    out: list[str] = []
+    i, n = 0, len(pattern)
+    in_class = False
+    class_start = 0
+    class_wide = False
+    while i < n:
+        ch = pattern[i]
+        if ch == "\\" and i + 1 < n:
+            esc = pattern[i + 1]
+            literal = None
+            if esc == "u":
+                literal, i = pattern[i + 2:i + 6], i + 6
+            elif esc == "x":
+                literal, i = pattern[i + 2:i + 4], i + 4
+            else:
+                out.append(pattern[i:i + 2])
+                i += 2
+                continue
+            try:
+                ch = chr(int(literal, 16))
+            except ValueError:
+                return None
+            if ch.isascii():
+                out.append(re.escape(ch))
+                continue
+        elif ch == "[" and not in_class:
+            in_class, class_start, class_wide = True, len(out), False
+            out.append(ch)
+            i += 1
+            if i < n and pattern[i] == "^":
+                out.append("^")
+                i += 1
+            if i < n and pattern[i] == "]":
+                out.append("\\]")
+                i += 1
+            continue
+        elif ch == "]" and in_class:
+            in_class = False
+            negated = out[class_start + 1:class_start + 2] == ["^"]
+            if class_wide and not negated:
+                out.append("a0 ")
+            out.append(ch)
+            i += 1
+            continue
+        else:
+            i += 1
+        if ch.isascii():
+            out.append(ch)
+        elif in_class:
+            class_wide = True
+            out.append(ch)
+        else:
+            folded = _fold_char(ch)
+            out.append(re.escape(folded) if folded != ch else ch)
+    return "".join(out)
+
+
 class MultiPatternMatcher:
     """Compiles all active patterns and scans text adaptively."""
 
@@ -375,9 +487,12 @@ class MultiPatternMatcher:
         the sliding window could otherwise straddle. A pattern RE2 rejects only
         for a lookaround is added in its stripped form, a superset.
         """
-        # The *original* source goes to RE2, not the rewritten one: RE2's \b is
-        # already ASCII-only, so the semantics match, while the rewrite uses
-        # lookbehind that RE2 cannot compile.
+        # RE2 gets the source Python compiles, with _ascii_word_boundaries'
+        # rewrite, folded by _for_re2 to match the folded text the prefilter
+        # reads. On folded text RE2's \b is Python's Unicode one, so without
+        # the rewrite "ЕГН7523169263" (a letter glued to a number, which the
+        # rewrite treats as a boundary) was skipped. The rewrite's lookbehinds
+        # take the lookaround-stripping path below (rules-engine#150).
         automaton = _re2.Set.SearchSet()
         slots: list[int | None] = []
         added = 0
@@ -386,8 +501,13 @@ class MultiPatternMatcher:
                 if _max_match_width(pdef.pattern) > _RE2_OVERLAP:
                     slots.append(None)
                     continue
+                source = _ascii_word_boundaries(pdef.pattern)
+                exact = _for_re2(source)
+                if exact is None:
+                    slots.append(None)
+                    continue
                 try:
-                    automaton.Add(pdef.pattern)
+                    automaton.Add(exact)
                 except Exception:  # noqa: BLE001 - RE2 rejects some Python syntax
                     # RE2 has no lookaround. Removing one only drops a
                     # constraint, so the stripped pattern matches a superset:
@@ -395,7 +515,8 @@ class MultiPatternMatcher:
                     # skip a window where the exact pattern matches. A guard
                     # like "(?![.,/:]\d)" used to cost a broad pattern its
                     # prefilter entirely (rules-engine#72).
-                    superset = _strip_lookarounds(pdef.pattern)
+                    stripped = _strip_lookarounds(source)
+                    superset = _for_re2(stripped) if stripped is not None else None
                     try:
                         if superset is None:
                             raise ValueError
@@ -472,6 +593,9 @@ class MultiPatternMatcher:
     def _scan_re2(self, text: str, plan: _ScanPlan, country_codes: set[str] | None = None) -> list[RawMatch]:
         """RE2-prefiltered scan. Identical output to :meth:`_scan_sequential`.
 
+        The prefilter reads the text folded to ASCII stand-ins (see
+        :func:`_for_re2`); the patterns themselves run on the text as it is.
+
         One DFA pass per window reports which patterns match anywhere in it —
         typically 42 of 314 for a real document. Only those are then run, over
         the full text, exactly as the sequential path would run them. Skipping
@@ -479,12 +603,13 @@ class MultiPatternMatcher:
         pure speed-up rather than a second set of semantics.
         """
         candidates: set[int] = set()
+        folded = _fold_for_re2(text)
         length = len(text)
         step = _RE2_WINDOW - _RE2_OVERLAP
         pos = 0
         while pos < length:
             end = min(length, pos + _RE2_WINDOW)
-            hits = plan.re2_set.Match(text[pos:end])  # type: ignore[attr-defined]
+            hits = plan.re2_set.Match(folded[pos:end])  # type: ignore[attr-defined]
             if hits:
                 candidates.update(hits)
             if end >= length:

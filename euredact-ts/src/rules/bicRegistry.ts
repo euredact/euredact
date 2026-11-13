@@ -194,6 +194,16 @@ export const SEED_BIC6_PREFIXES: ReadonlySet<string> = new Set([
 export type BicRegistryProvider = (bic: string) => boolean;
 
 let provider: BicRegistryProvider | null = null;
+/**
+ * Bumped by every setBicRegistry call. A BIC's validity depends on the
+ * registry, so cached results key on it (rules-engine#150).
+ */
+let generation = 0;
+
+/** How many times {@link setBicRegistry} has been called. @internal */
+export function registryGeneration(): number {
+  return generation;
+}
 
 /**
  * Install a deployment-supplied BIC registry, consulted ahead of the seed list.
@@ -206,6 +216,7 @@ let provider: BicRegistryProvider | null = null;
 export function setBicRegistry(
   registry: BicRegistryProvider | Iterable<string> | null,
 ): void {
+  generation++;
   if (registry === null) {
     provider = null;
     return;

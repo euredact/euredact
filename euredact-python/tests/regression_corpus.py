@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import string
 import sys
 from pathlib import Path
 
@@ -740,6 +741,66 @@ def _wrapped_iban(indent: str):
     return build
 
 
+def _fr_phone(rng: random.Random) -> list[str]:
+    return ["06"] + [f"{rng.randrange(100):02d}" for _ in range(4)]
+
+
+def _phone_grouped_with(space: str):
+    """A French phone grouped with no-break spaces, as French typography
+    writes numbers (#150)."""
+    def build(rng):
+        v = space.join(_fr_phone(rng))
+        return f"Tél : {v}, mail {email(rng)}", [pii(v, "PHONE", "FR")], []
+    return build
+
+
+def _iban_grouped_with_no_break_spaces(rng):
+    """An IBAN grouped with no-break spaces (#150)."""
+    n = nrb(rng)
+    v = "\xa0".join(["PL" + n[:2]] + [n[i:i + 4] for i in range(2, 26, 4)])
+    return f"Rachunek: {v}.", [pii(v, "BANK_ACCOUNT", "PL")], []
+
+
+def _full_width_phone(rng):
+    """A phone number in full-width digits (#150)."""
+    v = "".join(_fr_phone(rng)).translate(str.maketrans("0123456789", "０１２３４５６７８９"))
+    return f"Tel {v}", [pii(v, "PHONE", "FR")], []
+
+
+def _pt_nif_non_resident(rng):
+    """A non-resident's NIF, prefix 45 (#150)."""
+    def make(r):
+        body = "45" + _digits(r, 6)
+        t = sum(int(d) * w for d, w in zip(body, (9, 8, 7, 6, 5, 4, 3, 2))) % 11
+        return body + str(0 if t < 2 else 11 - t)
+    v = _sample(rng, make, "portuguese_nif")
+    return f"Contribuinte n.º {v}", [pii(v, "NATIONAL_ID", "PT")], []
+
+
+def _omocodic_codice_fiscale(rng):
+    """An omocodic codice fiscale: digits from the right replaced by L-V (#150)."""
+    letters = "BCDFGHJKLMNPQRSTVWXZ"
+
+    def make(r):
+        body = list("".join(r.choice(letters) for _ in range(6)) + _digits(r, 2)
+                    + r.choice("ABCDEHLMPRST") + f"{r.randrange(1, 29):02d}"
+                    + r.choice("ABCDEFGHLMZ") + _digits(r, 3))
+        for pos in (14, 13):
+            body[pos] = "LMNPQRSTUV"[int(body[pos])]
+        return "".join(body) + r.choice(string.ascii_uppercase)
+    v = _sample(rng, make, "italian_cf")
+    return f"Codice fiscale: {v}", [pii(v, "NATIONAL_ID", "IT")], []
+
+
+def _czech_birth_number_check_zero(rng):
+    """A Czech birth number up to 1985 with remainder 10, check digit 0 (#150)."""
+    while True:
+        first9 = f"{rng.randrange(54, 86):02d}{rng.randrange(1, 13):02d}{rng.randrange(1, 29):02d}{_digits(rng, 3)}"
+        if int(first9) % 11 == 10:
+            v = f"{first9[:6]}/{first9[6:]}0"
+            return f"Rodné číslo: {v}", [pii(v, "NATIONAL_ID", "CZ")], []
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -859,6 +920,14 @@ TEMPLATES: list[tuple[str, object]] = [
     # #138: an IBAN wrapped over a line break.
     ("rules-engine#138: wrapped IBAN, indented", _wrapped_iban("  ")),
     ("rules-engine#138: wrapped IBAN", _wrapped_iban("")),
+    # #150: Unicode spaces and digits, and identifiers the validators rejected.
+    ("rules-engine#150: phone grouped with no-break spaces", _phone_grouped_with("\xa0")),
+    ("rules-engine#150: phone grouped with narrow no-break spaces", _phone_grouped_with("\u202f")),
+    ("rules-engine#150: IBAN grouped with no-break spaces", _iban_grouped_with_no_break_spaces),
+    ("rules-engine#150: phone in full-width digits", _full_width_phone),
+    ("rules-engine#150: Portuguese NIF 45", _pt_nif_non_resident),
+    ("rules-engine#150: omocodic codice fiscale", _omocodic_codice_fiscale),
+    ("rules-engine#150: Czech birth number, check digit 0", _czech_birth_number_check_zero),
     # #103: residence card and visa sticker.
     ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
     ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),

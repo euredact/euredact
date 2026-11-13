@@ -14,9 +14,10 @@ class ITConfig(CountryConfig):
         self.name = "Italy"
         self.patterns = [
             # --- Codice Fiscale (16 alphanumeric) ---
+            # Digits may be letters L-V in an omocodic code (rules-engine#150).
             PatternDef(
                 entity_type=EntityType.NATIONAL_ID,
-                pattern=r"\b[A-Z]{6}\d{2}[ABCDEHLMPRST]\d{2}[A-Z]\d{3}[A-Z]\b",
+                pattern=r"\b[A-Z]{6}[\dLMNPQRSTUV]{2}[ABCDEHLMPRST][\dLMNPQRSTUV]{2}[A-Z][\dLMNPQRSTUV]{3}[A-Z]\b",
                 validator="italian_cf",
                 description="Italian Codice Fiscale — 16 chars with check letter",
             ),

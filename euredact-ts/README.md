@@ -1501,7 +1501,7 @@ list is merged with it.
 Input text
     |
     v
-[Normalizer] -- Unicode normalization, whitespace cleanup
+[Normalizer] -- NFC, digits in other scripts read as ASCII (０６… as 06…)
     |
     v
 [Pass 1: Pattern Matching] -- All country + shared + custom regexes

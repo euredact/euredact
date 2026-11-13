@@ -883,6 +883,44 @@ function suppressPostalInsideIban(text: string, match: RawMatch): boolean {
 // alphanumerics. Deliberately not checksum-gated -- the point is to describe the
 // run a human wrote as one account number, including the ones that fail their
 // checksum, because those are exactly the ones no structured detector claims.
+/**
+ * The offsets of every line break in the last text seen, for the per-candidate
+ * line lookups below. `lastIndexOf("\n")` walks back to the start of the line
+ * for each candidate, which on one long line of numbers made the suppressors
+ * quadratic (rules-engine#150). One entry: it holds on to one document at most.
+ */
+let newlineMemo: { text: string; at: number[] } | null = null;
+
+function newlines(text: string): number[] {
+  if (newlineMemo !== null && newlineMemo.text === text) return newlineMemo.at;
+  const at: number[] = [];
+  for (let i = text.indexOf("\n"); i >= 0; i = text.indexOf("\n", i + 1)) at.push(i);
+  newlineMemo = { text, at };
+  return at;
+}
+
+/** `text.lastIndexOf("\n", from)` for `from >= 0`: the last break at or before `from`, or -1. */
+function prevNewline(text: string, from: number): number {
+  const at = newlines(text);
+  let lo = 0, hi = at.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (at[mid] <= from) lo = mid + 1; else hi = mid;
+  }
+  return lo > 0 ? at[lo - 1] : -1;
+}
+
+/** `text.indexOf("\n", from)`: the first break at or after `from`, or -1. */
+function nextNewline(text: string, from: number): number {
+  const at = newlines(text);
+  let lo = 0, hi = at.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (at[mid] < from) lo = mid + 1; else hi = mid;
+  }
+  return lo < at.length ? at[lo] : -1;
+}
+
 const ACCOUNT_RUN = /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){2,8}\b/g;
 
 // "Compte: FR76 3000 4008 0300 0109 5374" fails the IBAN checksum, so no
@@ -892,20 +930,40 @@ const ACCOUNT_RUN = /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){2,8}\b/g;
 // since 0.3.3, in suppressPostalInsideIban.
 function suppressPhoneInsideAccountRun(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.PHONE) return false;
-  const lineStart = text.lastIndexOf("\n", match.start) + 1;
-  let lineEnd = text.indexOf("\n", match.end);
+  const lineStart = prevNewline(text, match.start) + 1;
+  let lineEnd = nextNewline(text, match.end);
   if (lineEnd < 0) lineEnd = text.length;
+  const [starts, ends] = accountRuns(text, lineStart, lineEnd);
+  // Runs do not overlap, so only the last one starting at or before the match
+  // can contain it; it must be longer than the match, or it *is* the match.
+  let lo = 0, hi = starts.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (starts[mid] <= match.start) lo = mid + 1; else hi = mid;
+  }
+  const i = lo - 1;
+  return i >= 0 && match.end <= ends[i] && ends[i] - starts[i] > match.end - match.start;
+}
+
+/** The last line's account runs, found once for every candidate on it: a
+ *  scan per candidate was quadratic on a long line of numbers (rules-engine#150). */
+let accountRunsMemo: { text: string; lineStart: number; lineEnd: number; starts: number[]; ends: number[] } | null = null;
+
+function accountRuns(text: string, lineStart: number, lineEnd: number): [number[], number[]] {
+  const memo = accountRunsMemo;
+  if (memo !== null && memo.text === text && memo.lineStart === lineStart && memo.lineEnd === lineEnd) {
+    return [memo.starts, memo.ends];
+  }
   const line = text.slice(lineStart, lineEnd);
+  const starts: number[] = [];
+  const ends: number[] = [];
   ACCOUNT_RUN.lastIndex = 0;
   for (let m = ACCOUNT_RUN.exec(line); m !== null; m = ACCOUNT_RUN.exec(line)) {
-    const runStart = lineStart + m.index;
-    const runEnd = runStart + m[0].length;
-    if (runStart <= match.start && match.end <= runEnd
-        && runEnd - runStart > match.end - match.start) {
-      return true;
-    }
+    starts.push(lineStart + m.index);
+    ends.push(lineStart + m.index + m[0].length);
   }
-  return false;
+  accountRunsMemo = { text, lineStart, lineEnd, starts, ends };
+  return [starts, ends];
 }
 
 function suppressPostalAsHouseNumber(text: string, match: RawMatch): boolean {
@@ -1276,15 +1334,14 @@ const DELIMITED_FIELD_TYPES = new Set<EntityType | string>([
 
 /** True when the span is exactly one field of a delimited row. */
 function fillsADelimitedField(text: string, start: number, end: number): boolean {
-  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-  let lineEnd = text.indexOf("\n", end);
+  const lineStart = prevNewline(text, start - 1) + 1;
+  let lineEnd = nextNewline(text, end);
   if (lineEnd < 0) lineEnd = text.length;
-  if (!DELIMITED_ROW.test(text.slice(lineStart, lineEnd))) return false;
-  const before = text.slice(lineStart, start);
-  const after = text.slice(end, lineEnd);
-  const opens = before === "" || ",;|\t".includes(before[before.length - 1]);
-  const closes = after === "" || ",;|\t".includes(after[0]);
-  return opens && closes;
+  // The two characters around the span first: they rule out nearly every
+  // candidate, and matching the row costs the whole line (rules-engine#150).
+  const opens = start === lineStart || ",;|\t".includes(text[start - 1]);
+  const closes = end === lineEnd || ",;|\t".includes(text[end]);
+  return opens && closes && DELIMITED_ROW.test(text.slice(lineStart, lineEnd));
 }
 
 function suppressRequiresContext(text: string, match: RawMatch): boolean {
@@ -1304,7 +1361,7 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
     const key = assignmentKey(text, match.start);
     if (key !== null) {
       const kws = match.patternDef.contextKeywords;
-      const line = text.slice(text.lastIndexOf("\n", match.start - 1) + 1, match.start);
+      const line = text.slice(prevNewline(text, match.start - 1) + 1, match.start);
       return !(namesACredential(key, kws) || namesACredential(line.replace(MASKED_VALUE, " "), kws, false));
     }
   }
@@ -1470,13 +1527,40 @@ const COLUMN_SEPARATORS = [";", "|", "\t", ","];
  * lines above, split by the row's separator into the same number of cells.
  */
 function columnHeader(text: string, start: number): string | null {
-  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-  const lineEndAt = text.indexOf("\n", start);
+  const lineStart = prevNewline(text, start - 1) + 1;
+  // The header depends on the line, not on the value: found once per line, it
+  // serves every candidate on it. Per candidate, splitting the line made a long
+  // delimited line quadratic (rules-engine#150).
+  const memo = columnMemo;
+  let found: [number[], string[]] | null;
+  if (memo !== null && memo.text === text && memo.lineStart === lineStart) {
+    found = memo.found;
+  } else {
+    found = lineHeader(text, lineStart);
+    columnMemo = { text, lineStart, found };
+  }
+  if (found === null) return null;
+  const [separators, heads] = found;
+  // The value's column: the separators before it.
+  let lo = 0, hi = separators.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (separators[mid] < start) lo = mid + 1; else hi = mid;
+  }
+  return heads[lo].toLowerCase();
+}
+
+/** The last line's header, one entry, holding on to one document at most. */
+let columnMemo: { text: string; lineStart: number; found: [number[], string[]] | null } | null = null;
+
+/** The header cells over the line at `lineStart`, and the offsets of the
+ *  separator splitting both, or null when the line sits in no table. */
+function lineHeader(text: string, lineStart: number): [number[], string[]] | null {
+  const lineEndAt = text.indexOf("\n", lineStart);
   const line = text.slice(lineStart, lineEndAt >= 0 ? lineEndAt : text.length);
   for (const sep of COLUMN_SEPARATORS) {
     if (!line.includes(sep)) continue;
     const cells = line.split(sep);
-    const column = text.slice(lineStart, start).split(sep).length - 1;
     // Lines above, one lastIndexOf at a time: one of the three lines above, or
     // further up through rows of the same table (rules-engine#126).
     let end = lineStart - 1;
@@ -1497,7 +1581,9 @@ function columnHeader(text: string, start: number): string | null {
       // Nor is a data row without a date: a header has no cell with four digits or more (#130).
       if (same && (!header.includes(":") || header.trimStart().startsWith("#")) && !ANY_DATE.test(header)
           && !heads.some((h) => (h.match(/\d/g) ?? []).length >= 4)) {
-        return heads[column].toLowerCase();
+        const separators: number[] = [];
+        for (let i = 0; i < line.length; i++) if (line[i] === sep) separators.push(lineStart + i);
+        return [separators, heads];
       }
       if (seen >= 3 && !same) break;  // past the table this value sits in
       end = begin - 1;

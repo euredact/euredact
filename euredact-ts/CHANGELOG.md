@@ -11,6 +11,42 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **Values written with Unicode spaces and digits** *(rules-engine#150)*.
+  - **Digits in other scripts** are folded to ASCII before matching, one
+    character for one so offsets do not move: full-width, Arabic-Indic,
+    Devanagari and the other decimal digits of the Basic Multilingual Plane,
+    from one table both SDKs carry. A phone in full-width digits was masked
+    as `[TAX_ID]８` in Python and not at all in TypeScript.
+  - **NFC offsets.** The offset mapping was built only when NFC changed the
+    length. A composition (one shorter) and an expansion such as U+0958 (one
+    longer) cancel out, and every mask between them landed one character
+    early, leaving the last character of an e-mail visible.
+- **Quadratic time on text dense with numbers** *(rules-engine#150)*. Three
+  per-candidate scans: the fragment test walked back through every rejected
+  span, and the account-run and column-header suppressors re-read the
+  candidate's whole line (in TypeScript also its line start, by
+  `lastIndexOf`). 117 KB of phone numbers took 115 s and now takes 3 s, 125 KB
+  on one line 127 s and now 3.5 s; the output is byte-for-byte the same.
+- **Result cache** *(rules-engine#150)*. Keyed on the normalised text, an
+  NFC document was answered with the cached result of its NFD spelling, its
+  redacted text and offsets; it is now keyed on the text as given. A cached
+  result was handed out as is, so emptying `detections` emptied them for
+  every later call; callers now get their own copy. A new BIC registry
+  (`setBicRegistry`) is part of the key.
+- **Allowlist separator folding** applied to every type: folded keys shared
+  the exact keys' space, so `allowlist=["Xk92! mQz7Lp4w"]` exempted the SECRET
+  `Xk92!mQz7Lp4w`. Folding is again for the identifier types only.
+  *(rules-engine#150)*
+- **Valid identifiers rejected** *(rules-engine#150)*: a Portuguese NIF of a
+  non-resident (prefix 45, refused by the patterns and the validator), a Czech
+  birth number up to 1985 whose remainder 10 is written as check digit 0, and
+  an omocodic Italian codice fiscale (digits replaced by L-V when two codes
+  collide).
+
 ## 0.8.0 (2026-10-31)
 
 ### Added

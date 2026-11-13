@@ -204,6 +204,15 @@ BicRegistryProvider = Callable[[str], bool]
 
 _lock = threading.Lock()
 _provider: BicRegistryProvider | None = None
+#: Bumped by every set_bic_registry call. A BIC's validity depends on the
+#: registry, so cached results key on it: a cached result from before a new
+#: registry was installed is not served after (rules-engine#150).
+_generation = 0
+
+
+def registry_generation() -> int:
+    """How many times :func:`set_bic_registry` has been called."""
+    return _generation
 
 
 def set_bic_registry(
@@ -222,11 +231,12 @@ def set_bic_registry(
     Entries may be full BIC8/BIC11 codes or bare BIC6 prefixes; both are
     matched. Lookups are case-insensitive and ignore spaces.
     """
-    global _provider
+    global _provider, _generation
 
     if registry is None:
         with _lock:
             _provider = None
+            _generation += 1
         return
 
     if callable(registry):
@@ -246,6 +256,7 @@ def set_bic_registry(
 
     with _lock:
         _provider = provider
+        _generation += 1
 
 
 def get_bic_registry() -> BicRegistryProvider | None:

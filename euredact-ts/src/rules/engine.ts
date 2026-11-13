@@ -348,6 +348,14 @@ export class RuleEngine {
     for (let i = 0; i < allFailed.length; i++) {
       failedPrefixMax[i + 1] = Math.max(failedPrefixMax[i], allFailed[i][1]);
     }
+    // The earliest start among the spans ending at each offset, for the
+    // equal-end case of the fragment test: walking back through the prefix
+    // was quadratic on text dense with numbers failing a checksum (rules-engine#150).
+    const minStartByEnd = new Map<number, number>();
+    for (const [zs, ze] of allFailed) {
+      const known = minStartByEnd.get(ze);
+      if (known === undefined || zs < known) minStartByEnd.set(ze, zs);
+    }
     const mergedZones = new Map<string, { starts: number[]; ends: number[] }>();
     for (const [etype, spans] of zonesByType) {
       spans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -422,15 +430,9 @@ export class RuleEngine {
           // proper subset of it.
           fragment = true;
         } else if (reach === match.end) {
-          // Same end offset — a proper subset only if some span with that end
-          // starts strictly earlier. Scanning backwards finds the enclosing
-          // span first, and the equal case is rare.
-          for (let i = lo - 1; i >= 0; i--) {
-            if (allFailed[i][1] === match.end && allFailed[i][0] < match.start) {
-              fragment = true;
-              break;
-            }
-          }
+          // Same end offset: a proper subset only if some span with that end
+          // starts strictly earlier. Every such span is in allFailed[:lo].
+          fragment = (minStartByEnd.get(match.end) ?? match.start) < match.start;
         }
         if (fragment) continue;
       }

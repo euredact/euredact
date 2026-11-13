@@ -555,7 +555,7 @@ const IT: CountryConfig = {
   code: "IT",
   name: "Italy",
   patterns: [
-    p(EntityType.NATIONAL_ID, String.raw`\b[A-Z]{6}\d{2}[ABCDEHLMPRST]\d{2}[A-Z]\d{3}[A-Z]\b`, "italian_cf"),
+    p(EntityType.NATIONAL_ID, String.raw`\b[A-Z]{6}[\dLMNPQRSTUV]{2}[ABCDEHLMPRST][\dLMNPQRSTUV]{2}[A-Z][\dLMNPQRSTUV]{3}[A-Z]\b`, "italian_cf"),
     p(EntityType.IBAN, String.raw`\bIT\d{2}\s?[A-Z]\d{3}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{3}\b`, "iban"),
     p(EntityType.IBAN, String.raw`\bIT\d{2}[A-Z]\d{22}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bIT[\s.]?\d{11}\b`),
@@ -596,8 +596,8 @@ const PT: CountryConfig = {
   code: "PT",
   name: "Portugal",
   patterns: [
-    p(EntityType.NATIONAL_ID, String.raw`\b[1-35-9]\d{8}\b`, "portuguese_nif"),
-    p(EntityType.NATIONAL_ID, String.raw`\b[1-35-9]\d{2}[\s.]\d{3}[\s.]\d{3}\b`, "portuguese_nif"),
+    p(EntityType.NATIONAL_ID, String.raw`\b(?:[1-35-9]\d|45)\d{7}\b`, "portuguese_nif"),
+    p(EntityType.NATIONAL_ID, String.raw`\b(?:[1-35-9]\d|45)\d[\s.]\d{3}[\s.]\d{3}\b`, "portuguese_nif"),
     p(EntityType.IBAN, String.raw`\bPT\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{5}\b`, "iban"),
     p(EntityType.VAT, String.raw`\bPT[\s.]?\d{9}\b`),
     p(EntityType.PHONE, String.raw`\b[29]\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b`),

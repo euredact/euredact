@@ -652,6 +652,15 @@ class RuleEngine:
             if ze > running_max:
                 running_max = ze
             failed_prefix_max[i + 1] = running_max
+        # The earliest start among the spans ending at each offset, for the
+        # equal-end case of the fragment test. Walking back through the prefix
+        # for it was quadratic on text dense with numbers that fail a checksum:
+        # "Tel: 0612345678" on every line took 2.1 s for 16 KB and 8.3 s for
+        # 32 KB (rules-engine#150).
+        min_start_by_end: dict[int, int] = {}
+        for zs, ze in all_failed:
+            if zs < min_start_by_end.get(ze, zs + 1):
+                min_start_by_end[ze] = zs
 
         by_type: dict[object, list[tuple[int, int]]] = {}
         for start, end, etype in corroborated:
@@ -744,15 +753,10 @@ class RuleEngine:
                     # we are a proper subset of it.
                     fragment = True
                 elif reach == match.end:
-                    # Same end offset — a proper subset only if some span with
-                    # that end starts strictly earlier. Scanning backwards finds
-                    # the enclosing span first; the equal case is rare enough
-                    # that the walk does not show up in the profile.
-                    for i in range(hi - 1, -1, -1):
-                        zs, ze = all_failed[i]
-                        if ze == match.end and zs < match.start:
-                            fragment = True
-                            break
+                    # Same end offset: a proper subset only if some span with
+                    # that end starts strictly earlier. Every such span is in
+                    # all_failed[:hi], since the rest start after us.
+                    fragment = min_start_by_end.get(match.end, match.start) < match.start
             if fragment:
                 continue
 

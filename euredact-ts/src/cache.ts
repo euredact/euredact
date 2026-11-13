@@ -15,6 +15,20 @@ export function resultChars(result: RedactResult): number {
   return chars;
 }
 
+/**
+ * `result` with containers and detections of its own. A cached result was
+ * handed out as is, so a caller emptying `detections` emptied them for every
+ * later call on the same text (rules-engine#150).
+ */
+function copy(result: RedactResult): RedactResult {
+  return {
+    ...result,
+    detections: result.detections.map(d => ({ ...d })),
+    exempted: result.exempted.map(e => ({ ...e })),
+    tokens: { ...result.tokens },
+  };
+}
+
 export class ResultCache {
   private maxsize: number;
   private maxChars: number;
@@ -46,7 +60,7 @@ export class ResultCache {
       // Move to end (LRU)
       this.store.delete(key);
       this.store.set(key, result);
-      return result;
+      return copy(result);
     }
     return null;
   }
@@ -61,7 +75,7 @@ export class ResultCache {
       return;
     }
     this.evict(key);
-    this.store.set(key, result);
+    this.store.set(key, copy(result));
     this.sizes.set(key, size);
     this.chars += size;
     while (this.store.size > this.maxsize || this.chars > this.maxChars) {

@@ -7,6 +7,7 @@ whether the match is a false positive. Returning True means the match should be
 
 from __future__ import annotations
 
+import bisect
 import re
 from typing import Callable
 
@@ -1482,7 +1483,9 @@ def suppress_phone_inside_account_run(text: str, match: RawMatch) -> bool:
     this guard since then, in ``suppress_postal_inside_iban``.
 
     Scoped to the match's own line: an account number is not written across a
-    line break, and scanning the line rather than the document keeps this O(line).
+    line break. The line's runs are found once and looked up per candidate:
+    scanning the line again for each phone candidate on it was quadratic on a
+    long line of numbers (rules-engine#150).
     """
     if match.pattern_def.entity_type != EntityType.PHONE:
         return False
@@ -1490,12 +1493,31 @@ def suppress_phone_inside_account_run(text: str, match: RawMatch) -> bool:
     line_end = text.find("\n", match.end)
     if line_end < 0:
         line_end = len(text)
-    for run in _ACCOUNT_RUN.finditer(text, line_start, line_end):
-        if run.start() <= match.start and match.end <= run.end():
-            # The run must be longer than the match, or it *is* the match.
-            if run.end() - run.start() > match.end - match.start:
-                return True
-    return False
+    starts, ends = _account_runs(text, line_start, line_end)
+    # Runs do not overlap, so only the last one starting at or before the
+    # match can contain it.
+    i = bisect.bisect_right(starts, match.start) - 1
+    # The run must be longer than the match, or it *is* the match.
+    return (i >= 0 and match.end <= ends[i]
+            and ends[i] - starts[i] > match.end - match.start)
+
+
+#: The last line's runs: (text, line_start, line_end, starts, ends). One entry,
+#: replaced in a single assignment, so a concurrent call sees an old entry or a
+#: new one, and it holds on to one document at most.
+_ACCOUNT_RUNS_MEMO: tuple = ("", -1, -1, [], [])
+
+
+def _account_runs(text: str, line_start: int, line_end: int) -> tuple[list[int], list[int]]:
+    """The IBAN-shaped runs of one line, as sorted starts and their ends."""
+    global _ACCOUNT_RUNS_MEMO
+    memo = _ACCOUNT_RUNS_MEMO
+    if memo[0] is text and memo[1] == line_start and memo[2] == line_end:
+        return memo[3], memo[4]
+    runs = [(m.start(), m.end()) for m in _ACCOUNT_RUN.finditer(text, line_start, line_end)]
+    starts, ends = [r[0] for r in runs], [r[1] for r in runs]
+    _ACCOUNT_RUNS_MEMO = (text, line_start, line_end, starts, ends)
+    return starts, ends
 
 
 def suppress_postal_as_house_number(text: str, match: RawMatch) -> bool:
@@ -1842,14 +1864,12 @@ def _fills_a_delimited_field(text: str, start: int, end: int) -> bool:
     line_end = text.find("\n", end)
     if line_end < 0:
         line_end = len(text)
-    line = text[line_start:line_end]
-    if not _DELIMITED_ROW.match(line):
-        return False
-    before = text[line_start:start]
-    after = text[end:line_end]
-    opens = not before or before[-1] in ",;|\t"
-    closes = not after or after[0] in ",;|\t"
-    return opens and closes
+    # The two characters around the span first: they rule out nearly every
+    # candidate, and matching the row costs the whole line each time
+    # (rules-engine#150).
+    opens = start == line_start or text[start - 1] in ",;|\t"
+    closes = end == line_end or text[end] in ",;|\t"
+    return opens and closes and _DELIMITED_ROW.match(text, line_start, line_end) is not None
 
 
 def suppress_requires_context(text: str, match: RawMatch) -> bool:
@@ -2110,14 +2130,38 @@ def _column_header(text: str, start: int) -> str | None:
     above, or further up through rows of the same table -- a leave table's
     header sits dozens of rows above its last dates (rules-engine#126).
     """
+    global _COLUMN_MEMO
     line_start = text.rfind("\n", 0, start) + 1
-    line_end = text.find("\n", start)
+    # The header depends on the line, not on the value: found once per line,
+    # it serves every candidate on it. Per candidate, splitting the line made a
+    # long delimited line quadratic (rules-engine#150).
+    memo = _COLUMN_MEMO
+    if memo[0] is text and memo[1] == line_start:
+        found = memo[2]
+    else:
+        found = _line_header(text, line_start)
+        _COLUMN_MEMO = (text, line_start, found)
+    if found is None:
+        return None
+    separators, heads = found
+    # The value's column: the separators before it.
+    return heads[bisect.bisect_left(separators, start)].lower()
+
+
+#: The last line's header: (text, line_start, result of _line_header). One
+#: entry, replaced in a single assignment, holding on to one document at most.
+_COLUMN_MEMO: tuple = ("", -1, None)
+
+
+def _line_header(text: str, line_start: int) -> tuple[list[int], list[str]] | None:
+    """The header cells over the line at *line_start*, and the offsets of the
+    separator that splits both, or None when the line sits in no table."""
+    line_end = text.find("\n", line_start)
     line = text[line_start:line_end if line_end >= 0 else len(text)]
     for sep in _COLUMN_SEPARATORS:
         if sep not in line:
             continue
         cells = line.split(sep)
-        column = text[line_start:start].count(sep)
         # Lines above, one rfind at a time: splitting the whole prefix made
         # this quadratic in the document, once per date candidate.
         end = line_start - 1
@@ -2143,7 +2187,7 @@ def _column_header(text: str, start: int) -> str | None:
             if (same and (":" not in header or header.lstrip().startswith("#"))
                     and not _ANY_DATE.search(header)
                     and not any(sum(c.isdigit() for c in h) >= 4 for h in heads)):
-                return heads[column].lower()
+                return [line_start + i for i, c in enumerate(line) if c == sep], heads
             if seen >= 3 and not same:
                 break           # past the table this value sits in
             end = begin - 1

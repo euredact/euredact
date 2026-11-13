@@ -6,6 +6,7 @@ import asyncio
 import json
 import re
 import secrets
+import threading
 import unicodedata
 import warnings
 from bisect import bisect_left, bisect_right
@@ -15,6 +16,7 @@ from typing import Callable, Iterator, Mapping
 
 from euredact.cache import ResultCache
 from euredact.normalizer import map_offset_to_original, normalize
+from euredact.rules.bic_registry import registry_generation
 from euredact.rules.context import DocumentContext
 from euredact.rules.engine import RuleEngine, check_country_arg
 from euredact.rules.evidence import weights_to_ranking
@@ -221,29 +223,39 @@ class ReferentialMapper:
         self._counters: dict[EntityType, int] = {}
         self._mapping: dict[str, str] = {}
         self._warned = False
+        # aredact and aredact_batch label from pool threads. Unlocked, two new
+        # values could read the same counter and share a label, and a shared
+        # label says two values are one (rules-engine#150).
+        self._lock = threading.Lock()
 
     def get_label(self, text: str, entity_type: EntityType | str) -> str:
         """Return consistent label. Same input always returns same output."""
-        if text not in self._mapping:
-            self._counters[entity_type] = self._counters.get(entity_type, 0) + 1
-            n = self._counters[entity_type]
-            type_label = entity_type.value if isinstance(entity_type, EntityType) else entity_type
-            self._mapping[text] = f"{type_label}_{n}"
-            if not self._warned and len(self._mapping) > self.MAPPING_WARN_THRESHOLD:
-                self._warned = True
-                warnings.warn(
-                    f"Referential integrity mapping holds "
-                    f"{len(self._mapping)} raw PII values and is never evicted. "
-                    f"Call clear() between workloads to release them.",
-                    ResourceWarning,
-                    stacklevel=2,
-                )
-        return self._mapping[text]
+        warn_at = 0
+        with self._lock:
+            label = self._mapping.get(text)
+            if label is None:
+                self._counters[entity_type] = self._counters.get(entity_type, 0) + 1
+                n = self._counters[entity_type]
+                type_label = entity_type.value if isinstance(entity_type, EntityType) else entity_type
+                label = self._mapping[text] = f"{type_label}_{n}"
+                if not self._warned and len(self._mapping) > self.MAPPING_WARN_THRESHOLD:
+                    self._warned = True
+                    warn_at = len(self._mapping)
+        if warn_at:
+            warnings.warn(
+                f"Referential integrity mapping holds "
+                f"{warn_at} raw PII values and is never evicted. "
+                f"Call clear() between workloads to release them.",
+                ResourceWarning,
+                stacklevel=2,
+            )
+        return label
 
     def clear(self) -> None:
         """Remove all stored PII mappings from memory."""
-        self._counters.clear()
-        self._mapping.clear()
+        with self._lock:
+            self._counters.clear()
+            self._mapping.clear()
 
 
 #: Types whose separators are presentational: the same identifier stays the
@@ -296,8 +308,14 @@ def _allowlist_key(value: str) -> str:
 
 
 def _folded_key(value: str) -> str:
-    """:func:`_allowlist_key` with presentational separators removed."""
-    return _SEPARATORS.sub("", _allowlist_key(value))
+    """:func:`_allowlist_key` with presentational separators removed.
+
+    Prefixed so that it shares no key with an unfolded entry. In one keyspace
+    an exact lookup found other entries' folded forms, and folding, meant for
+    the identifier types only, applied to every type: ``allowlist=["Xk92!
+    mQz7Lp4w"]`` exempted the SECRET ``Xk92!mQz7Lp4w`` (rules-engine#150).
+    """
+    return "\x00" + _SEPARATORS.sub("", _allowlist_key(value))
 
 
 def _normalize_allowlist(values: list[str] | None) -> dict[str, str]:
@@ -809,14 +827,21 @@ class EuRedact:
             allow_key += "|dom=" + json.dumps(sorted(domains))
         if excluded:
             allow_key += "|excl=" + json.dumps(sorted(excluded))
-        cache_mode = f"rules|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}|tok={tokenize}|allow={allow_key}"
+        # The BIC registry decides which BICs are valid, so a new one must not
+        # be answered from results computed under the old (rules-engine#150).
+        cache_mode = (f"rules|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}"
+                      f"|tok={tokenize}|allow={allow_key}|bic={registry_generation()}")
         # A context makes the result depend on evidence from other chunks, so
         # the text no longer identifies the result. Caching is disabled rather
         # than keyed on the context, whose contents change as chunks arrive.
         if context is not None:
             cache = False
         if cache:
-            cache_key = self._cache.key(normalized_text, countries_tuple, cache_mode)
+            # The text as given, not as normalised: the result is built from
+            # it, so an NFD and an NFC spelling of one document are two entries.
+            # Keyed on the normalised text, the second was answered with the
+            # first one's redacted text and offsets (rules-engine#150).
+            cache_key = self._cache.key(text, countries_tuple, cache_mode)
             cached = self._cache.get(cache_key)
             if cached is not None:
                 return cached
