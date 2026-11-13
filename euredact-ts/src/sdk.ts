@@ -375,10 +375,19 @@ function normalizeDomains(values: string[] | null | undefined): Map<string, stri
   return out;
 }
 
-/** The domain an exemption rule would apply to, or null. */
-function domainOf(entityType: EntityType | string, value: string): string | null {
+/** The domain an exemption rule would apply to, or null. @internal Exported for tests. */
+export function domainOf(entityType: EntityType | string, value: string): string | null {
   if (!DOMAIN_BEARING.has(entityType)) return null;
   let v = allowlistKey(value);
+  if (v.includes("://")) {
+    // A URL's host, not whatever follows its last "@" (in the query, that
+    // exempted the whole URL and the number in it) (rules-engine#152).
+    try {
+      return new URL(v).hostname || null;
+    } catch {
+      return null;
+    }
+  }
   if (v.includes("@")) return v.slice(v.lastIndexOf("@") + 1).replace(/^[<[(]+|[>\])(),;:"']+$/g, "") || null;
   v = v.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
   return v.split("/")[0].split(":")[0].replace(/^[<[(]+|[>\])(),;:"']+$/g, "") || null;

@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- Values a suppressor dropped although its stated condition did not hold, each left in the text with nothing reported: a number next to `=` without a number on the other side (`BSN=111222333`), a `-` bullet, a spaced dash or a slash between two phone numbers; a phone or postcode beside a word starting or ending in `Kn`/`Ft` on the next line (`Knud`, `Kraft`); a number before an initial (`M. de Vries`); a national number behind a passport label (now `PASSPORT`); a number after a compound ending in `lid` or `punt`; a phone in a CSV field after a number; a card number followed by its expiry (eight of its digits were a phone); a passphrase of words under a password key; a postcode after a surname ending in `no` or `az` (`Bruno`, `Díaz`) or with an inner capital (`McCarthy`); a checksum-valid IBAN after "invoice" and a national number after `#`; an international phone with a glued extension. A BIC registry that throws now leaves the BIC masked, with a warning, and a URL's domain for `allowlist_domains` is its host, not what follows an `@` in its query. *(rules-engine#152)*
+
 ## [0.8.0] - 2026-10-31
 
 ### Added

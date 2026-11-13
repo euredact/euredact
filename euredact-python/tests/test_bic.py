@@ -490,3 +490,24 @@ def test_case_ids_are_unique():
         + [c[0] for c in NO_TIER_CASES]
     )
     assert len(ids) == len(set(ids))
+
+
+def test_a_bic_registry_that_raises_leaves_the_bic_masked():
+    """Fail closed: it fell back to the seed list, which does not know this BIC,
+    and the BIC was suppressed with no warning (rules-engine#152)."""
+    import pytest
+
+    from euredact.rules import bic_registry
+
+    assert bic_registry.is_registered_bic("ZQXWBEBB") is False
+
+    def broken(_bic):
+        raise TimeoutError("registry timeout")
+
+    bic_registry._provider_warned = False
+    try:
+        bic_registry.set_bic_registry(broken)
+        with pytest.warns(RuntimeWarning, match="BIC registry"):
+            assert bic_registry.is_registered_bic("ZQXWBEBB") is True
+    finally:
+        bic_registry.set_bic_registry(None)

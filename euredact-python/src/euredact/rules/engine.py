@@ -13,7 +13,11 @@ from euredact.rules.countries._base import PatternDef
 from euredact.rules.matchers import MultiPatternMatcher, RawMatch
 from euredact.rules.registry import CountryRegistry
 from euredact.rules.structural import detect_structural_dob
-from euredact.rules.suppressors import should_suppress_claim, should_suppress_span
+from euredact.rules.suppressors import (
+    labelled_a_passport,
+    should_suppress_claim,
+    should_suppress_span,
+)
 from euredact.types import CountryEvidence, Detection, DetectionSource, EntityType
 
 
@@ -652,6 +656,16 @@ class RuleEngine:
             if ze > running_max:
                 running_max = ze
             failed_prefix_max[i + 1] = running_max
+        # A shorter international number inside a rejected one of the same type
+        # from the same offset is that number read right, not a piece carved out
+        # of it: "+49 171 2345678-62657" fails E.164 whole, and dropping the
+        # German "+49 171 2345678" inside it left the number visible
+        # (rules-engine#152). Only with the "+": "059133 60" inside a rejected
+        # "059133 60-3333" is the extension's case, left to "059133" (#51).
+        failed_typed = sorted((start, end, etype) for start, end, _cc, etype in failed_spans)
+        failed_typed_starts = [f[0] for f in failed_typed]
+        same_start_types = {(start, etype) for start, _end, etype in failed_typed}
+        longest_failed = max((end - start for start, end, _e in failed_typed), default=0)
 
         by_type: dict[object, list[tuple[int, int]]] = {}
         for start, end, etype in corroborated:
@@ -753,6 +767,17 @@ class RuleEngine:
                         if ze == match.end and zs < match.start:
                             fragment = True
                             break
+            if (fragment and match.text.startswith("+")
+                    and (match.start, match.pattern_def.entity_type) in same_start_types):
+                # Recheck without the same-type spans from the same offset; an
+                # enclosing span can start at most `longest_failed` earlier.
+                lo = bisect.bisect_left(failed_typed_starts, match.start - longest_failed)
+                hi = bisect.bisect_right(failed_typed_starts, match.start)
+                fragment = any(
+                    zs <= match.start and ze >= match.end
+                    and (zs, ze) != (match.start, match.end)
+                    and not (zs == match.start and et == match.pattern_def.entity_type)
+                    for zs, ze, et in failed_typed[lo:hi])
             if fragment:
                 continue
 
@@ -958,6 +983,9 @@ class RuleEngine:
                 out_of_scope = not in_scope
 
                 retyped = _retyped(text, start, entity_type, score, match.country_code)
+                if (retyped is None and entity_type == EntityType.NATIONAL_ID
+                        and labelled_a_passport(text, start)):
+                    retyped = EntityType.PASSPORT
                 if retyped is not None:
                     # The country came from the pattern that matched, and that
                     # pattern was just overruled: a Finnish phone rule saying

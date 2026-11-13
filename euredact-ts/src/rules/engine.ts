@@ -1,6 +1,6 @@
 import { DetectionSource, EntityType, type CountryConfig, type CountryEvidence, type Detection, type PatternDef } from "../types.js";
 import { MultiPatternMatcher, type RawMatch } from "./matchers.js";
-import { shouldSuppress, SuppressionScratch } from "./suppressors.js";
+import { labelledAPassport, shouldSuppress, SuppressionScratch } from "./suppressors.js";
 import { CUE_TARGETS, CUE_WINDOW, RESCUE_TARGETS, cuedType, retypedBy } from "./cues.js";
 import { detectStructuralDob } from "./structural.js";
 import { COUNTRY_CONFIGS } from "./countries/index.js";
@@ -348,6 +348,14 @@ export class RuleEngine {
     for (let i = 0; i < allFailed.length; i++) {
       failedPrefixMax[i + 1] = Math.max(failedPrefixMax[i], allFailed[i][1]);
     }
+    // A shorter international number inside a rejected one of the same type
+    // from the same offset is that number read right: "+49 171 2345678-62657"
+    // fails E.164 whole, and dropping the German number inside it left it
+    // visible (rules-engine#152). Only with the "+" ("059133 60-3333", #51).
+    const failedTyped = failedSpans.map(f => [f.start, f.end, f.etype] as [number, number, string])
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const sameStartTypes = new Set(failedTyped.map(([s, , t]) => `${s}|${t}`));
+    const longestFailed = failedTyped.reduce((m, [s, e]) => Math.max(m, e - s), 0);
     const mergedZones = new Map<string, { starts: number[]; ends: number[] }>();
     for (const [etype, spans] of zonesByType) {
       spans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -432,6 +440,13 @@ export class RuleEngine {
             }
           }
         }
+        if (fragment && match.text.startsWith("+")
+            && sameStartTypes.has(`${match.start}|${match.patternDef.entityType}`)) {
+          fragment = failedTyped.some(([zs, ze, t]) =>
+            zs >= match.start - longestFailed && zs <= match.start && ze >= match.end
+            && !(zs === match.start && ze === match.end)
+            && !(zs === match.start && t === match.patternDef.entityType));
+        }
         if (fragment) continue;
       }
 
@@ -486,8 +501,12 @@ export class RuleEngine {
       // country the caller did not declare while naming no country at all.
       const retyped = retypedBy(text, match.start, entityType,
                                 countryScores.get(match.countryCode) ?? 0, match.countryCode);
-      if (retyped !== null) {
-        entityType = retyped;
+      // A passport label relabels a national number as a passport rather than
+      // dropping it (rules-engine#152).
+      const relabel = retyped ?? (entityType === EntityType.NATIONAL_ID && labelledAPassport(text, match.start)
+        ? EntityType.PASSPORT : null);
+      if (relabel !== null) {
+        entityType = relabel;
         country = null;
         outOfScope = false;
         confidence = "medium";

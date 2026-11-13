@@ -12,6 +12,7 @@ from bisect import bisect_left, bisect_right
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import Callable, Iterator, Mapping
+from urllib.parse import urlsplit
 
 from euredact.cache import ResultCache
 from euredact.normalizer import map_offset_to_original, normalize
@@ -326,6 +327,15 @@ def _domain_of(entity_type: EntityType | str, value: str) -> str | None:
     if entity_type not in _DOMAIN_BEARING:
         return None
     v = _allowlist_key(value)
+    if "://" in v:
+        # A URL's host, not whatever follows its last "@": in
+        # "https://crm.example.com/c?ssn=…&contact=support@euredact.be" that is
+        # the query, and allowlist_domains=["euredact.be"] exempted the whole
+        # URL, the number in it included (rules-engine#152).
+        try:
+            return urlsplit(v).hostname
+        except ValueError:
+            return None
     if "@" in v:
         return v.rsplit("@", 1)[1].strip("<>[](),;:\"'")
     v = re.sub(r"^[a-z][a-z0-9+.\-]*://", "", v)

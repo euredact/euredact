@@ -13,6 +13,7 @@ from typing import Callable
 from euredact.rules.bic_registry import is_known_institution, is_registered_bic
 from euredact.rules.de_districts import DE_DISTRICT_CODES
 from euredact.rules.matchers import RawMatch
+from euredact.rules.validators import VALIDATORS
 from euredact.types import EntityType
 
 # Context window: number of characters before/after a match to examine
@@ -25,24 +26,29 @@ _CONTEXT_CHARS = 150
 #: demands a word character after the symbol and fails on the overwhelmingly
 #: common "1163 €," / "20744 €." — the trailing punctuation kills the match.
 #: That bug made every euro amount at the end of a clause a postal code.
-_CURRENCY_SYMBOL = r"€|\$|£|¥|₺|zł|Kč|лв|kn|Ft|₽"
+#: The letter symbols need word boundaries of their own: unbounded, "Kn" was
+#: the start of "Knud" and "ft" the end of "Kraft", and a phone number or a
+#: postcode beside either name was dropped as an amount (rules-engine#152).
+_CURRENCY_SYMBOL = r"€|\$|£|¥|₺|₽|(?<![^\W\d_])(?:zł|Kč|лв|kn|Ft)(?![^\W\d_])"
 #: Alphabetic codes and words, where "\b" is correct and necessary.
 _CURRENCY_WORD = (
     r"EUR|USD|GBP|CHF|ISK|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|HRK|"
     r"euro|euros|dollar|dollars|pond|kronor|kroner|kronur|kr|"
     r"złoty|korun|forint|lei|leva"
 )
+# On the number's own line: across a break the next line's first word was
+# read as the amount's currency (rules-engine#152, as #51 did for units).
 _CURRENCY_AFTER = re.compile(
-    rf"^\s*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
+    rf"^[ \t]*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
     re.IGNORECASE,
 )
 # "12385,84 €" or "12385.84 €" — number is integer part of decimal amount
 _CURRENCY_COMMA_AFTER = re.compile(
-    rf"^[.,]\d{{1,2}}\s*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
+    rf"^[.,]\d{{1,2}}[ \t]*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
     re.IGNORECASE,
 )
 _CURRENCY_BEFORE = re.compile(
-    rf"(?:(?:{_CURRENCY_SYMBOL})|\b(?:{_CURRENCY_WORD}))\s*$",
+    rf"(?:(?:{_CURRENCY_SYMBOL})|\b(?:{_CURRENCY_WORD}))[ \t]*$",
     re.IGNORECASE,
 )
 # Also catch "Montant TTC :" or "Beløb:" before a number
@@ -65,7 +71,10 @@ _AMOUNT_LABEL_BEFORE = re.compile(
 _UNIT_AFTER = re.compile(
     # A size in bytes: "48213377 bytes total" in a build log (rules-engine#136).
     r"^[ \t]*(?:bytes?|octets?|KiB|MiB|GiB|TiB|"
-    r"kg|km|cm|mm|m[²³]?|m\b|g\b|l\b|ml|mg|GB|MB|KB|TB|%|"
+    # A bare m, g or l in lower case only, and not an initial or an elision:
+    # case-insensitive, "M. de Vries" and "G. Jansen" were metres and grams
+    # and the number before them was dropped (rules-engine#152).
+    r"kg|km|cm|mm|m[²³]|(?-i:[mgl])\b(?![.'’])|ml|mg|GB|MB|KB|TB|%|"
     r"jaar|maanden|weken|dagen|uur|minuten|seconden|"
     # "st" (stuks/pieces) must not swallow the "St." of a place name —
     # "Postal: 9600 St. Paul's Bay", "Adresse: 8386 St. Gallen".
@@ -98,6 +107,10 @@ _REFERENCE_BEFORE = re.compile(
     re.IGNORECASE,
 )
 
+#: Checks a random number passes at most once in 97 (mod 97). A value that
+#: passes one is the identifier, whatever reference word sits nearby.
+_STRONG_CHECKSUMS = frozenset({"iban", "belgian_nn", "belgian_vat", "french_nir"})
+
 #: A "#" immediately before the number. Across every language in scope this
 #: marks a reference — a ticket, an order, a line item — and never a postcode or
 #: a national identifier.
@@ -123,9 +136,12 @@ _POSTAL_PREFIX_COUNTRIES = frozenset({
 
 # ── Legal / structural reference ────────────────────────────────────────
 
+# Each word starts a word: "lid" ended "Gezinslid" (family member) and "punt"
+# could end any compound, and the number after them was dropped
+# (rules-engine#152).
 _LEGAL_BEFORE = re.compile(
-    r"(?:Art(?:ikel|icle|\.)|§|Artikel|Section|Sectie|Afdeling|"
-    r"paragraaf|Absatz|alinéa|punt|point|Punkt|lid)\s*$",
+    r"(?:§|(?<![^\W\d_])(?:Art(?:ikel|icle|\.)|Artikel|Section|Sectie|Afdeling|"
+    r"paragraaf|Absatz|alinéa|punt|point|Punkt|lid))\s*$",
     re.IGNORECASE,
 )
 
@@ -137,6 +153,21 @@ _LEGAL_BEFORE = re.compile(
 # 782 of 8,810 pipeline documents (rules-engine#91).
 _MATH_BEFORE = re.compile(r"[=+\-×÷*/][^\S\r\n]*$")
 _MATH_AFTER = re.compile(r"^[^\S\r\n]*[=+\-×÷*/]")
+#: An operator with a number on its other side: arithmetic. Any operator next to
+#: the value used to count, so "BSN=111222333", a "- " bullet, "Jan Jansen -
+#: 0612345678" and the slash between two phone numbers dropped the value
+#: (rules-engine#152). "/" and "-" separate list items far more often than they
+#: divide, so for an identifier only the other operators count; a bare postcode
+#: keeps them ("12/2024", "2024-2025").
+_OPERAND_OPERATOR_BEFORE = re.compile(
+    r"(?:[\d)]|(?<![^\W\d_])(?:total|totaal|sum|som|summe|summa|somme|result|resultaat|ergebnis)"
+    r")[^\S\r\n]*[=+×÷*][^\S\r\n]*$", re.IGNORECASE)
+_OPERATOR_OPERAND_AFTER = re.compile(r"^[^\S\r\n]*[=+×÷*][^\S\r\n]*[\d(]")
+#: A "-" or "/" glued to the value and to a letter or digit on its other side
+#: joins it into a longer token ("PV-LS-2026-652314", "4471/2025"); spaced, it
+#: separates list items, which is what it does around a phone number.
+_GLUED_JOIN_BEFORE = re.compile(r"[^\W_][/\-]$")
+_GLUED_JOIN_AFTER = re.compile(r"^[/\-][^\W_]")
 
 # "A-1010", "B-2000", "L-1234", "CH-8000", "D-10115": a country prefix on a
 # postal code, not a minus sign.
@@ -191,8 +222,12 @@ _DATE_KEYWORD_NEAR = re.compile(
 # introduced this way; an SVNr, policy number or service number always is.
 _ID_CUE_BEFORE = re.compile(
     r"(?:"
-    r"[\w\-]*Nr|[\w\-]*N[°ºo]|[\w\-]*Nummer|[\w\-]*Numero|[\w\-]*Numéro|"
-    r"No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen"
+    # A compound may end in "N°" ("SV-N°"), not in "no": that ended "Bruno",
+    # "Moreno", "Romano", and the short words below start a word for the same
+    # reason ("az" ended "Díaz"). A postcode on the next line was dropped as an
+    # identifier (rules-engine#152).
+    r"[\w\-]*Nr|[\w\-]*N[°º]|[\w\-]*Nummer|[\w\-]*Numero|[\w\-]*Numéro|"
+    r"(?<![^\W\d_])(?:No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen)"
     r")\.?\s*:?\s*$",
     re.IGNORECASE,
 )
@@ -631,6 +666,13 @@ def suppress_secret_not_a_secret(text: str, match: RawMatch) -> bool:
     bare = _core_token(match.text)
     if _TIMESTAMP_FRAGMENT.match(bare):
         return True
+    if _under_a_credential_key(text, match):
+        # The key says what the value is. A passphrase of words
+        # ("Correct-Horse-Battery", the default of most password managers) has
+        # the shape of a name, and was dropped under "password=" for it
+        # (rules-engine#152). A reference to where a secret is kept still is
+        # not one.
+        return bool(bare.startswith("${") or _CONNECTION_WITH_REFERENCE.match(bare))
     if _NOT_A_SECRET.match(bare):
         return True
     if _URL_LIKE.match(bare) and not _URL_WITH_CREDENTIALS.search(bare):
@@ -719,6 +761,10 @@ def suppress_phone_as_number_range(text: str, match: RawMatch) -> bool:
         return False
     if _YEAR_RANGE.match(match.text.strip()):
         return True
+    # A fraction is unsigned and short: "+31612345678" after "1017," in a CSV
+    # row is a field, not the decimals of 1017 (rules-engine#152).
+    if match.text.startswith("+") or sum(c.isdigit() for c in match.text) > 8:
+        return False
     return bool(_DECIMAL_TAIL_BEFORE.search(text[max(0, match.start - 2):match.start]))
 
 
@@ -752,6 +798,15 @@ def suppress_reference(text: str, match: RawMatch) -> bool:
         EntityType.POSTAL_CODE,
     ):
         return False
+    # A strong checksum outranks a word nearby: "Pay invoice:
+    # NL91ABNA0417164300" is an account, "Patiënt #85031928479" a national
+    # number, and both were dropped (rules-engine#152). Only a check a random
+    # number passes at most once in 97; an 11-proof number behind
+    # "Factuurnummer:" passes once in 11 and stays an invoice number.
+    if match.pattern_def.validator in _STRONG_CHECKSUMS:
+        validator = VALIDATORS[match.pattern_def.validator]
+        if validator(match.text):
+            return False
     before, _ = _get_context(text, match.start, match.end)
     if _REFERENCE_BEFORE.search(before):
         return True
@@ -801,7 +856,14 @@ def suppress_math(text: str, match: RawMatch) -> bool:
         and _COUNTRY_PREFIX_HYPHEN.search(before)
     ):
         return False
-    return bool(_MATH_BEFORE.search(before) or _MATH_AFTER.search(after))
+    if match.pattern_def.entity_type == EntityType.POSTAL_CODE:
+        return bool(_MATH_BEFORE.search(before) or _MATH_AFTER.search(after))
+    return bool(_OPERAND_OPERATOR_BEFORE.search(before)
+                or _OPERATOR_OPERAND_AFTER.search(after)
+                # An international number is never part of a reference: in
+                # "+49 171 2345678-62657" the glued tail is an extension.
+                or (not match.text.startswith("+")
+                    and (_GLUED_JOIN_BEFORE.search(before) or _GLUED_JOIN_AFTER.search(after))))
 
 
 def suppress_sequential(text: str, match: RawMatch) -> bool:
@@ -1062,7 +1124,10 @@ _COUNT_LABEL_BEFORE = re.compile(
 _NOT_POSTAL_BEFORE = re.compile(
     r"(?<![A-Za-z0-9_])(?:(?:ISO(?:/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?"
     r"|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*"
-    r"|[A-Za-z]*[a-z][A-Z][A-Za-z]*\s+)$")
+    # A model name with an inner capital ("OptiPlex 7090"), on the number's own
+    # line, and not a surname: "Sean McCarthy\n1000 Bruxelles" lost its
+    # postcode (rules-engine#152).
+    r"|(?!(?:Mc|Mac|De|Di|Da|Du|Le|La|Van|Von|O)[A-Z])[A-Za-z]*[a-z][A-Z][A-Za-z]*[ \t]+)$")
 
 #: A thousands group of an amount: the "750" of "£28,750,000".
 _GROUP_BEFORE = re.compile(r"\d[,.]$")
@@ -1307,10 +1372,14 @@ def suppress_card_inside_digit_run(text: str, match: RawMatch) -> bool:
     if not sep:
         return False
     before = text[max(0, match.start - 6):match.start]
-    after = text[match.end:match.end + 6]
+    after = text[match.end:match.end + 11]
     s = re.escape(sep)
+    # After the card, a run means two more groups: one group is the card's own
+    # expiry ("4111 1111 1111 1111 1225 123"), and dropping the card left a
+    # phone to claim eight of its digits and the rest in the clear
+    # (rules-engine#152).
     return bool(re.search(rf"(?<!\d)\d{{4}}{s}$", before)
-                or re.match(rf"{s}\d{{4}}(?!\d)", after))
+                or re.match(rf"{s}\d{{4}}{s}\d{{4}}(?!\d)", after))
 
 
 def suppress_plate_in_compound(text: str, match: RawMatch) -> bool:
@@ -1417,11 +1486,15 @@ def suppress_de_plate_unknown_district(text: str, match: RawMatch) -> bool:
     return True
 
 
-def suppress_natid_as_passport(text: str, match: RawMatch) -> bool:
-    """Suppress NATIONAL_ID when context clearly says passport."""
-    if match.pattern_def.entity_type != EntityType.NATIONAL_ID:
-        return False
-    before, _ = _get_context(text, match.start, match.end)
+def labelled_a_passport(text: str, start: int) -> bool:
+    """True when a passport label sits right before *start*.
+
+    The engine relabels a NATIONAL_ID there as PASSPORT. This was a suppressor,
+    and dropping the claim left the value in the text: "Passport: 85031928479"
+    passes the Belgian national-number check, nothing else wanted the span, and
+    it was printed in full (rules-engine#152; the relabelling #53 asked for).
+    """
+    before = text[max(0, start - _CONTEXT_CHARS):start]
     return bool(_PASSPORT_CONTEXT_BEFORE.search(before))
 
 
@@ -1922,6 +1995,19 @@ _CREDENTIAL_KEY_WORDS = ("pass", "pwd", "pw", "pin", "otp", "passphrase",
                          "authorization", "authentication", "mdp")
 
 
+def _under_a_credential_key(text: str, match: RawMatch) -> bool:
+    """True when the value is assigned to a key whose last word names a
+    credential: ``password=``, ``DB_PASSWORD:``, ``client_secret =``. A key
+    using the word as a modifier names something else: ``Passwort-Richtlinie``
+    (the policy), ``credentials_user``, ``secret_name`` (rules-engine#126)."""
+    keywords = match.pattern_def.context_keywords
+    key = _assignment_key(text, match.start) if keywords else None
+    if key is None:
+        return False
+    words = _key_words(key).split()
+    return bool(words) and _names_a_credential(words[-1], keywords)
+
+
 def _assignment_key(text: str, start: int) -> str | None:
     """The key the value at *start* is assigned to, or None."""
     lo = max(0, start - 60)
@@ -2172,7 +2258,7 @@ _TYPE_SUPPRESSORS: dict[EntityType, list[Callable[..., bool]]] = {
     ],
     EntityType.NATIONAL_ID: [
         suppress_currency, suppress_units, suppress_reference, suppress_legal,
-        suppress_math, suppress_natid_as_passport, suppress_se_natid_as_org,
+        suppress_math, suppress_se_natid_as_org,
     ],
     EntityType.SSN: [
         suppress_currency, suppress_units, suppress_reference, suppress_math,

@@ -194,6 +194,7 @@ export const SEED_BIC6_PREFIXES: ReadonlySet<string> = new Set([
 export type BicRegistryProvider = (bic: string) => boolean;
 
 let provider: BicRegistryProvider | null = null;
+let providerWarned = false;
 
 /**
  * Install a deployment-supplied BIC registry, consulted ahead of the seed list.
@@ -241,8 +242,15 @@ export function isRegisteredBic(candidate: string): boolean {
   if (provider !== null) {
     try {
       if (provider(c) || provider(prefix)) return true;
-    } catch {
-      // a broken provider must not break detection
+    } catch (err) {
+      // Fail closed: the seed list would answer instead, and a BIC it does not
+      // know was then suppressed with no word of why (rules-engine#152).
+      if (!providerWarned) {
+        providerWarned = true;
+        console.warn(`[euredact] the BIC registry installed with setBicRegistry threw ${String(err)}; `
+          + "BICs it could not answer for are treated as registered and masked");
+      }
+      return true;
     }
   }
   return SEED_BIC6_PREFIXES.has(prefix);

@@ -7867,6 +7867,204 @@
         ]
       },
       "notes": "rules-engine#136: guard; the line before the value names the credential before its key."
+    },
+    {
+      "id": "phone-a-slash-between-two-numbers-is-no-division",
+      "text": "Tel: 0612345678 / 0687654321",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Tel: [PHONE] / [PHONE]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-after-a-key-and-equals-sign",
+      "text": "BSN=111222333",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "BSN=[NATIONAL_ID]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-list-with-dash-bullets",
+      "text": "- 0612345678\n- 0687654321",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "- [PHONE]\n- [PHONE]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-after-a-name-and-a-spaced-dash",
+      "text": "Jan Jansen - 0612345678",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Jan Jansen - [PHONE]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-a-slash-and-a-short-number-after-it",
+      "text": "Tel 06 12 34 56 78 / 2",
+      "countries": [
+        "FR"
+      ],
+      "expectRedactedText": "Tel [PHONE] / 2",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-dk-next-line-starting-kn-is-no-kuna",
+      "text": "Telefon: 20 12 34 56\nKnud Hansen",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Telefon: [PHONE]\nKnud Hansen",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-de-next-line-starting-kn-is-no-kuna",
+      "text": "Tel.: 030 12345678\nKnut Meyer",
+      "countries": [
+        "DE"
+      ],
+      "expectRedactedText": "Tel.: [PHONE]\nKnut Meyer",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-next-line-starting-kn",
+      "text": "BSN: 111222333\nKnoopstraat 4",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "BSN: [NATIONAL_ID]\nKnoopstraat 4",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "postcode-after-a-name-ending-ft-is-no-forint",
+      "text": "Adresse: Hans Kraft\n10115 Berlin",
+      "countries": [
+        "DE"
+      ],
+      "expectRedactedText": "Adresse: Hans Kraft\n[POSTAL_CODE] Berlin",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-before-an-initial-m",
+      "text": "Tel 0612345678 M. de Vries",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Tel [PHONE] M. de Vries",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-before-an-initial-g",
+      "text": "BSN 111222333 G. Jansen",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "BSN [NATIONAL_ID] G. Jansen",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-fr-before-the-title-m",
+      "text": "Tél : 06 12 34 56 78 M. Dupont",
+      "countries": [
+        "FR"
+      ],
+      "expectRedactedText": "Tél : [PHONE] M. Dupont",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "passport-label-relabels-a-national-number",
+      "text": "Passport: 85031928479",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "Passport: [PASSPORT]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-after-a-compound-ending-in-lid",
+      "text": "Gezinslid 85031928479",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "Gezinslid [NATIONAL_ID]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-in-a-csv-field-after-a-number",
+      "text": "id,telefoon\n1017,+31612345678",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "id,telefoon\n1017,[PHONE]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "credit-card-followed-by-its-expiry",
+      "text": "Card: 4111 1111 1111 1111 1225 123",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Card: [CREDIT_CARD] 1225 123",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "secret-a-passphrase-of-words-under-a-password-key",
+      "text": "password=Correct-Horse-Battery",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "password=[SECRET]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "postcode-after-a-surname-ending-in-no",
+      "text": "Indirizzo: Mario Bruno\n20121 Milano",
+      "countries": [
+        "IT"
+      ],
+      "expectRedactedText": "Indirizzo: Mario Bruno\n[POSTAL_CODE] Milano",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "postcode-after-a-surname-with-an-inner-capital",
+      "text": "Adresse: Sean McCarthy\n1000 Bruxelles",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "Adresse: Sean McCarthy\n[POSTAL_CODE] Bruxelles",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "iban-after-an-invoice-word",
+      "text": "Pay invoice: NL91ABNA0417164300",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Pay invoice: [BANK_ACCOUNT]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "national-id-after-a-hash",
+      "text": "Patiënt #85031928479",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "Patiënt #[NATIONAL_ID]",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "phone-international-with-a-glued-extension",
+      "text": "Tel: +49 171 2345678-62657",
+      "countries": [
+        "DE"
+      ],
+      "expectRedactedText": "Tel: [PHONE]-62657",
+      "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
     }
   ]
 }
