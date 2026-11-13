@@ -12,6 +12,8 @@ diverge again regardless of which extras are installed.
 """
 
 import contextlib
+import json
+from pathlib import Path
 
 import pytest
 
@@ -283,3 +285,67 @@ def test_lookahead_guarded_phone_patterns_keep_the_prefilter():
     ]
     assert len(guarded) == 3
     assert all(slot is not None for slot, _ in guarded), guarded
+
+
+# -- Unicode text: every path reads it as Python does (rules-engine#150) -------
+#
+# RE2 reads \d, \s, \w and \b as ASCII, Python as Unicode. Fed the patterns
+# unchanged, the re2 prefilter matched less than the patterns it filters for
+# and skipped them: a French phone grouped with no-break spaces, the way French
+# typography writes numbers, was redacted without [fast] and left in the text
+# with it. The vectors' texts are re-spelled with Unicode spaces, digits and
+# letters, and every accelerated path must report what the sequential scan does.
+
+_VECTORS = [c["text"] for c in json.loads(
+    (Path(__file__).resolve().parents[2] / "conformance" / "vectors.json").read_text()
+)["cases"]]
+
+_UNICODE_SPELLINGS = {
+    "no-break-space": lambda t: t.replace(" ", "\xa0"),
+    "narrow-no-break-space": lambda t: t.replace(" ", " "),
+    "thin-space": lambda t: t.replace(" ", " "),
+    "figure-space": lambda t: t.replace(" ", " "),
+    "ideographic-space": lambda t: t.replace(" ", "　"),
+    "full-width-digits": lambda t: t.translate(str.maketrans("0123456789", "０１２３４５６７８９")),
+    "arabic-indic-digits": lambda t: t.translate(str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")),
+    "accented-letters": lambda t: "Ünïcödé " + t.replace("e", "é").replace("a", "ä"),
+    "letter-before-each-space": lambda t: t.replace(" ", "é "),
+    "as-written": lambda t: t,
+}
+
+
+def _scan_key(matches):
+    return sorted((m.start, m.end, id(m.pattern_def), m.country_code) for m in matches)
+
+
+@pytest.mark.skipif(not (matchers._HAS_RE2 or matchers._HAS_AC), reason="no accelerated path installed")
+@pytest.mark.parametrize("spelling", list(_UNICODE_SPELLINGS))
+def test_accelerated_scans_read_unicode_text_as_python_does(spelling):
+    matcher = _all_countries_matcher()
+    plan = matcher._plan
+    respell = _UNICODE_SPELLINGS[spelling]
+    differing = []
+    for text in _VECTORS:
+        text = respell(text)
+        reference = _scan_key(matcher._scan_sequential(text, plan))
+        if plan.re2_set is not None and _scan_key(matcher._scan_re2(text, plan)) != reference:
+            differing.append(("re2", text))
+        if plan.ac_automaton is not None and _scan_key(matcher._scan_ac(text, plan)) != reference:
+            differing.append(("aho-corasick", text))
+    assert differing == [], f"{len(differing)} texts differ, first: {differing[:3]}"
+
+
+@pytest.mark.parametrize("path", _PATHS)
+@pytest.mark.parametrize("text, country, expected", [
+    ("Tél : 06\xa012\xa034\xa056\xa078", "FR", "Tél : [PHONE]"),
+    ("Tél : 06 12 34 56 78", "FR", "Tél : [PHONE]"),
+    ("IBAN NL91\xa0ABNA\xa00417\xa01643\xa000", "NL", "IBAN [BANK_ACCOUNT]"),
+    ("Tel ０６１２３４５６７８", "FR", "Tel [PHONE]"),
+], ids=["fr-phone-nbsp", "fr-phone-nnbsp", "iban-nbsp", "full-width-phone"])
+def test_values_written_with_unicode_spaces_and_digits_are_redacted_on_every_path(
+        path, text, country, expected):
+    """The leak itself: before the fix the first three came back unchanged
+    with [fast], and the last was "Tel [TAX_ID]８" without it."""
+    with _force_path(path):
+        result = EuRedact().redact(text, countries=[country], cache=False)
+    assert result.redacted_text == expected

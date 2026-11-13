@@ -60,6 +60,7 @@
  * Spanish NIE: 52 false positives across the corpus.
  */
 
+import { cpBefore } from "./codepoints.js";
 import { EntityType } from "../types.js";
 
 /**
@@ -191,7 +192,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
  * about some other value.
  */
 export function cuedType(text: string, start: number): EntityType | null {
-  const before = text.slice(Math.max(0, start - CUE_WINDOW), start);
+  const before = cpBefore(text, start, CUE_WINDOW);
   for (const [entityType, pattern] of CUES) {
     if (pattern.test(before)) return entityType;
   }

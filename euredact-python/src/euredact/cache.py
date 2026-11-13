@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import threading
 from collections import OrderedDict
+from dataclasses import replace
 
 from euredact.types import RedactResult
 
@@ -22,6 +23,14 @@ def _result_chars(result: RedactResult) -> int:
         + sum(len(k) + len(v) for k, v in result.tokens.items())
         + sum(len(e.text) + len(e.rule) for e in result.exempted)
     )
+
+
+def _copy(result: RedactResult) -> RedactResult:
+    """*result* with containers of its own. A cached result was handed out
+    as is, so ``r.detections.clear()`` emptied the detections of every later
+    call on the same text (rules-engine#150)."""
+    return replace(result, detections=list(result.detections),
+                   exempted=list(result.exempted), tokens=dict(result.tokens))
 
 
 class ResultCache:
@@ -64,7 +73,7 @@ class ResultCache:
         with self._lock:
             if key in self._store:
                 self._store.move_to_end(key)
-                return self._store[key]
+                return _copy(self._store[key])
         return None
 
     def put(self, key: str, result: RedactResult) -> None:
@@ -79,7 +88,7 @@ class ResultCache:
             # cache for one document.
             if size > self._max_chars:
                 return
-            self._store[key] = result
+            self._store[key] = _copy(result)
             self._sizes[key] = size
             self._chars += size
             while self._store and (

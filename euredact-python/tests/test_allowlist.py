@@ -301,3 +301,13 @@ class TestExemptionRecord:
         with_ex = RedactResult(redacted_text="x", detections=[], exempted=[
             Exemption(entity_type=EntityType.EMAIL, start=0, end=3, text="abc", rule="r")])
         assert _result_chars(with_ex) - _result_chars(bare) == len("abc") + len("r")
+
+
+def test_a_urls_domain_is_its_host_not_what_follows_an_at_in_its_query():
+    """allowlist_domains=["euredact.be"] exempted a cloud URL span whole, the
+    number in its query included (rules-engine#152)."""
+    from euredact.sdk import _domain_of
+    from euredact.types import EntityType
+    assert _domain_of(EntityType.URL, "https://crm.example.com/c?ssn=1&contact=support@euredact.be") == "crm.example.com"
+    assert _domain_of(EntityType.URL, "https://jan@crm.example.com/x") == "crm.example.com"
+    assert _domain_of(EntityType.EMAIL, "support@euredact.be") == "euredact.be"

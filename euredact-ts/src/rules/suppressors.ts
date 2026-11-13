@@ -1,6 +1,8 @@
 import { EntityType, type PatternDef } from "../types.js";
 import { isKnownInstitution, isRegisteredBic } from "./bicRegistry.js";
 import { DE_DISTRICT_CODES } from "./deDistricts.js";
+import { cpAfter, cpBefore } from "./codepoints.js";
+import { VALIDATORS } from "./validators.js";
 
 const CONTEXT_CHARS = 150;
 
@@ -13,9 +15,7 @@ export interface RawMatch {
 }
 
 function getContext(text: string, start: number, end: number): [string, string] {
-  const ctxStart = Math.max(0, start - CONTEXT_CHARS);
-  const ctxEnd = Math.min(text.length, end + CONTEXT_CHARS);
-  return [text.slice(ctxStart, start), text.slice(end, ctxEnd)];
+  return [cpBefore(text, start, CONTEXT_CHARS), cpAfter(text, end, CONTEXT_CHARS)];
 }
 
 // Unicode-safe word boundary: negative lookahead for any letter (including accented)
@@ -25,14 +25,18 @@ const _UWB = "(?![a-zA-Z\\u00C0-\\u024F\\u0400-\\u04FF])";
 // bare "\b" here and so could never match "1163 €," at all; this port used the
 // lookahead below and did not have that defect. Kept split so the difference
 // cannot come back.
-const CURRENCY_SYMBOL = "€|\\$|£|¥|₺|zł|Kč|лв|kn|Ft|₽";
+// The letter symbols need word boundaries: "Kn" started "Knud" and "ft" ended
+// "Kraft" (rules-engine#152).
+const CURRENCY_SYMBOL = "€|\\$|£|¥|₺|₽|(?<!\\p{L})(?:zł|Kč|лв|kn|Ft)(?!\\p{L})";
 const CURRENCY_WORD =
   "EUR|USD|GBP|CHF|ISK|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|HRK|" +
   "euro|euros|dollar|dollars|pond|kronor|kroner|kronur|kr|" +
   "złoty|korun|forint|lei|leva";
-const CURRENCY_AFTER = new RegExp(`^\\s*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "i");
-const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}\\s*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "i");
-const CURRENCY_BEFORE = new RegExp(`(?:(?:${CURRENCY_SYMBOL})|\\b(?:${CURRENCY_WORD}))\\s*$`, "i");
+// On the number's own line: across a break the next line's first word was the
+// amount's currency (rules-engine#152, as #51 did for units).
+const CURRENCY_AFTER = new RegExp(`^[ \\t]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
+const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}[ \\t]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
+const CURRENCY_BEFORE = new RegExp(`(?:(?:${CURRENCY_SYMBOL})|\\b(?:${CURRENCY_WORD}))[ \\t]*$`, "iu");
 const AMOUNT_LABEL_BEFORE =
   /\b(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|Upphæð|Importe|Importo|Valore|Wartość|Kwota|Částka|Összeg|Sum|Beloop|Prix|Preis|Price|Loyer|Miete|Huur|Rent|Betrag)(?:\s+\w+)?\s*:?\s*$/i; // second word separate: not "Rent"+"enversicherungsnummer" (rules-engine#111)
 
@@ -48,6 +52,8 @@ const REFERENCE_BEFORE = /\b(?:dossier|ref\.?|referentie|reference|référence|f
 // "#" before a number marks a reference in every language in scope — a ticket,
 // an order, a line item — and never a postcode or a national identifier.
 const HASH_BEFORE = /#\s*$/;
+/** Checks a random number passes at most once in 97 (rules-engine#152). */
+const STRONG_CHECKSUMS = new Set(["iban", "belgian_nn", "belgian_vat", "french_nir"]);
 
 // A short uppercase tag hyphenated to the number: "IR-43433", "INC-2024".
 const REF_PREFIX_BEFORE = /(?:^|[\s([])[A-Z]{2,5}-$/;
@@ -62,11 +68,24 @@ const POSTAL_PREFIX_COUNTRIES = new Set([
   "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK", "UK",
 ]);
 
-const LEGAL_BEFORE = /(?:Art(?:ikel|icle|\.)|§|Artikel|Section|Sectie|Afdeling|paragraaf|Absatz|alinéa|punt|point|Punkt|lid)\s*$/i;
+// Each word starts a word: "lid" ended "Gezinslid" (rules-engine#152).
+const LEGAL_BEFORE = /(?:§|(?<!\p{L})(?:Art(?:ikel|icle|\.)|Artikel|Section|Sectie|Afdeling|paragraaf|Absatz|alinéa|punt|point|Punkt|lid))\s*$/iu;
 
 // An operator on the same line only: a bullet or "---" on the next line is not a minus sign (rules-engine#91).
 const MATH_BEFORE = /[=+\-×÷*/][^\S\r\n]*$/;
 const MATH_AFTER = /^[^\S\r\n]*[=+\-×÷*/]/;
+/**
+ * An operator with a number (or an amount word) on its other side: arithmetic.
+ * Any operator next to the value used to count, so "BSN=111222333", a bullet,
+ * "Jan Jansen - 0612345678" and the slash between two phone numbers dropped the
+ * value (rules-engine#152). For an identifier "/" and "-" count only glued to a
+ * letter or digit, joining a longer token ("PV-LS-2026-652314").
+ */
+const OPERAND_OPERATOR_BEFORE =
+  /(?:[\d)]|(?<!\p{L})(?:total|totaal|sum|som|summe|summa|somme|result|resultaat|ergebnis))[^\S\r\n]*[=+×÷*][^\S\r\n]*$/iu;
+const OPERATOR_OPERAND_AFTER = /^[^\S\r\n]*[=+×÷*][^\S\r\n]*[\d(]/;
+const GLUED_JOIN_BEFORE = /[\p{L}\p{N}][/\-]$/u;
+const GLUED_JOIN_AFTER = /^[/\-][\p{L}\p{N}]/u;
 
 // "A-1010", "B-2000", "L-1234", "CH-8000", "D-10115": a country prefix on a
 // postal code, not a minus sign.
@@ -113,7 +132,9 @@ export const MONTH_NAMES =
   // "desember" (nb/nn/is) was the one December spelling missing from a list
   // that already carried ten others — "1. desember 2025" was a Norwegian
   // postcode because of it.
-  "|marts|augusti|desember" +
+  // "maj" (da/sv/no, sl/hr) was the one month the Python list had and this
+  // one lacked: "Født: 4. maj 1948" was a DOB there only (rules-engine#151).
+  "|marts|maj|augusti|desember" +
   "|janúar|febrúar|apríl|maí|júní|júlí|ágúst|nóvember" +
   "|tammikuu|helmikuu|maaliskuu|huhtikuu|toukokuu|kesäkuu|heinäkuu|elokuu|syyskuu|lokakuu|marraskuu|joulukuu" +
   "|jaanuar|veebruar|aprill|juuni|juuli|oktoober|detsember" +
@@ -242,7 +263,7 @@ function suppressSecretOverStructured(text: string, match: RawMatch): boolean {
   const token = coreToken(match.text);
   if (EXACT_UUID.test(token) || EXACT_EMAIL.test(token)) return true;
   if (BIC_SHAPE.test(token)) {
-    return BIC_CUE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start));
+    return BIC_CUE_BEFORE.test(cpBefore(text, match.start, 24));
   }
   return false;
 }
@@ -279,10 +300,14 @@ const COMPOUND = new RegExp(String.raw`^` + COMPOUND_PART + String.raw`(?:-` + C
 const NAME_PAIR = /^[A-ZÀ-Þ][a-zß-ÿ]{2,}-[A-ZÀ-Þ][a-zß-ÿ]{2,}$/;
 const CONNECTION_WITH_REFERENCE = /^[a-z]+:\/\/[^\s:@]+:\$\{[^}]*\}@/;
 
-function suppressSecretNotASecret(_text: string, match: RawMatch): boolean {
+function suppressSecretNotASecret(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.SECRET) return false;
   const bare = coreToken(match.text);
   if (TIMESTAMP_FRAGMENT.test(bare)) return true;
+  // Under a key whose last word names a credential the key says what the value
+  // is: a passphrase of words ("Correct-Horse-Battery") was dropped for its
+  // shape (rules-engine#152). A reference to where a secret is kept still is not one.
+  if (underACredentialKey(text, match)) return bare.startsWith("${") || CONNECTION_WITH_REFERENCE.test(bare);
   if (NOT_A_SECRET.test(bare)) return true;
   if (URL_LIKE.test(bare) && !URL_WITH_CREDENTIALS.test(bare)) return true;
   if (LDAP_DN.test(bare)) return true;
@@ -306,7 +331,7 @@ function suppressSecretNotASecret(_text: string, match: RawMatch): boolean {
 function suppressPlateAsCurrencyAmount(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.LICENSE_PLATE) return false;
   if (CURRENCY_CODE_TAIL.test(match.text)) return true;
-  return CURRENCY_CODE_AFTER.test(text.slice(match.end, match.end + 12));
+  return CURRENCY_CODE_AFTER.test(cpAfter(text, match.end, 12));
 }
 
 /**
@@ -328,7 +353,10 @@ function suppressTaxidAsIpAddress(_text: string, match: RawMatch): boolean {
 function suppressPhoneAsNumberRange(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.PHONE) return false;
   if (YEAR_RANGE.test(match.text.trim())) return true;
-  return DECIMAL_TAIL_BEFORE.test(text.slice(Math.max(0, match.start - 2), match.start));
+  // A fraction is unsigned and short: "+31612345678" after "1017," in a CSV row
+  // is a field (rules-engine#152).
+  if (match.text.startsWith("+") || (match.text.match(/\d/g) ?? []).length > 8) return false;
+  return DECIMAL_TAIL_BEFORE.test(cpBefore(text, match.start, 2));
 }
 
 function suppressCurrency(text: string, match: RawMatch): boolean {
@@ -343,8 +371,16 @@ function suppressCurrency(text: string, match: RawMatch): boolean {
 function suppressUnits(text: string, match: RawMatch): boolean {
   if (!NUMERIC_TYPES.has(match.patternDef.entityType)) return false;
   const [, after] = getContext(text, match.start, match.end);
-  return UNIT_AFTER.test(after);
+  return UNIT_AFTER.test(after) || SINGLE_LETTER_UNIT_AFTER.test(after);
 }
+
+/**
+ * A bare metre, gram or litre: lower case, and not an initial or an elision
+ * ("M. de Vries", "G. Jansen" are names). The Python list had these and this
+ * one did not; written case-insensitively there, they took initials for units
+ * and dropped the number before them (rules-engine#152).
+ */
+const SINGLE_LETTER_UNIT_AFTER = /^[ \t]*[mgl](?![\p{L}\p{N}_.'’])/u;
 
 /**
  * Suppress numbers preceded by reference/invoice/dossier keywords.
@@ -366,9 +402,13 @@ const LEGAL_TYPES = new Set<EntityType | string>([EntityType.PHONE, EntityType.N
 function suppressReference(text: string, match: RawMatch): boolean {
   const applicable = REFERENCE_TYPES;
   if (!applicable.has(match.patternDef.entityType)) return false;
+  // A mod-97 checksum outranks a reference word: "Pay invoice:
+  // NL91ABNA0417164300", "Patiënt #85031928479" (rules-engine#152).
+  const v = match.patternDef.validator;
+  if (v !== null && STRONG_CHECKSUMS.has(v) && VALIDATORS[v](match.text)) return false;
   const [before] = getContext(text, match.start, match.end);
   if (REFERENCE_BEFORE.test(before)) return true;
-  const adjacent = text.slice(Math.max(0, match.start - 8), match.start);
+  const adjacent = cpBefore(text, match.start, 8);
   if (HASH_BEFORE.test(adjacent)) return true;
   if (!REF_PREFIX_BEFORE.test(adjacent)) return false;
   return !(
@@ -379,11 +419,11 @@ function suppressReference(text: string, match: RawMatch): boolean {
 
 /** "CH-8004 Zürich" on an address line, not the reference "IT-20431". */
 function isCountryPrefixedAddress(text: string, start: number, end: number): boolean {
-  const found = COUNTRY_PREFIX_OPENS_LINE.exec(text.slice(Math.max(0, start - 12), start));
+  const found = COUNTRY_PREFIX_OPENS_LINE.exec(cpBefore(text, start, 12));
   return (
     found !== null &&
     POSTAL_PREFIX_COUNTRIES.has(found[1]) &&
-    CITY_AFTER.test(text.slice(end, end + 24))
+    CITY_AFTER.test(cpAfter(text, end, 24))
   );
 }
 
@@ -402,7 +442,11 @@ function suppressMath(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType === EntityType.POSTAL_CODE && COUNTRY_PREFIX_HYPHEN.test(before)) {
     return false;
   }
-  return MATH_BEFORE.test(before) || MATH_AFTER.test(after);
+  if (match.patternDef.entityType === EntityType.POSTAL_CODE) return MATH_BEFORE.test(before) || MATH_AFTER.test(after);
+  // An international number is never part of a reference: in
+  // "+49 171 2345678-62657" the glued tail is an extension.
+  return OPERAND_OPERATOR_BEFORE.test(before) || OPERATOR_OPERAND_AFTER.test(after)
+    || (!match.text.startsWith("+") && (GLUED_JOIN_BEFORE.test(before) || GLUED_JOIN_AFTER.test(after)));
 }
 
 function suppressSequential(_text: string, match: RawMatch): boolean {
@@ -466,7 +510,7 @@ const SENTENCE_BREAK_G = /[.!?][ \t\n]|\n/g;
 
 // The value's own sentence, bounded either side.
 function sentenceAround(text: string, start: number, end: number, reach = 160): string {
-  let before = text.slice(Math.max(0, start - reach), start);
+  let before = cpBefore(text, start, reach);
   let after = text.slice(end, end + reach);
   let lastEnd = -1;
   SENTENCE_BREAK_G.lastIndex = 0;
@@ -507,13 +551,13 @@ const ADDRESS_COMMA = /(?<!\S)(?:[A-ZÀ-Þ\d][^\s,]*|[^\s,]*\]),[ \t]*$/;
 const MASKED_VALUE = /\[[A-Z][A-Z_]*\]/g;
 
 function yearSitsInAddressStructure(text: string, start: number, end: number): boolean {
-  const before = text.slice(Math.max(0, start - 28), start);
+  const before = cpBefore(text, start, 28);
   // "Amsterdam, 2026" -- the comma of an address line.
   if (ADDRESS_COMMA.test(before)) return true;
   // "PLZ: 2011" -- a postal label with nothing but punctuation between.
   if (POSTAL_LABEL_TOUCHING.test(before)) return true;
   // A capitalised place name immediately after.
-  if (CITY_AFTER.test(text.slice(end, end + 24))) return true;
+  if (CITY_AFTER.test(cpAfter(text, end, 24))) return true;
   // An address word in the value's own sentence. "Te huur: Lange Nieuwstraat
   // 12, rustige ligging in 2018, vlakbij openbaar vervoer." is an Antwerp
   // postal code in prose; the false positives put the year and the address in
@@ -531,8 +575,8 @@ function suppressYearAsPostal(text: string, match: RawMatch): boolean {
   // and "Str." appear in the header of essentially every business letter.
   // Measured: 1,691 of 3,322 postal false positives were plausible years,
   // 1,636 of them literally "2025".
-  if (DATE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start))) return true;
-  if (DATE_AFTER.test(text.slice(match.end, match.end + 8))) return true;
+  if (DATE_BEFORE.test(cpBefore(text, match.start, 24))) return true;
+  if (DATE_AFTER.test(cpAfter(text, match.end, 8))) return true;
   if (!RECENT_YEAR.test(clean)) return false;
 
   const [before, after] = getContext(text, match.start, match.end);
@@ -599,8 +643,10 @@ const EXTENSION_BEFORE =
  */
 const COUNT_LABEL_BEFORE =
   /(?<![A-Za-z0-9_])(?:employees|headcount|staff|mitarbeiter(?:innen)?|beschäftigte|werknemers|medewerkers|employés|salariés|effectifs?|dipendenti|empleados|pracowników|zaměstnanců)\s*[:=]?\s*$/i;
+// The model-name branch ("OptiPlex 7090") is same-line and skips surnames:
+// "Sean McCarthy\n1000 Bruxelles" lost its postcode (rules-engine#152).
 const NOT_POSTAL_BEFORE =
-  /(?<![A-Za-z0-9_])(?:(?:ISO(?:\/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*|[A-Za-z]*[a-z][A-Z][A-Za-z]*\s+)$/;
+  /(?<![A-Za-z0-9_])(?:(?:ISO(?:\/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*|(?!(?:Mc|Mac|De|Di|Da|Du|Le|La|Van|Von|O)[A-Z])[A-Za-z]*[a-z][A-Z][A-Za-z]*[ \t]+)$/;
 
 /**
  * What else a number is, by what touches it (rules-engine#126): a build,
@@ -639,18 +685,18 @@ const GROUP_AFTER = /^[,.]\d{3}(?!\d)/;
 /** Suppress a postal code the word in front of it rules out. */
 function suppressPostalAfterDisqualifyingWord(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
-  const before = text.slice(Math.max(0, match.start - 24), match.start);
+  const before = cpBefore(text, match.start, 24);
   if (EXTENSION_BEFORE.test(before) || COUNT_LABEL_BEFORE.test(before)
     || NOT_POSTAL_BEFORE.test(before)) return true;
-  if (GROUP_BEFORE.test(before) && GROUP_AFTER.test(text.slice(match.end, match.end + 5))) return true;
-  const after = text.slice(match.end, match.end + 24);
+  if (GROUP_BEFORE.test(before) && GROUP_AFTER.test(cpAfter(text, match.end, 5))) return true;
+  const after = cpAfter(text, match.end, 24);
   if (TECH_WORD_BEFORE.test(before) || TECH_SHAPE_BEFORE.test(before) || POSTAL_UNIT_AFTER.test(after)
     || STANDARD_LETTERS.test(match.text)) return true;
   if (PID_BEFORE.test(before) && after.startsWith("]")) return true;
   if (DATE_YEAR.test(match.text.trim()) && (YEAR_RANGE_BEFORE.test(before) || YEAR_RANGE_AFTER.test(after))) return true;
   return RECENT_YEAR.test(match.text.trim())
     && (YEAR_WORD_BEFORE.test(before) || YEAR_VERB_BEFORE.test(before))
-    && !TOWN_AFTER.test(text.slice(match.end, match.end + 3));
+    && !TOWN_AFTER.test(cpAfter(text, match.end, 3));
 }
 
 /** A group with a leading zero: "2.00.079.01" is a version, not an address. */
@@ -676,9 +722,9 @@ function suppressIpNotAHost(text: string, match: RawMatch): boolean {
   if (IP_LEADING_ZERO.test(ip) || DOCUMENTATION_NETS.some((n) => ip.startsWith(n))) return true;
   if (ip === "0.0.0.0" || ip.startsWith("127.")) return true;
   // Part of a longer dotted run: "urn:oid:1.2.250.1.71.4.2.1" is an OID.
-  if (/\d\.$/.test(text.slice(Math.max(0, match.start - 2), match.start))
-    || /^\.\d/.test(text.slice(match.end, match.end + 2))) return true;
-  const prefix = CIDR_PREFIX_AFTER.exec(text.slice(match.end, match.end + 4));
+  if (/\d\.$/.test(cpBefore(text, match.start, 2))
+    || /^\.\d/.test(cpAfter(text, match.end, 2))) return true;
+  const prefix = CIDR_PREFIX_AFTER.exec(cpAfter(text, match.end, 4));
   if (prefix !== null && Number(prefix[1]) < 32) {
     const value = ip.split(".").reduce((acc, o) => acc * 256 + Number(o), 0);
     return value % 2 ** (32 - Number(prefix[1])) === 0;
@@ -713,7 +759,7 @@ function suppressDummyValue(_text: string, match: RawMatch): boolean {
 /** An identifier given as a form's specimen, not anyone's (#126). */
 function suppressExampleValue(text: string, match: RawMatch): boolean {
   if (!EXAMPLE_TYPES.has(match.patternDef.entityType)) return false;
-  return EXAMPLE_BEFORE.test(text.slice(Math.max(0, match.start - 24), match.start));
+  return EXAMPLE_BEFORE.test(cpBefore(text, match.start, 24));
 }
 
 /**
@@ -726,7 +772,7 @@ function suppressNotAnIdentifier(text: string, match: RawMatch): boolean {
   const value = match.text.trim();
   if (type === EntityType.PASSPORT) return !/\d/.test(value);
   if (type === EntityType.LICENSE_PLATE) {
-    return ALGORITHM.test(value) || /§\s*$/.test(text.slice(Math.max(0, match.start - 4), match.start));
+    return ALGORITHM.test(value) || /§\s*$/.test(cpBefore(text, match.start, 4));
   }
   if (type === EntityType.NATIONAL_ID) return EXACT_DOTTED_DATE.test(value);
   return false;
@@ -747,7 +793,7 @@ function suppressPhoneDateOverlap(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.PHONE) return false;
   const candidate = match.text.trim();
   if (DATE_PATTERN_FULL.test(candidate)) return true;
-  return DATE_THEN_HOUR.test(candidate) && MINUTES_AFTER.test(text.slice(match.end, match.end + 3));
+  return DATE_THEN_HOUR.test(candidate) && MINUTES_AFTER.test(cpAfter(text, match.end, 3));
 }
 
 // Standards and classification prefixes that are plate-shaped once a letter and
@@ -786,7 +832,7 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
   // Suppress currency + number misread as plate (e.g. "EUR 2")
   if (CURRENCY_PLATE.test(match.text)) return true;
   if (match.start >= 3) {
-    const before = text.slice(Math.max(0, match.start - 10), match.start);
+    const before = cpBefore(text, match.start, 10);
     if (/[A-Za-zÄÖÜäöüß]{2,}-$/.test(before)) return true;
   }
   // A plate is a token of its own: joined by a connector to more of an
@@ -795,7 +841,7 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
   if (joinedToMore(text, match.start, match.end)) return true;
   // After a reference marker ("Ref #FR-S2") it is a reference, unless a plate
   // cue says otherwise (rules-engine#81).
-  if (REFERENCE_MARK_BEFORE.test(text.slice(Math.max(0, match.start - 4), match.start))) {
+  if (REFERENCE_MARK_BEFORE.test(cpBefore(text, match.start, 4))) {
     const [b, a] = getContext(text, match.start, match.end);
     if (!PLATE_CUE_NEAR.test(b + a)) return true;
   }
@@ -815,7 +861,7 @@ function suppressPlateInCompound(text: string, match: RawMatch): boolean {
     if (/\d/.test(afterChar) || beforeChar === "-") return true;
     if (parts[0] === "WS" || parts[0] === "SS") return true;
     if (parts[0] === "IP") {
-      const afterTwo = text.slice(match.end, match.end + 2);
+      const afterTwo = cpAfter(text, match.end, 2);
       if (afterTwo.length >= 2 && afterTwo[0] === "." && /\d/.test(afterTwo[1])) return true;
     }
   }
@@ -854,10 +900,13 @@ function suppressDePlateUnknownDistrict(text: string, match: RawMatch): boolean 
   return true;
 }
 
-function suppressNatidAsPassport(text: string, match: RawMatch): boolean {
-  if (match.patternDef.entityType !== EntityType.NATIONAL_ID) return false;
-  const [before] = getContext(text, match.start, match.end);
-  return PASSPORT_CONTEXT_BEFORE.test(before);
+/**
+ * A passport label right before `start`: the engine relabels a NATIONAL_ID
+ * there as PASSPORT. As a suppressor it dropped the value: "Passport:
+ * 85031928479" passes the Belgian check and was printed in full (rules-engine#152).
+ */
+export function labelledAPassport(text: string, start: number): boolean {
+  return PASSPORT_CONTEXT_BEFORE.test(cpBefore(text, start, CONTEXT_CHARS));
 }
 
 function suppressSeNatidAsOrg(text: string, match: RawMatch): boolean {
@@ -883,6 +932,44 @@ function suppressPostalInsideIban(text: string, match: RawMatch): boolean {
 // alphanumerics. Deliberately not checksum-gated -- the point is to describe the
 // run a human wrote as one account number, including the ones that fail their
 // checksum, because those are exactly the ones no structured detector claims.
+/**
+ * The offsets of every line break in the last text seen, for the per-candidate
+ * line lookups below. `lastIndexOf("\n")` walks back to the start of the line
+ * for each candidate, which on one long line of numbers made the suppressors
+ * quadratic (rules-engine#150). One entry: it holds on to one document at most.
+ */
+let newlineMemo: { text: string; at: number[] } | null = null;
+
+function newlines(text: string): number[] {
+  if (newlineMemo !== null && newlineMemo.text === text) return newlineMemo.at;
+  const at: number[] = [];
+  for (let i = text.indexOf("\n"); i >= 0; i = text.indexOf("\n", i + 1)) at.push(i);
+  newlineMemo = { text, at };
+  return at;
+}
+
+/** `text.lastIndexOf("\n", from)` for `from >= 0`: the last break at or before `from`, or -1. */
+function prevNewline(text: string, from: number): number {
+  const at = newlines(text);
+  let lo = 0, hi = at.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (at[mid] <= from) lo = mid + 1; else hi = mid;
+  }
+  return lo > 0 ? at[lo - 1] : -1;
+}
+
+/** `text.indexOf("\n", from)`: the first break at or after `from`, or -1. */
+function nextNewline(text: string, from: number): number {
+  const at = newlines(text);
+  let lo = 0, hi = at.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (at[mid] < from) lo = mid + 1; else hi = mid;
+  }
+  return lo < at.length ? at[lo] : -1;
+}
+
 const ACCOUNT_RUN = /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){2,8}\b/g;
 
 // "Compte: FR76 3000 4008 0300 0109 5374" fails the IBAN checksum, so no
@@ -892,29 +979,49 @@ const ACCOUNT_RUN = /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){2,8}\b/g;
 // since 0.3.3, in suppressPostalInsideIban.
 function suppressPhoneInsideAccountRun(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.PHONE) return false;
-  const lineStart = text.lastIndexOf("\n", match.start) + 1;
-  let lineEnd = text.indexOf("\n", match.end);
+  const lineStart = prevNewline(text, match.start) + 1;
+  let lineEnd = nextNewline(text, match.end);
   if (lineEnd < 0) lineEnd = text.length;
+  const [starts, ends] = accountRuns(text, lineStart, lineEnd);
+  // Runs do not overlap, so only the last one starting at or before the match
+  // can contain it; it must be longer than the match, or it *is* the match.
+  let lo = 0, hi = starts.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (starts[mid] <= match.start) lo = mid + 1; else hi = mid;
+  }
+  const i = lo - 1;
+  return i >= 0 && match.end <= ends[i] && ends[i] - starts[i] > match.end - match.start;
+}
+
+/** The last line's account runs, found once for every candidate on it: a
+ *  scan per candidate was quadratic on a long line of numbers (rules-engine#150). */
+let accountRunsMemo: { text: string; lineStart: number; lineEnd: number; starts: number[]; ends: number[] } | null = null;
+
+function accountRuns(text: string, lineStart: number, lineEnd: number): [number[], number[]] {
+  const memo = accountRunsMemo;
+  if (memo !== null && memo.text === text && memo.lineStart === lineStart && memo.lineEnd === lineEnd) {
+    return [memo.starts, memo.ends];
+  }
   const line = text.slice(lineStart, lineEnd);
+  const starts: number[] = [];
+  const ends: number[] = [];
   ACCOUNT_RUN.lastIndex = 0;
   for (let m = ACCOUNT_RUN.exec(line); m !== null; m = ACCOUNT_RUN.exec(line)) {
-    const runStart = lineStart + m.index;
-    const runEnd = runStart + m[0].length;
-    if (runStart <= match.start && match.end <= runEnd
-        && runEnd - runStart > match.end - match.start) {
-      return true;
-    }
+    starts.push(lineStart + m.index);
+    ends.push(lineStart + m.index + m[0].length);
   }
-  return false;
+  accountRunsMemo = { text, lineStart, lineEnd, starts, ends };
+  return [starts, ends];
 }
 
 function suppressPostalAsHouseNumber(text: string, match: RawMatch): boolean {
   if (match.patternDef.entityType !== EntityType.POSTAL_CODE) return false;
   const clean = match.text.replace(/\s/g, "");
   if (clean.length > 3) return false;
-  const before = text.slice(Math.max(0, match.start - 30), match.start);
+  const before = cpBefore(text, match.start, 30);
   if (/[a-záéíóúýþæöðA-ZÁÉÍÓÚÝÞÆÖÐ]{3,}\s+$/.test(before)) {
-    const after = text.slice(match.end, match.end + 5);
+    const after = cpAfter(text, match.end, 5);
     if (!/^,?\s+[A-ZÁÉÍÓÚÝÞÆÖÐ]/.test(after)) return true;
   }
   return false;
@@ -1149,10 +1256,10 @@ const BIC_LABEL_BEFORE = /(?<![A-Za-z])(?:bic|swift)(?:[\s/\-]*(?:code|swift|bic
 function bicShapedWord(text: string, start: number, end: number, token: string): boolean {
   if ((start >= 2 && text[start - 1] === "-" && LETTER.test(text[start - 2])) ||
       (text[end] === "-" && end + 1 < text.length && LETTER.test(text[end + 1]))) return true;
-  if (TITLE_BEFORE.test(text.slice(Math.max(0, start - 8), start))) return true;
+  if (TITLE_BEFORE.test(cpBefore(text, start, 8))) return true;
   return /^[A-Za-z]+$/.test(token) && !(token.length === 11 && token.endsWith("XXX"))
     && !isKnownInstitution(token)
-    && !BIC_LABEL_BEFORE.test(text.slice(Math.max(0, start - 30), start));
+    && !BIC_LABEL_BEFORE.test(cpBefore(text, start, 30));
 }
 
 // ── Postal code: digits belonging to a longer identifier ────────────────
@@ -1166,7 +1273,9 @@ function bicShapedWord(text: string, start: number, end: number, token: string):
 // An identifier cue that is really a postal label -- see the use below.
 const POSTAL_LABEL_CUE = /^post/i;
 
-const ID_CUE_BEFORE = /(?:[\w\-]*(?:Nr|N[°ºo]|Nummer|Numero|Numéro)|No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen)\.?\s*:?\s*$/i;
+// A compound ends in "N°", not "no" ("Bruno"), and the short words start a
+// word ("Díaz") (rules-engine#152).
+const ID_CUE_BEFORE = /(?:[\w\-]*(?:Nr|N[°º]|Nummer|Numero|Numéro)|(?<!\p{L})(?:No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen))\.?\s*:?\s*$/iu;
 
 // An international dialling prefix earlier on the same line, with nothing but
 // number punctuation in between: these digits belong to the phone detector.
@@ -1203,7 +1312,7 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   const clean = match.text.trim();
   if (!/^\d+$/.test(clean)) {
     // A structured form glued on by a hyphen is the tail of a reference: "CPS-HR-2026-019" (#111).
-    const glued = text.slice(Math.max(0, match.start - 2), match.start);
+    const glued = cpBefore(text, match.start, 2);
     if (glued.length === 2 && glued[1] === "-" && /[A-Za-z0-9]/.test(glued[0])) {
       const m = COUNTRY_PREFIXED.exec(text.slice(0, match.start - 1));
       return !(m && m[1] in POSTAL_PREFIX_DIGITS);
@@ -1228,13 +1337,13 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   if ("._/".includes(afterChar) && /\d/.test(nextNext)) return true;
   if (afterChar === "-" && /\d/.test(nextNext)) return true;
   // A hyphenated chain goes on after it: "réf. : L-2025-HD-0412" is a reference (#111).
-  if (/^-[A-Za-z0-9]+-/.test(text.slice(match.end, match.end + 12))) return true;
+  if (/^-[A-Za-z0-9]+-/.test(cpAfter(text, match.end, 12))) return true;
   if (beforeChar === "-" && !countryPrefixed(text.slice(0, match.start - 1), clean)) return true;
 
   // A further digit group on the same line: "1268 040390", "1234 5678 925",
   // "+43 664 8213 907". Horizontal whitespace only — a digit on the *next*
   // line is a separate field, not a continuation.
-  if (/^[ \t]+\d/.test(text.slice(match.end, match.end + 4))) return true;
+  if (/^[ \t]+\d/.test(cpAfter(text, match.end, 4))) return true;
 
   // An identifier label introduces the digits: "DiNr. 4471", "Policen-Nr."
   // Unless the label is a *postal* one. ID_CUE_BEFORE matches any word ending
@@ -1244,7 +1353,7 @@ function suppressPostalInLongerIdentifier(text: string, match: RawMatch): boolea
   // four- or five-digit code, so the isdigit() guard above lets this run and
   // the code was suppressed by its own label: `postnummer: 5020 Bergen`
   // produced nothing at all (rules-engine#41).
-  const before = text.slice(Math.max(0, match.start - 40), match.start);
+  const before = cpBefore(text, match.start, 40);
   const cue = ID_CUE_BEFORE.exec(before);
   if (cue !== null && !POSTAL_LABEL_CUE.test(cue[0].trimStart())) return true;
 
@@ -1276,15 +1385,14 @@ const DELIMITED_FIELD_TYPES = new Set<EntityType | string>([
 
 /** True when the span is exactly one field of a delimited row. */
 function fillsADelimitedField(text: string, start: number, end: number): boolean {
-  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-  let lineEnd = text.indexOf("\n", end);
+  const lineStart = prevNewline(text, start - 1) + 1;
+  let lineEnd = nextNewline(text, end);
   if (lineEnd < 0) lineEnd = text.length;
-  if (!DELIMITED_ROW.test(text.slice(lineStart, lineEnd))) return false;
-  const before = text.slice(lineStart, start);
-  const after = text.slice(end, lineEnd);
-  const opens = before === "" || ",;|\t".includes(before[before.length - 1]);
-  const closes = after === "" || ",;|\t".includes(after[0]);
-  return opens && closes;
+  // The two characters around the span first: they rule out nearly every
+  // candidate, and matching the row costs the whole line (rules-engine#150).
+  const opens = start === lineStart || ",;|\t".includes(text[start - 1]);
+  const closes = end === lineEnd || ",;|\t".includes(text[end]);
+  return opens && closes && DELIMITED_ROW.test(text.slice(lineStart, lineEnd));
 }
 
 function suppressRequiresContext(text: string, match: RawMatch): boolean {
@@ -1304,7 +1412,7 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
     const key = assignmentKey(text, match.start);
     if (key !== null) {
       const kws = match.patternDef.contextKeywords;
-      const line = text.slice(text.lastIndexOf("\n", match.start - 1) + 1, match.start);
+      const line = text.slice(prevNewline(text, match.start - 1) + 1, match.start);
       return !(namesACredential(key, kws) || namesACredential(line.replace(MASKED_VALUE, " "), kws, false));
     }
   }
@@ -1330,6 +1438,16 @@ const ASSIGNMENT_KEY = /[\n,;{}()[\]|:=]([^\n,;{}()[\]|:=]{1,48}?)["'`]?\]?[ \t]
 const KEY_SEPARATORS = /[\s_\-.:"'`$[\]{}()/\\,;|@#]+/g;
 /** Credential words that name a credential only as a key: `pass=`, `pwd:`, `"pin":`. */
 const CREDENTIAL_KEY_WORDS = ["pass", "pwd", "pw", "pin", "otp", "passphrase", "authorization", "authentication", "mdp"];
+
+/** The value is assigned to a key whose last word names a credential:
+ *  `password=`, `client_secret =`; not `Passwort-Richtlinie`, `secret_name`. */
+function underACredentialKey(text: string, match: RawMatch): boolean {
+  const keywords = match.patternDef.contextKeywords;
+  const key = keywords.length > 0 ? assignmentKey(text, match.start) : null;
+  if (key === null) return false;
+  const words = keyWords(key).trim().split(" ");
+  return words.length > 0 && words[0] !== "" && namesACredential(words[words.length - 1], keywords);
+}
 
 function assignmentKey(text: string, start: number): string | null {
   const lo = Math.max(0, start - 60);
@@ -1470,13 +1588,40 @@ const COLUMN_SEPARATORS = [";", "|", "\t", ","];
  * lines above, split by the row's separator into the same number of cells.
  */
 function columnHeader(text: string, start: number): string | null {
-  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-  const lineEndAt = text.indexOf("\n", start);
+  const lineStart = prevNewline(text, start - 1) + 1;
+  // The header depends on the line, not on the value: found once per line, it
+  // serves every candidate on it. Per candidate, splitting the line made a long
+  // delimited line quadratic (rules-engine#150).
+  const memo = columnMemo;
+  let found: [number[], string[]] | null;
+  if (memo !== null && memo.text === text && memo.lineStart === lineStart) {
+    found = memo.found;
+  } else {
+    found = lineHeader(text, lineStart);
+    columnMemo = { text, lineStart, found };
+  }
+  if (found === null) return null;
+  const [separators, heads] = found;
+  // The value's column: the separators before it.
+  let lo = 0, hi = separators.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (separators[mid] < start) lo = mid + 1; else hi = mid;
+  }
+  return heads[lo].toLowerCase();
+}
+
+/** The last line's header, one entry, holding on to one document at most. */
+let columnMemo: { text: string; lineStart: number; found: [number[], string[]] | null } | null = null;
+
+/** The header cells over the line at `lineStart`, and the offsets of the
+ *  separator splitting both, or null when the line sits in no table. */
+function lineHeader(text: string, lineStart: number): [number[], string[]] | null {
+  const lineEndAt = text.indexOf("\n", lineStart);
   const line = text.slice(lineStart, lineEndAt >= 0 ? lineEndAt : text.length);
   for (const sep of COLUMN_SEPARATORS) {
     if (!line.includes(sep)) continue;
     const cells = line.split(sep);
-    const column = text.slice(lineStart, start).split(sep).length - 1;
     // Lines above, one lastIndexOf at a time: one of the three lines above, or
     // further up through rows of the same table (rules-engine#126).
     let end = lineStart - 1;
@@ -1497,7 +1642,9 @@ function columnHeader(text: string, start: number): string | null {
       // Nor is a data row without a date: a header has no cell with four digits or more (#130).
       if (same && (!header.includes(":") || header.trimStart().startsWith("#")) && !ANY_DATE.test(header)
           && !heads.some((h) => (h.match(/\d/g) ?? []).length >= 4)) {
-        return heads[column].toLowerCase();
+        const separators: number[] = [];
+        for (let i = 0; i < line.length; i++) if (line[i] === sep) separators.push(lineStart + i);
+        return [separators, heads];
       }
       if (seen >= 3 && !same) break;  // past the table this value sits in
       end = begin - 1;
@@ -1530,14 +1677,17 @@ function suppressCardInsideDigitRun(text: string, match: RawMatch): boolean {
   const sep = [...match.text].find(c => !/\d/.test(c)) ?? "";
   if (!sep) return false;
   const s = sep.replace(/[-\\^$.*+?()[\]{}|]/g, "\\$&");
-  const before = text.slice(Math.max(0, match.start - 6), match.start);
-  const after = text.slice(match.end, match.end + 6);
-  return new RegExp(`(?<!\\d)\\d{4}${s}$`).test(before) || new RegExp(`^${s}\\d{4}(?!\\d)`).test(after);
+  const before = cpBefore(text, match.start, 6);
+  const after = cpAfter(text, match.end, 11);
+  // After the card a run means two more groups: one is its own expiry
+  // ("4111 1111 1111 1111 1225 123"), and dropping the card left eight of its
+  // digits to a phone and the rest in the clear (rules-engine#152).
+  return new RegExp(`(?<!\\d)\\d{4}${s}$`).test(before) || new RegExp(`^${s}\\d{4}${s}\\d{4}(?!\\d)`).test(after);
 }
 
 const TYPE_SUPPRESSORS: Partial<Record<string, Suppressor[]>> = {
   [EntityType.PHONE]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressPhoneServiceNumber, suppressPhoneInsideAccountRun, suppressPhoneDateOverlap, suppressPhoneAsNumberRange],
-  [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressNatidAsPassport, suppressSeNatidAsOrg],
+  [EntityType.NATIONAL_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressLegal, suppressMath, suppressSeNatidAsOrg],
   [EntityType.SSN]: [suppressCurrency, suppressUnits, suppressReference, suppressMath],
   [EntityType.TAX_ID]: [suppressCurrency, suppressUnits, suppressReference, suppressMath, suppressTaxidAsIpAddress],
   [EntityType.POSTAL_CODE]: [suppressCurrency, suppressUnits, suppressMath, suppressLegal, suppressYearAsPostal, suppressPostalAfterDisqualifyingWord, suppressPostalInsideIban, suppressPostalAsHouseNumber, suppressPostalInLongerIdentifier, suppressReference],

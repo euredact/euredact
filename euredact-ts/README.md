@@ -189,6 +189,13 @@ function addCustomPattern(name: string, pattern: string): void;
 Register a custom regex pattern. Matches are reported with `name` as the entity
 type. See [Custom Patterns](#custom-patterns) below.
 
+The pattern is a JavaScript regular expression, compiled with the `u` flag, and
+JavaScript's `\w`, `\d` and `\b` are ASCII where Python's are Unicode:
+`PAT-\w+` stops at the `ü` of `PAT-Müller` here and takes the whole name in the
+Python SDK. For a pattern that behaves the same in both, spell the characters
+out in a class both engines read alike, such as `[A-Za-zÀ-ÖØ-öø-ÿ0-9_]`
+(Python's `re` has no `\p{…}`) (rules-engine#151).
+
 #### `restore(text, tokens)`
 
 ```ts
@@ -1521,7 +1528,7 @@ list is merged with it.
 Input text
     |
     v
-[Normalizer] -- Unicode normalization, whitespace cleanup
+[Normalizer] -- NFC, digits in other scripts read as ASCII (０６… as 06…)
     |
     v
 [Pass 1: Pattern Matching] -- All country + shared + custom regexes

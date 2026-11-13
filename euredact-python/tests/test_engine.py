@@ -1,5 +1,7 @@
 """Rule engine unit tests."""
 
+import pytest
+
 from euredact.rules.engine import RuleEngine
 from euredact.types import EntityType
 
@@ -37,3 +39,29 @@ class TestRuleEngine:
         dets = engine.detect("test@example.com", ["NL", "BE"])
         email_dets = [d for d in dets if d.entity_type == EntityType.EMAIL]
         assert len(email_dets) == 1
+
+
+@pytest.mark.parametrize("separator", ["\n", "; "], ids=["one-per-line", "one-line"])
+def test_time_grows_linearly_on_text_dense_with_phone_numbers(separator):
+    """A list of phone numbers took quadratic time: 115 s for 117 KB with one
+    number per line, 127 s for 125 KB on one line (rules-engine#150). Four
+    times the text must take well under the sixteen times a quadratic pass
+    needs; the threshold leaves room for timing noise."""
+    import time
+
+    from euredact import EuRedact
+
+    sdk = EuRedact()
+    sdk.redact("warm-up", countries=["NL"], cache=False)
+
+    def seconds(n: int) -> float:
+        text = ("Tel 0612345678" + separator) * n
+        best = float("inf")
+        for _ in range(2):
+            start = time.perf_counter()
+            sdk.redact(text, countries=["NL"], cache=False)
+            best = min(best, time.perf_counter() - start)
+        return best
+
+    small, large = seconds(500), seconds(2000)
+    assert large / small < 8, f"{small:.2f}s -> {large:.2f}s"

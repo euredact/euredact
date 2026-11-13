@@ -6,15 +6,18 @@ import asyncio
 import json
 import re
 import secrets
+import threading
 import unicodedata
 import warnings
 from bisect import bisect_left, bisect_right
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import Callable, Iterator, Mapping
+from urllib.parse import urlsplit
 
 from euredact.cache import ResultCache
 from euredact.normalizer import map_offset_to_original, normalize
+from euredact.rules.bic_registry import registry_generation
 from euredact.rules.context import DocumentContext
 from euredact.rules.engine import RuleEngine, check_country_arg
 from euredact.rules.evidence import weights_to_ranking
@@ -221,29 +224,39 @@ class ReferentialMapper:
         self._counters: dict[EntityType, int] = {}
         self._mapping: dict[str, str] = {}
         self._warned = False
+        # aredact and aredact_batch label from pool threads. Unlocked, two new
+        # values could read the same counter and share a label, and a shared
+        # label says two values are one (rules-engine#150).
+        self._lock = threading.Lock()
 
     def get_label(self, text: str, entity_type: EntityType | str) -> str:
         """Return consistent label. Same input always returns same output."""
-        if text not in self._mapping:
-            self._counters[entity_type] = self._counters.get(entity_type, 0) + 1
-            n = self._counters[entity_type]
-            type_label = entity_type.value if isinstance(entity_type, EntityType) else entity_type
-            self._mapping[text] = f"{type_label}_{n}"
-            if not self._warned and len(self._mapping) > self.MAPPING_WARN_THRESHOLD:
-                self._warned = True
-                warnings.warn(
-                    f"Referential integrity mapping holds "
-                    f"{len(self._mapping)} raw PII values and is never evicted. "
-                    f"Call clear() between workloads to release them.",
-                    ResourceWarning,
-                    stacklevel=2,
-                )
-        return self._mapping[text]
+        warn_at = 0
+        with self._lock:
+            label = self._mapping.get(text)
+            if label is None:
+                self._counters[entity_type] = self._counters.get(entity_type, 0) + 1
+                n = self._counters[entity_type]
+                type_label = entity_type.value if isinstance(entity_type, EntityType) else entity_type
+                label = self._mapping[text] = f"{type_label}_{n}"
+                if not self._warned and len(self._mapping) > self.MAPPING_WARN_THRESHOLD:
+                    self._warned = True
+                    warn_at = len(self._mapping)
+        if warn_at:
+            warnings.warn(
+                f"Referential integrity mapping holds "
+                f"{warn_at} raw PII values and is never evicted. "
+                f"Call clear() between workloads to release them.",
+                ResourceWarning,
+                stacklevel=2,
+            )
+        return label
 
     def clear(self) -> None:
         """Remove all stored PII mappings from memory."""
-        self._counters.clear()
-        self._mapping.clear()
+        with self._lock:
+            self._counters.clear()
+            self._mapping.clear()
 
 
 #: Types whose separators are presentational: the same identifier stays the
@@ -296,8 +309,14 @@ def _allowlist_key(value: str) -> str:
 
 
 def _folded_key(value: str) -> str:
-    """:func:`_allowlist_key` with presentational separators removed."""
-    return _SEPARATORS.sub("", _allowlist_key(value))
+    """:func:`_allowlist_key` with presentational separators removed.
+
+    Prefixed so that it shares no key with an unfolded entry. In one keyspace
+    an exact lookup found other entries' folded forms, and folding, meant for
+    the identifier types only, applied to every type: ``allowlist=["Xk92!
+    mQz7Lp4w"]`` exempted the SECRET ``Xk92!mQz7Lp4w`` (rules-engine#150).
+    """
+    return "\x00" + _SEPARATORS.sub("", _allowlist_key(value))
 
 
 def _normalize_allowlist(values: list[str] | None) -> dict[str, str]:
@@ -326,6 +345,15 @@ def _domain_of(entity_type: EntityType | str, value: str) -> str | None:
     if entity_type not in _DOMAIN_BEARING:
         return None
     v = _allowlist_key(value)
+    if "://" in v:
+        # A URL's host, not whatever follows its last "@": in
+        # "https://crm.example.com/c?ssn=…&contact=support@euredact.be" that is
+        # the query, and allowlist_domains=["euredact.be"] exempted the whole
+        # URL, the number in it included (rules-engine#152).
+        try:
+            return urlsplit(v).hostname
+        except ValueError:
+            return None
     if "@" in v:
         return v.rsplit("@", 1)[1].strip("<>[](),;:\"'")
     v = re.sub(r"^[a-z][a-z0-9+.\-]*://", "", v)
@@ -809,14 +837,21 @@ class EuRedact:
             allow_key += "|dom=" + json.dumps(sorted(domains))
         if excluded:
             allow_key += "|excl=" + json.dumps(sorted(excluded))
-        cache_mode = f"rules|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}|tok={tokenize}|allow={allow_key}"
+        # The BIC registry decides which BICs are valid, so a new one must not
+        # be answered from results computed under the old (rules-engine#150).
+        cache_mode = (f"rules|dates={detect_dates}|hint={hint_key}|ri={referential_integrity}"
+                      f"|tok={tokenize}|allow={allow_key}|bic={registry_generation()}")
         # A context makes the result depend on evidence from other chunks, so
         # the text no longer identifies the result. Caching is disabled rather
         # than keyed on the context, whose contents change as chunks arrive.
         if context is not None:
             cache = False
         if cache:
-            cache_key = self._cache.key(normalized_text, countries_tuple, cache_mode)
+            # The text as given, not as normalised: the result is built from
+            # it, so an NFD and an NFC spelling of one document are two entries.
+            # Keyed on the normalised text, the second was answered with the
+            # first one's redacted text and offsets (rules-engine#150).
+            cache_key = self._cache.key(text, countries_tuple, cache_mode)
             cached = self._cache.get(cache_key)
             if cached is not None:
                 return cached
@@ -829,20 +864,23 @@ class EuRedact:
         if context is not None:
             context.add(evidence, chunk_offset)
 
-        # Map offsets back to original text if normalization changed length
-        if offset_mapping is not None:
-            # replace() rather than a field-by-field rebuild: this listed every
-            # field explicitly and so silently dropped any new one, which is
-            # how out_of_scope and country_confidence would have been lost on
+        # Map offsets back to the original text, and report what it says there:
+        # a detection's text is the document's, full-width digits and NFD
+        # included, not the normalised form the patterns read (rules-engine#150).
+        if normalized_text != text:
+            # replace() rather than a field-by-field rebuild, which silently
+            # dropped any new field (out_of_scope, country_confidence) on
             # exactly the inputs that need normalising.
-            detections = [
-                replace(
-                    d,
-                    start=map_offset_to_original(d.start, offset_mapping),
-                    end=map_offset_to_original(d.end, offset_mapping),
-                )
-                for d in detections
-            ]
+            if offset_mapping is not None:
+                detections = [
+                    replace(
+                        d,
+                        start=map_offset_to_original(d.start, offset_mapping),
+                        end=map_offset_to_original(d.end, offset_mapping),
+                    )
+                    for d in detections
+                ]
+            detections = [replace(d, text=text[d.start:d.end]) for d in detections]
 
         # Filter date types unless opted in
         if not detect_dates:
