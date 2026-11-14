@@ -48,6 +48,18 @@ narrative lives. Sections here use that vocabulary
   both SDKs: three 402 bodies (full, partly malformed, not JSON) and three
   credit answers (no breakdown, Budget and extra, extra only).
 
+### Changed
+
+- **BIC list refreshed to the October 2026 GLEIF mapping** *(rules-engine#161)*.
+  It was September's: 10,382 BIC6 prefixes, now 10,380, with 35 added and 37
+  removed. The list decides only whether a letters-only code beside an IBAN,
+  with no BIC label, is a bank or a word (#57), and 13 of the additions and 4
+  of the removals have such a code. `OPENDEFF`, `SOGEDEFF` and `REVOATWW` are
+  now masked there. `SCFBESMM` (Santander Consumer Finance, now Openbank's
+  `OPENESMM`) and three others are treated like any unlisted bank: masked
+  behind a `BIC:` label or as an 11-character code, not bare. The SWIFT
+  notice in `NOTICE` is dated October 2026. Three conformance vectors.
+
 ### Fixed
 
 - **Values written with Unicode spaces and digits** *(rules-engine#150)*.
