@@ -149,6 +149,20 @@ narrative lives. Sections here use that vocabulary
     `contact=support@euredact.be` in it was exempted whole. It reads the host.
   - 22 conformance vectors, all failing on 0.8.0.
 
+- **No re2 errors on concurrent first calls** *(rules-engine#157)*. With
+  `[fast]`, 25 threads making their first `redact()` call together printed
+  48 to 749 "Error parsing … invalid perl operator" lines to stderr;
+  detections were identical in every thread. Each thread built its own
+  module-level instance (`_get_instance` had no lock), and each build
+  silences RE2 by swapping file descriptor 2 for the whole process, so one
+  build restored stderr while another was still feeding RE2 the patterns it
+  rejects. The instance is now built once under a lock; re2 builds are
+  serialised; and lookarounds are stripped before RE2 sees a pattern rather
+  than after it rejects one (the same superset). #150 made that last
+  rejection happen for most digit patterns, which is why it showed far more
+  often than on 0.8.0. A test makes the first calls from a fresh process
+  behind a barrier and asserts empty stderr.
+
 ## 0.8.0 (2026-10-31)
 
 ### Added

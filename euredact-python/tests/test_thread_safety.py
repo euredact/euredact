@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from euredact.rules.engine import RuleEngine
 
 # Every line carries an email and an IBAN, both from the SHARED country config
@@ -103,3 +105,45 @@ def test_concurrent_referential_labels_are_never_shared() -> None:
             assert len(labels) == len(set(labels)) == 2400
     finally:
         sys.setswitchinterval(interval)
+
+
+_FIRST_CALL_SCRIPT = r"""
+import sys, threading
+import euredact
+from euredact import EuRedact
+per_tenant = sys.argv[1] == "instances"
+N = 16
+DOC = ("Ring Jo Bloggs on 07700 900123, post code SW1A 1AA. Pay GB33BUKB20201555555555, "
+       "NI number QQ 12 34 56 C. Ref 12345 67890 and VAT GB123456789. ") * 3
+barrier = threading.Barrier(N)
+out = [None] * N
+def work(i):
+    barrier.wait()   # every thread's FIRST call, at once
+    sdk = EuRedact() if per_tenant else euredact
+    r = sdk.redact(DOC, countries=["GB"])
+    out[i] = tuple(sorted((d.start, d.end, str(d.entity_type)) for d in r.detections))
+threads = [threading.Thread(target=work, args=(i,)) for i in range(N)]
+for t in threads: t.start()
+for t in threads: t.join()
+print(len(set(out)), len(out[0]))
+"""
+
+
+@pytest.mark.parametrize("how", ["default-instance", "instances"])
+def test_concurrent_first_calls_print_nothing_and_agree(how) -> None:
+    """With [fast], threads making their first call together printed hundreds
+    of re2 "Error parsing" lines: each built its own instance, and their
+    process-wide stderr swaps interleaved (rules-engine#157). A fresh process,
+    because only the first call shows it; the test above warms up first."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "src"
+    run = subprocess.run(
+        [sys.executable, "-c", _FIRST_CALL_SCRIPT, how], capture_output=True, text=True,
+        timeout=300, env={**__import__("os").environ, "PYTHONPATH": str(src)})
+    assert run.returncode == 0, run.stderr
+    assert run.stderr == ""
+    distinct, spans = run.stdout.split()
+    assert distinct == "1" and int(spans) > 0

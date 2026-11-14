@@ -20,6 +20,7 @@ Quick start::
 
 from __future__ import annotations
 
+import threading
 from typing import Iterator
 
 __version__ = "0.8.0"
@@ -71,12 +72,18 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 _instance: EuRedact | None = None
+# Threads making their first call together each built an instance of their own,
+# and with [fast] their concurrent re2 builds printed parse errors to stderr
+# (rules-engine#157). One instance, built once.
+_instance_lock = threading.Lock()
 
 
 def _get_instance() -> EuRedact:
     global _instance
     if _instance is None:
-        _instance = EuRedact()
+        with _instance_lock:
+            if _instance is None:
+                _instance = EuRedact()
     return _instance
 
 
