@@ -48,6 +48,7 @@ which both test suites run.
 
 ### Fixed
 
+- A value at the start of a line was dropped when the line before ended in context a suppressor reads (`Termin 19.10.` then the postcode `04-002`): Python's `$` also matches before a final newline. The patterns end in `\Z`, as TypeScript's `$` already behaved. *(Python only)* *(rules-engine#166)*
 - With `[fast]` installed (google-re2), values written with Unicode spaces were left in the text: a French phone grouped with no-break spaces (`06\u00a012\u00a034\u00a056\u00a078`), an IBAN grouped the same way. The re2 prefilter read `\s`, `\d`, `\w` and `\b` as ASCII and skipped patterns Python would have matched; it now reads the text folded to ASCII stand-ins chosen by Python's own character classes, and matches exactly what the pure-Python install does. *(Python only)* *(rules-engine#150)*
 - Digits in other scripts (full-width `０６１２３４５６７８`, Arabic-Indic, Devanagari, …) are read as ASCII digits, one character for one; a phone written in full-width digits was cut in two (Python) or left whole (TypeScript). Masks over text whose NFC form has the same length but different characters (a composition and an expansion) landed one character off. A detection's `text` is now what the document says at its offsets, full-width digits and decomposed accents included; it was the normalised form. *(rules-engine#150)*
 - Text dense with phone numbers took quadratic time: 117 KB took 115 s, now 3 s, with identical output. *(rules-engine#150)*

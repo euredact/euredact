@@ -597,7 +597,7 @@ def validate_italian_cf(candidate: str) -> bool:
     # computed over the replaced code, so the tables below already cover it.
     # Rejecting the letters rejected valid codes (rules-engine#150).
     if not re.match(r"^[A-Z]{6}[\dLMNPQRSTUV]{2}[A-Z][\dLMNPQRSTUV]{2}[A-Z]"
-                    r"[\dLMNPQRSTUV]{3}[A-Z]$", clean):
+                    r"[\dLMNPQRSTUV]{3}[A-Z]\Z", clean):
         return False
 
     odd_map = {
@@ -627,7 +627,7 @@ def validate_italian_cf(candidate: str) -> bool:
 def validate_spanish_dni(candidate: str) -> bool:
     """Spanish DNI: 8 digits + check letter. Letter = number mod 23 → lookup."""
     clean = candidate.upper().strip()
-    if not re.match(r"^\d{8}[A-Z]$", clean):
+    if not re.match(r"^\d{8}[A-Z]\Z", clean):
         return False
     lookup = "TRWAGMYFPDXBNJZSQVHLCKE"
     number = int(clean[:8])
@@ -637,7 +637,7 @@ def validate_spanish_dni(candidate: str) -> bool:
 def validate_spanish_nie(candidate: str) -> bool:
     """Spanish NIE: X/Y/Z + 7 digits + check letter. X→0, Y→1, Z→2 then same as DNI."""
     clean = candidate.upper().strip()
-    if not re.match(r"^[XYZ]\d{7}[A-Z]$", clean):
+    if not re.match(r"^[XYZ]\d{7}[A-Z]\Z", clean):
         return False
     prefix_map = {"X": "0", "Y": "1", "Z": "2"}
     number = int(prefix_map[clean[0]] + clean[1:8])
@@ -865,7 +865,7 @@ def validate_slovenian_emso(candidate: str) -> bool:
 def validate_irish_pps(candidate: str) -> bool:
     """Irish PPS Number: 7 digits + check letter(s). Weights 8,7,6,5,4,3,2 (+9 for 9th)."""
     clean = candidate.upper().strip()
-    if not re.match(r"^\d{7}[A-W][ABWTXZ]?$", clean):
+    if not re.match(r"^\d{7}[A-W][ABWTXZ]?\Z", clean):
         return False
     weights = [8, 7, 6, 5, 4, 3, 2]
     total = sum(int(d) * w for d, w in zip(clean[:7], weights))

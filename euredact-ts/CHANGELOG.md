@@ -76,6 +76,12 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A value at the start of a line** was dropped by the Python SDK, not this
+  one, when the line before ended in context a suppressor reads (`Termin
+  19.10.` before the postcode `04-002`): Python's `$` also matches before a
+  final newline (rules-engine#166). The four conformance vectors added for it
+  run here too.
+
 - **Values written with Unicode spaces and digits** *(rules-engine#150)*.
   - **Digits in other scripts** are folded to ASCII before matching, one
     character for one so offsets do not move: full-width, Arabic-Indic,

@@ -125,7 +125,7 @@ def _tail(run_on: str = r"\w*") -> str:
     colon, and "Burgerservicenummer (BSN):" closes a parenthesis first. Both are
     bounded — they can absorb punctuation, never another word.
     """
-    return rf"(?:{run_on}|\s+[^\s:.\-\d,;()/]{{2,20}})\s*\)?\s*[:.\-]*\s*$"
+    return rf"(?:{run_on}|\s+[^\s:.\-\d,;()/]{{2,20}})\s*\)?\s*[:.\-]*\s*\Z"
 
 
 #: One character of a label's run-on. The second branch is what ``\w`` means in
@@ -287,7 +287,7 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         # the national-visa sticker (rules-engine#103).
         r"|kart(?:a|y|ę|ą)\s*pobytu(?:\s*cukr)?|naklejk(?:a|i|ę|ą)\s*wizow(?:a|ej|ą)"
         r"|uppehållstillstånd|opholdstilladelse|oppholdstillatelse|oleskelulupa)"
-        + _SEP[:-1] + r"(?:[A-Z]\s+)?$", re.IGNORECASE)),
+        + _SEP.removesuffix(r"\Z") + r"(?:[A-Z]\s+)?\Z", re.IGNORECASE)),
 
     # ── Driving licence ────────────────────────────────────────────────
     # Polish: a licence's document number has the passport shape (two letters
@@ -306,7 +306,7 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
     # ── BIC / SWIFT ────────────────────────────────────────────────────
     (EntityType.BIC, re.compile(
         _B + r"(?:bic|swift)(?:[A-Za-z0-9_/]|[^\x00-\x7F])*"
-        r"\s*[:.\-]?\s*\(?\s*$", re.IGNORECASE)),
+        r"\s*[:.\-]?\s*\(?\s*\Z", re.IGNORECASE)),
 
     # ── Postal code ────────────────────────────────────────────────────
     # A postal code loses every contested span on priority (it is the weakest

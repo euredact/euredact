@@ -8470,6 +8470,58 @@
         ]
       },
       "notes": "rules-engine#161: an institution the October 2026 GLEIF mapping added. A letters-only code beside an IBAN, with no BIC label, is masked only when the bundled mapping knows the institution (#57); the September list did not."
+    },
+    {
+      "id": "line-break-postal-after-a-dotted-day-on-the-line-before",
+      "text": "Termin 19.10.\n04-002",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "04-002"
+        ]
+      },
+      "notes": "rules-engine#166: Python's $ also matches just before a final newline, so a context pattern tested on the text before a value fired across the line break and the value at the start of the next line was dropped; TypeScript's $ does not. The Python patterns end in \\Z now."
+    },
+    {
+      "id": "line-break-postal-with-its-city-after-a-dotted-day",
+      "text": "Termin 19.10.\n04-002 Warszawa",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "04-002"
+        ]
+      },
+      "notes": "rules-engine#166: Python's $ also matches just before a final newline, so a context pattern tested on the text before a value fired across the line break and the value at the start of the next line was dropped; TypeScript's $ does not. The Python patterns end in \\Z now."
+    },
+    {
+      "id": "line-break-an-operator-on-the-line-before-is-not-maths",
+      "text": "total =\n0612345678",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "0612345678"
+        ]
+      },
+      "notes": "rules-engine#166: Python's $ also matches just before a final newline, so a context pattern tested on the text before a value fired across the line break and the value at the start of the next line was dropped; TypeScript's $ does not. The Python patterns end in \\Z now."
+    },
+    {
+      "id": "line-break-a-secret-on-the-line-after-its-cue",
+      "text": "j.peeters@example.be accessed secret store, retrieved:\nZt4mQ9vLx2Rk8WbN5cHp3sYd7Fg6",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "SECRET": [
+          "Zt4mQ9vLx2Rk8WbN5cHp3sYd7Fg6"
+        ]
+      },
+      "notes": "rules-engine#166: Python's $ also matches just before a final newline, so a context pattern tested on the text before a value fired across the line break and the value at the start of the next line was dropped; TypeScript's $ does not. The Python patterns end in \\Z now."
     }
   ]
 }

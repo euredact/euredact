@@ -76,6 +76,21 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A value at the start of a line, dropped by context on the line before**
+  *(Python only)* *(rules-engine#166)*. Without `re.MULTILINE`, Python's `$`
+  matches at the end of the text and also just before a final newline;
+  JavaScript's does not. The context patterns tested on the text before a
+  value (`*_BEFORE`, 88 anchors in `suppressors.py`, `cues.py` and
+  `validators.py`) therefore fired across a line break, and the value
+  starting the next line was suppressed and left in the text: `Termin
+  19.10.` on one line dropped the postcode `04-002` starting the next, which
+  TypeScript kept. Found by comparing both SDKs on a 900-document held-out
+  benchmark (one document differed). Every such pattern ends in `\Z` now,
+  which means what TypeScript's `$` means; a test reads every regex literal
+  under `rules/` so a bare `$` cannot come back. Four conformance vectors;
+  2,854 conformance texts re-spelled with a line break before a value now
+  give the same output in both SDKs (6 differed).
+
 - **Values written with Unicode spaces and digits** *(rules-engine#150)*.
   - **`[fast]` skipped patterns** *(Python only)*. google-re2 reads `\s`,
     `\d`, `\w` and `\b` as ASCII; the prefilter was given the patterns as

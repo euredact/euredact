@@ -52,7 +52,7 @@ _CURRENCY_COMMA_AFTER = re.compile(
     re.IGNORECASE,
 )
 _CURRENCY_BEFORE = re.compile(
-    rf"(?:(?:{_CURRENCY_SYMBOL})|\b(?:{_CURRENCY_WORD}))[^\S\r\n]*$",
+    rf"(?:(?:{_CURRENCY_SYMBOL})|\b(?:{_CURRENCY_WORD}))[^\S\r\n]*\Z",
     re.IGNORECASE,
 )
 # Also catch "Montant TTC :" or "Beløb:" before a number
@@ -63,7 +63,7 @@ _AMOUNT_LABEL_BEFORE = re.compile(
     # The optional second word must be a word of its own. Glued on, it let
     # "Rent" + "enversicherungsnummer" read as an amount label and dropped the
     # German pension number after it (rules-engine#111).
-    r"(?:\s+\w+)?\s*:?\s*$",
+    r"(?:\s+\w+)?\s*:?\s*\Z",
     re.IGNORECASE,
 )
 
@@ -107,7 +107,7 @@ _REFERENCE_BEFORE = re.compile(
     r"saksnummer|ärendenummer|sagsnummer|asianumero|"
     # The Dutch two-word form. "factuurnummer" was here, "Factuur nr." was not,
     # and the latter is what documents actually write.
-    r"Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.#]?\s*$",
+    r"Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.#]?\s*\Z",
     re.IGNORECASE,
 )
 
@@ -118,12 +118,12 @@ _STRONG_CHECKSUMS = frozenset({"iban", "belgian_nn", "belgian_vat", "french_nir"
 #: A "#" immediately before the number. Across every language in scope this
 #: marks a reference — a ticket, an order, a line item — and never a postcode or
 #: a national identifier.
-_HASH_BEFORE = re.compile(r"#\s*$")
+_HASH_BEFORE = re.compile(r"#\s*\Z")
 
 #: A short uppercase tag joined to the number by a hyphen: "IR-43433",
 #: "INC-2024", "REF-88120". The tag is what makes it a document reference; a
 #: postal code is never introduced this way.
-_REF_PREFIX_BEFORE = re.compile(r"(?:^|[\s(\[])[A-Z]{2,5}-$")
+_REF_PREFIX_BEFORE = re.compile(r"(?:^|[\s(\[])[A-Z]{2,5}-\Z")
 
 #: The cross-border address form, "CH-8004 Zürich", "NL-1012 LG Amsterdam":
 #: an ISO country code hyphenated to a postal code. `_REF_PREFIX_BEFORE` reads
@@ -131,7 +131,7 @@ _REF_PREFIX_BEFORE = re.compile(r"(?:^|[\s(\[])[A-Z]{2,5}-$")
 #: so the address form is told apart by position rather than by shape -- the
 #: prefix opens an address line (after a comma or at a line start) and a place
 #: name follows the code (rules-engine#58).
-_COUNTRY_PREFIX_OPENS_LINE = re.compile(r"(?:^|\n|,)[ \t]*([A-Z]{2})-$")
+_COUNTRY_PREFIX_OPENS_LINE = re.compile(r"(?:^|\n|,)[ \t]*([A-Z]{2})-\Z")
 _POSTAL_PREFIX_COUNTRIES = frozenset({
     "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI",
     "FR", "GB", "GR", "HR", "HU", "IE", "IS", "IT", "LI", "LT", "LU", "LV",
@@ -145,7 +145,7 @@ _POSTAL_PREFIX_COUNTRIES = frozenset({
 # (rules-engine#152).
 _LEGAL_BEFORE = re.compile(
     r"(?:§|(?<![^\W\d_])(?:Art(?:ikel|icle|\.)|Artikel|Section|Sectie|Afdeling|"
-    r"paragraaf|Absatz|alinéa|punt|point|Punkt|lid))\s*$",
+    r"paragraaf|Absatz|alinéa|punt|point|Punkt|lid))\s*\Z",
     re.IGNORECASE,
 )
 
@@ -155,7 +155,7 @@ _LEGAL_BEFORE = re.compile(
 # bullet or a Markdown rule on the next line ("- Adres", "---") read as a minus
 # sign and dropped the value at the end of the line above it: 1,134 values in
 # 782 of 8,810 pipeline documents (rules-engine#91).
-_MATH_BEFORE = re.compile(r"[=+\-×÷*/][^\S\r\n]*$")
+_MATH_BEFORE = re.compile(r"[=+\-×÷*/][^\S\r\n]*\Z")
 _MATH_AFTER = re.compile(r"^[^\S\r\n]*[=+\-×÷*/]")
 #: An operator with a number on its other side: arithmetic. Any operator next to
 #: the value used to count, so "BSN=111222333", a "- " bullet, "Jan Jansen -
@@ -165,33 +165,33 @@ _MATH_AFTER = re.compile(r"^[^\S\r\n]*[=+\-×÷*/]")
 #: keeps them ("12/2024", "2024-2025").
 _OPERAND_OPERATOR_BEFORE = re.compile(
     r"(?:[\d)]|(?<![^\W\d_])(?:total|totaal|sum|som|summe|summa|somme|result|resultaat|ergebnis)"
-    r")[^\S\r\n]*[=+×÷*][^\S\r\n]*$", re.IGNORECASE)
+    r")[^\S\r\n]*[=+×÷*][^\S\r\n]*\Z", re.IGNORECASE)
 _OPERATOR_OPERAND_AFTER = re.compile(r"^[^\S\r\n]*[=+×÷*][^\S\r\n]*[\d(]")
 #: A "-" or "/" glued to the value and to a letter or digit on its other side
 #: joins it into a longer token ("PV-LS-2026-652314", "4471/2025"); spaced, it
 #: separates list items, which is what it does around a phone number.
-_GLUED_JOIN_BEFORE = re.compile(r"[^\W_][/\-]$")
+_GLUED_JOIN_BEFORE = re.compile(r"[^\W_][/\-]\Z")
 _GLUED_JOIN_AFTER = re.compile(r"^[/\-][^\W_]")
 
 # "A-1010", "B-2000", "L-1234", "CH-8000", "D-10115": a country prefix on a
 # postal code, not a minus sign.
-_COUNTRY_PREFIX_HYPHEN = re.compile(r"(?:^|[^A-Za-z0-9])[A-Z]{1,2}-\s*$")
+_COUNTRY_PREFIX_HYPHEN = re.compile(r"(?:^|[^A-Za-z0-9])[A-Z]{1,2}-\s*\Z")
 
 # ── Sequential / test data ──────────────────────────────────────────────
 
 _SEQUENTIAL_PATTERNS = re.compile(
     r"^(?:0{6,}|1234567890?|0123456789|9876543210?|1111111111?|"
-    r"000000000|123456789)$"
+    r"000000000|123456789)\Z"
 )
 
 # ── Year-like 4-digit number (not a postal code) ───────────────────────
 
-_RECENT_YEAR = re.compile(r"^(?:19[5-9]\d|20[0-3]\d)$")
+_RECENT_YEAR = re.compile(r"^(?:19[5-9]\d|20[0-3]\d)\Z")
 #: Any year a written date can carry. The date-construction test below applies
 #: to all of them: a birth year before 1950 ("Geburtsdatum: 21. Januar 1944")
 #: was outside _RECENT_YEAR, skipped that test and became a postcode
 #: (rules-engine#111).
-_DATE_YEAR = re.compile(r"^(?:1[89]\d\d|20\d\d)$")
+_DATE_YEAR = re.compile(r"^(?:1[89]\d\d|20\d\d)\Z")
 _POSTAL_CONTEXT_NEAR = re.compile(
     r"(?:postcode|postal|code\s*postal|PLZ|Postleitzahl|postnummer|postinumero|"
     r"póstnúmer|zip|straat|straße|strasse|rue\s|via\s|calle\s|rua\s|ulica|utca|"
@@ -232,13 +232,13 @@ _ID_CUE_BEFORE = re.compile(
     # identifier (rules-engine#152).
     r"[\w\-]*Nr|[\w\-]*N[°º]|[\w\-]*Nummer|[\w\-]*Numero|[\w\-]*Numéro|"
     r"(?<![^\W\d_])(?:No|number|num|Kennzahl|Aktenzeichen|Az|e-?card|Polizze|Police|Policen)"
-    r")\.?\s*:?\s*$",
+    r")\.?\s*:?\s*\Z",
     re.IGNORECASE,
 )
 
 # An international dialling prefix earlier on the same line, with nothing but
 # number punctuation in between: these digits belong to the phone detector.
-_DIALLING_PREFIX_BEFORE = re.compile(r"\+\d{1,3}[\d\s\-().]*$")
+_DIALLING_PREFIX_BEFORE = re.compile(r"\+\d{1,3}[\d\s\-().]*\Z")
 
 #: An identifier cue that is really a postal label. See
 #: `suppress_postal_in_longer_identifier` for why this exemption exists.
@@ -256,7 +256,7 @@ _POSTAL_LABEL_CUE = re.compile(r"post", re.IGNORECASE)
 #
 # A real prefix opens its token: it follows the start of the text, whitespace,
 # or punctuation that is not a hyphen joining it to a previous segment.
-_COUNTRY_PREFIXED = re.compile(r"(?:^|[^A-Za-z0-9\-])([A-Z]{1,3})$")
+_COUNTRY_PREFIXED = re.compile(r"(?:^|[^A-Za-z0-9\-])([A-Z]{1,3})\Z")
 
 #: The postal country prefixes in use, with the length of that country's
 #: postcode. Any one or two capitals used to pass as a prefix, so "K-40817",
@@ -289,11 +289,11 @@ _SERVICE_NUMBER = re.compile(r"^0800[\-\s]")
 
 # ── Phone: date overlap ─────────────────────────────────────────────────
 
-_DATE_PATTERN_FULL = re.compile(r"^\d{2}[-/.]\d{2}[-/.]\d{4}$|^\d{4}[-/.]\d{2}[-/.]\d{2}$")
+_DATE_PATTERN_FULL = re.compile(r"^\d{2}[-/.]\d{2}[-/.]\d{4}\Z|^\d{4}[-/.]\d{2}[-/.]\d{2}\Z")
 
 # ── License plate: compound words and non-city codes ────────────────────
 
-_HYPHEN_COMPOUND_BEFORE = re.compile(r"[A-Za-zÄÖÜäöüß]-$")
+_HYPHEN_COMPOUND_BEFORE = re.compile(r"[A-Za-zÄÖÜäöüß]-\Z")
 _CURRENCY_PLATE = re.compile(r"^(?:EUR|USD|GBP|CHF|SEK|NOK|DKK|ISK|CZK|PLN|HUF|RON|BGN|HRK)\s", re.IGNORECASE)
 
 # Standards and classification prefixes that are plate-shaped once a letter and
@@ -339,7 +339,7 @@ _BANK_BLOCK = re.compile(
 # layouts where the code sits on the following line.
 _BIC_LABEL_LINE = re.compile(
     r"^\s*(?:BIC|SWIFT|SWIFT[-\s]?BIC|BIC\s?/\s?SWIFT|SWIFT[-\s]?Code|"
-    r"BIC[-\s]?code|Code\s+SWIFT)\s*:?\s*$",
+    r"BIC[-\s]?code|Code\s+SWIFT)\s*:?\s*\Z",
     re.IGNORECASE,
 )
 
@@ -355,7 +355,7 @@ _MAX_UNIT_CHARS = 600
 
 _PASSPORT_CONTEXT_BEFORE = re.compile(
     r"(?:Reisepass|passport|passeport|paspoort|Bisheriger\s+Reisepass)\s*"
-    r"(?:Nr\.?|Nummer|nummer|number|n[°o])?\s*[:.]?\s*$",
+    r"(?:Nr\.?|Nummer|nummer|number|n[°o])?\s*[:.]?\s*\Z",
     re.IGNORECASE,
 )
 
@@ -363,7 +363,7 @@ _PASSPORT_CONTEXT_BEFORE = re.compile(
 
 _SE_ORG_CONTEXT_BEFORE = re.compile(
     r"(?:org\.?\s*nr\.?|organisationsnummer|organisationsnr|"
-    r"Bolagsverket|företag)\s*[:.]?\s*$",
+    r"Bolagsverket|företag)\s*[:.]?\s*\Z",
     re.IGNORECASE,
 )
 
@@ -488,7 +488,7 @@ _SINCE_CUES = (
 #: made this a bug in the first place.
 _DATE_BEFORE = re.compile(
     rf"(?:\b(?:{_MONTH_NAMES})\b\.?|\b(?:{_SINCE_CUES})\b|"
-    rf"\d{{1,2}}[./\-]\d{{1,2}}[./\-])\s*$",
+    rf"\d{{1,2}}[./\-]\d{{1,2}}[./\-])\s*\Z",
     re.IGNORECASE | re.UNICODE,
 )
 
@@ -508,22 +508,22 @@ _CURRENCY_CODE = (
 )
 #: The code usually falls *inside* the plate span, because the plate shape ends
 #: in exactly the three letters the code occupies: "2297 DKK" matched whole.
-_CURRENCY_CODE_TAIL = re.compile(rf"\s{_CURRENCY_CODE}$")
+_CURRENCY_CODE_TAIL = re.compile(rf"\s{_CURRENCY_CODE}\Z")
 _CURRENCY_CODE_AFTER = re.compile(rf"^\s*{_CURRENCY_CODE}\b")
 
 #: Log-timestamp tails, which the ":"-anchored secret rule picks up:
 #: "57:22.283Z]", "11:11.231Z".
 _TIMESTAMP_FRAGMENT = re.compile(
-    r"^\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,6})?Z?$"
+    r"^\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,6})?Z?\Z"
 )
 
 #: Cloud region names and similar well-known configuration values. Not secrets,
 #: and they sit after "region = " in every infrastructure dump.
 _NOT_A_SECRET = re.compile(
     r"^(?:af|ap|ca|cn|eu|il|me|sa|us|gov)-(?:north|south|east|west|central"
-    r"|northeast|northwest|southeast|southwest)-\d[a-z]?$"
-    r"|^(?:application|text|image|audio|video|multipart)/[\w.+-]+$"
-    r"|^(?:utf|iso|windows)-[\d-]+$"
+    r"|northeast|northwest|southeast|southwest)-\d[a-z]?\Z"
+    r"|^(?:application|text|image|audio|video|multipart)/[\w.+-]+\Z"
+    r"|^(?:utf|iso|windows)-[\d-]+\Z"
     r"|^(?:no-cache|no-store|max-age|gzip|deflate|identity|chunked)\b",
     re.IGNORECASE,
 )
@@ -531,7 +531,7 @@ _NOT_A_SECRET = re.compile(
 #: Trailing and leading punctuation the greedy "[^\\s]{8,}" secret rule sweeps
 #: up with the token: it matched "TRIONL2U)." out of "(BIC: TRIONL2U).". Stripped
 #: only for the shape tests below — the emitted span is never altered here.
-_PUNCT_EDGES = re.compile(r"^[\s(\[{<\"'`]+|[\s)\]}>\"'`.,;:!?]+$")
+_PUNCT_EDGES = re.compile(r"^[\s(\[{<\"'`]+|[\s)\]}>\"'`.,;:!?]+\Z")
 
 
 def _core_token(raw: str) -> str:
@@ -542,24 +542,24 @@ def _core_token(raw: str) -> str:
 #: suppress_secret_over_structured.
 _EXACT_UUID = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
-    r"-[0-9a-fA-F]{12}$"
+    r"-[0-9a-fA-F]{12}\Z"
 )
 
 #: A BIC, and the cue that licenses one.
-_BIC_SHAPE = re.compile(r"^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$")
-_BIC_CUE_BEFORE = re.compile(r"(?:BIC|SWIFT|BIC/SWIFT)\s*[:=]?\s*\(?\s*$", re.IGNORECASE)
+_BIC_SHAPE = re.compile(r"^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\Z")
+_BIC_CUE_BEFORE = re.compile(r"(?:BIC|SWIFT|BIC/SWIFT)\s*[:=]?\s*\(?\s*\Z", re.IGNORECASE)
 
 #: An email address, exactly. Same argument as the UUID and the BIC: the EMAIL
 #: rule owns this span, and a generic high-entropy rule must not contest it.
-_EXACT_EMAIL = re.compile(r"^[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+$")
+_EXACT_EMAIL = re.compile(r"^[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+\Z")
 
 #: A URL, or the tail of one after the scheme has been split off. The secret
 #: rules are anchored on ":" and "=", so "https://api.sendgrid.com/v3/mail/send"
 #: hands them "//api.sendgrid.com/v3/mail/send" and a slash-separated path scores
 #: as high-entropy. An endpoint is published documentation, not a credential.
 _URL_LIKE = re.compile(
-    r"^(?:[a-z][a-z0-9+.-]*:)?//[^\s/]+(?:/\S*)?$"
-    r"|^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?::\d{1,5})?(?:/\S*)?$",
+    r"^(?:[a-z][a-z0-9+.-]*:)?//[^\s/]+(?:/\S*)?\Z"
+    r"|^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?::\d{1,5})?(?:/\S*)?\Z",
     re.IGNORECASE,
 )
 
@@ -579,7 +579,7 @@ _URL_WITH_CREDENTIALS = re.compile(
 #: component is a key=value pair, which is precisely what the "="-anchored
 #: secret rule is looking for.
 _LDAP_DN = re.compile(
-    r"^(?:cn|ou|dc|uid|o|l|st|c)=[^,=]+(?:,\s*(?:cn|ou|dc|uid|o|l|st|c)=[^,=]+)+$",
+    r"^(?:cn|ou|dc|uid|o|l|st|c)=[^,=]+(?:,\s*(?:cn|ou|dc|uid|o|l|st|c)=[^,=]+)+\Z",
     re.IGNORECASE,
 )
 
@@ -588,7 +588,7 @@ _LDAP_DN = re.compile(
 #: single-word test already rejects "sozialversicherungsnummer" on the reasoning
 #: that a real secret would be mixed case; a hyphenated compound is the same
 #: token with a separator in it.
-_HYPHENATED_WORDS = re.compile(r"^[a-z]{2,}(?:-[a-z]{2,})+(?:-[0-9a-f]{4,8})?$")
+_HYPHENATED_WORDS = re.compile(r"^[a-z]{2,}(?:-[a-z]{2,})+(?:-[0-9a-f]{4,8})?\Z")
 
 
 def suppress_secret_over_structured(text: str, match: RawMatch) -> bool:
@@ -630,11 +630,11 @@ def suppress_secret_over_structured(text: str, match: RawMatch) -> bool:
 #: either: "uk/personal/fenwick_chloe", "mac-mhartmann88" and the employee
 #: number "PN-86260" carry personal data that only the mistyped SECRET masked.
 _SECRET_NAME_SHAPES = re.compile(
-    r"^\$\{[A-Za-z_][A-Za-z0-9_]*(?::?[-=?+][^}]*)?\}?$"
-    r"|^[a-z]{2,}(?:_[a-z]{2,})+$|^[A-Z]{2,}(?:_[A-Z]{2,})+$"
-    r"|^(?:[A-Z]+[a-z]{2,}){3,}(?:V?\d{1,2})?$"
-    r"|^[a-z][a-z0-9._/-]*:(?:\d+(?:\.\d+)*(?:-[a-z0-9]+)*|latest|stable|alpine|slim)$"
-    r"|^[A-Za-z][\w.-]*/\d+(?:\.\d+)+$"
+    r"^\$\{[A-Za-z_][A-Za-z0-9_]*(?::?[-=?+][^}]*)?\}?\Z"
+    r"|^[a-z]{2,}(?:_[a-z]{2,})+\Z|^[A-Z]{2,}(?:_[A-Z]{2,})+\Z"
+    r"|^(?:[A-Z]+[a-z]{2,}){3,}(?:V?\d{1,2})?\Z"
+    r"|^[a-z][a-z0-9._/-]*:(?:\d+(?:\.\d+)*(?:-[a-z0-9]+)*|latest|stable|alpine|slim)\Z"
+    r"|^[A-Za-z][\w.-]*/\d+(?:\.\d+)+\Z"
     r"|^[\w.]+\([\"'`]"
 )
 
@@ -642,8 +642,8 @@ _SECRET_NAME_SHAPES = re.compile(
 #: "IT-Security", "HMAC-SHA256", "Authenticatie-informatie". Two capitalised
 #: words alone are left alone: "Ann-Sophie" and "Caron-Cordier" are names.
 _COMPOUND_PART = r"(?:[A-ZÀ-Þ]{2,6}\d{0,3}|[A-Za-zÀ-ÿ][a-zß-ÿ]{2,})"
-_COMPOUND = re.compile(rf"^{_COMPOUND_PART}(?:-{_COMPOUND_PART})+$")
-_NAME_PAIR = re.compile(r"^[A-ZÀ-Þ][a-zß-ÿ]{2,}-[A-ZÀ-Þ][a-zß-ÿ]{2,}$")
+_COMPOUND = re.compile(rf"^{_COMPOUND_PART}(?:-{_COMPOUND_PART})+\Z")
+_NAME_PAIR = re.compile(r"^[A-ZÀ-Þ][a-zß-ÿ]{2,}-[A-ZÀ-Þ][a-zß-ÿ]{2,}\Z")
 
 #: A connection string whose password is a reference: the credential is kept
 #: elsewhere ("postgresql://app:${DB_PASS}@db:5432/hr").
@@ -730,16 +730,16 @@ def suppress_currency(text: str, match: RawMatch) -> bool:
 #: "45.175.147.128" was reported as a TAX_ID 31 times.
 _DOTTED_QUAD = re.compile(
     r"^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}"
-    r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$"
+    r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\Z"
 )
 
 #: Two plausible years joined by a hyphen — a school year, a contract term, a
 #: reporting period. Read as a phone number 96 times.
-_YEAR_RANGE = re.compile(r"^(19|20)\d{2}\s?[-–/]\s?(19|20)\d{2}$")
+_YEAR_RANGE = re.compile(r"^(19|20)\d{2}\s?[-–/]\s?(19|20)\d{2}\Z")
 
 #: A digit and a decimal point immediately before the candidate, so the match is
 #: the fractional part of an amount: "0.034865 BTC" gave a PHONE of "034865".
-_DECIMAL_TAIL_BEFORE = re.compile(r"\d[.,]$")
+_DECIMAL_TAIL_BEFORE = re.compile(r"\d[.,]\Z")
 
 
 def suppress_taxid_as_ip_address(text: str, match: RawMatch) -> bool:
@@ -946,7 +946,7 @@ def suppress_redaction_placeholder(text: str, match: RawMatch) -> bool:
 #: A postal label whose only distance from the value is punctuation:
 #: "PLZ: 2011", "code postal : 2011", "Woonplaats: 1950".
 _POSTAL_LABEL_TOUCHING = re.compile(
-    r"(?:" + _POSTAL_CONTEXT_NEAR.pattern + r")[\s:.\-]{0,4}$", re.IGNORECASE)
+    r"(?:" + _POSTAL_CONTEXT_NEAR.pattern + r")[\s:.\-]{0,4}\Z", re.IGNORECASE)
 
 #: A capitalised place name after the code: "2000 Antwerpen", "2011 Haarlem".
 #: A following label ("1970 Fødselsnummer:") is excluded by the colon.
@@ -978,7 +978,7 @@ def _sentence_around(text: str, start: int, end: int, reach: int = 160) -> str:
 #: The comma of an address line: "Amsterdam, 2026", "rue du Commerce 130, 2026".
 #: The word before it is a place name or a number. "myocardial infarction,
 #: 2016" is a year in a list, not an address (rules-engine#111).
-_ADDRESS_COMMA = re.compile(r"(?<!\S)(?:[A-ZÀ-Þ\d][^\s,]*|[^\s,]*\]),[ \t]*$")
+_ADDRESS_COMMA = re.compile(r"(?<!\S)(?:[A-ZÀ-Þ\d][^\s,]*|[^\s,]*\]),[ \t]*\Z")
 
 #: A redaction placeholder. "[POSTAL_CODE]" and "[ADDRESS]" contain the words
 #: the address test looks for, and on text already masked once they made every
@@ -1079,7 +1079,7 @@ def suppress_year_as_postal(text: str, match: RawMatch) -> bool:
 #: so these disqualify a postal code on their own.
 _YEAR_WORD_BEFORE = re.compile(
     r"(?<![A-Za-z0-9_])(?:sinds|since|depuis|seit|siden|sedan|desde"
-    r"|vuonna|anno|dal)\s+$",
+    r"|vuonna|anno|dal)\s+\Z",
     re.IGNORECASE,
 )
 
@@ -1096,7 +1096,7 @@ _YEAR_VERB_BEFORE = re.compile(
     r"|created|fond[ée]e?|cr[ée][ée]e?|gegründet|gegruendet|errichtet"
     r"|grundlagt|grundad|perustettu|fundada|fundado|fondata|costituita"
     r"|vers[ée]|betaald|uitbetaald|ausgezahlt|paid|geboren|born)"
-    r"\s+(?:in|en|im|op|the)\s+$",
+    r"\s+(?:in|en|im|op|the)\s+\Z",
     re.IGNORECASE,
 )
 
@@ -1109,7 +1109,7 @@ _TOWN_AFTER = re.compile(r"\s*[A-ZÀ-ÞĀ-Ž]")
 #: between the marker and the number, so allow exactly one.
 _EXTENSION_BEFORE = re.compile(
     r"(?<![A-Za-z0-9_])(?:toest(?:el)?|ext|extension|poste|durchwahl"
-    r"|doorkiesnummer|tst|nebenstelle)\.?\s*(?:[a-zà-ÿ]{2,10}\s*)?[:.]?\s*$",
+    r"|doorkiesnummer|tst|nebenstelle)\.?\s*(?:[a-zà-ÿ]{2,10}\s*)?[:.]?\s*\Z",
     re.IGNORECASE,
 )
 
@@ -1122,7 +1122,7 @@ _EXTENSION_BEFORE = re.compile(
 _COUNT_LABEL_BEFORE = re.compile(
     r"(?<![A-Za-z0-9_])(?:employees|headcount|staff|mitarbeiter(?:innen)?"
     r"|beschäftigte|werknemers|medewerkers|employés|salariés|effectifs?"
-    r"|dipendenti|empleados|pracowników|zaměstnanců)\s*[:=]?\s*$",
+    r"|dipendenti|empleados|pracowników|zaměstnanců)\s*[:=]?\s*\Z",
     re.IGNORECASE,
 )
 _NOT_POSTAL_BEFORE = re.compile(
@@ -1131,10 +1131,10 @@ _NOT_POSTAL_BEFORE = re.compile(
     # A model name with an inner capital ("OptiPlex 7090"), on the number's own
     # line, and not a surname: "Sean McCarthy\n1000 Bruxelles" lost its
     # postcode (rules-engine#152).
-    r"|(?!(?:Mc|Mac|De|Di|Da|Du|Le|La|Van|Von|O)[A-Z])[A-Za-z]*[a-z][A-Z][A-Za-z]*[^\S\r\n]+)$")
+    r"|(?!(?:Mc|Mac|De|Di|Da|Du|Le|La|Van|Von|O)[A-Z])[A-Za-z]*[a-z][A-Z][A-Za-z]*[^\S\r\n]+)\Z")
 
 #: A thousands group of an amount: the "750" of "£28,750,000".
-_GROUP_BEFORE = re.compile(r"\d[,.]$")
+_GROUP_BEFORE = re.compile(r"\d[,.]\Z")
 _GROUP_AFTER = re.compile(r"^[,.]\d{3}(?!\d)")
 
 
@@ -1148,7 +1148,7 @@ _TECH_WORD_BEFORE = re.compile(
     r"(?<![A-Za-z0-9_])(?:build|version|policy\s+id|ticket(?:\s+[A-Za-z]{2,10})?"
     r"|event|lease|pid|job|port|rfc|facture|invoice|r[ée]f[ée]rence|n[°º]"
     r"|tn|sae|uczestnik|subject|narratief|participant)"
-    r"\.?\s*[:#=]?\s*[\"(«\[]?\s*$", re.IGNORECASE)
+    r"\.?\s*[:#=]?\s*[\"(«\[]?\s*\Z", re.IGNORECASE)
 _TECH_SHAPE_BEFORE = re.compile(
     r"(?:\"[A-Za-z_]*(?:id|port)\"\s*:\s*\"?"          # "parent_id": 4400
     r"|(?<![A-Za-z0-9])[A-Z_]*PORT\s*[:=]\s*\"?"          # DB_PORT: "5432"
@@ -1158,20 +1158,20 @@ _TECH_SHAPE_BEFORE = re.compile(
     r"|\d+\.\d+(?:\.\d+)+\s*\("                          # build 2.4.0 (4012)
     r"|(?<!\d)\d{1,2}[./]\d{1,2}[./]"                      # 03.10.2026 23:50
     r"|\((?:N|norm(?:al)?|ref)\s*:?\s*"                   # (N : 30-400)
-    r"|\|)$", re.IGNORECASE)
+    r"|\|)\Z", re.IGNORECASE)
 _POSTAL_UNIT_AFTER = re.compile(
     r"^(?:\s?(?:ms|s|sec|secs|seconds?|secondes?|sekunden|sek|min|bits?|bytes?"
     r"|kb|mb|gb|tb|kbps|mbps|px|%|records|rows|entries|datensätze|einträge"
     r"|micrograms|µg|ug|mg|mmol|fl)(?![A-Za-zÀ-ÿ])"
     r"|\s*→\s*\d+\s*(?:bits?|bytes?)(?![A-Za-z])"           # 2048 → 3072 Bit
     r"|:\d|\|)", re.IGNORECASE)
-_PID_BEFORE = re.compile(r"[A-Za-z0-9_\-]\[$")
+_PID_BEFORE = re.compile(r"[A-Za-z0-9_\-]\[\Z")
 #: A standard's name as the letters of a lettered postcode: "RFC 5737" is
 #: not a Maltese one. Not BS or EN: those are Bristol and Enfield.
 _STANDARD_LETTERS = re.compile(r"^(?:RFC|ISO|IEC|DIN)\s?\d")
 #: A year closing a range: "1998–2011", "2012–2026". En and em dashes only; a
 #: hyphen joins a Portuguese postcode.
-_YEAR_RANGE_BEFORE = re.compile(r"(?:19|20)\d\d\s?[–—]\s?$")
+_YEAR_RANGE_BEFORE = re.compile(r"(?:19|20)\d\d\s?[–—]\s?\Z")
 _YEAR_RANGE_AFTER = re.compile(r"^\s?[–—]\s?(?:19|20)\d\d(?!\d)")
 
 
@@ -1213,7 +1213,7 @@ _DOCUMENTATION_NETS = ("192.0.2.", "198.51.100.", "203.0.113.")
 
 #: The loopback and unspecified IPv6 addresses: "::1", "::", and the same
 #: written out ("0:0:0:0:0:0:0:1").
-_IPV6_NO_HOST = re.compile(r"^(?=.*::|(?:0+:){7})[0:]*1?$")
+_IPV6_NO_HOST = re.compile(r"^(?=.*::|(?:0+:){7})[0:]*1?\Z")
 
 
 def suppress_ip_not_a_host(text: str, match: RawMatch) -> bool:
@@ -1238,7 +1238,7 @@ def suppress_ip_not_a_host(text: str, match: RawMatch) -> bool:
     if ip == "0.0.0.0" or ip.startswith("127."):
         return True
     # Part of a longer dotted run: "urn:oid:1.2.250.1.71.4.2.1" is an OID.
-    if (re.search(r"\d\.$", text[max(0, match.start - 2):match.start])
+    if (re.search(r"\d\.\Z", text[max(0, match.start - 2):match.start])
             or re.match(r"^\.\d", text[match.end:match.end + 2])):
         return True
     prefix = _CIDR_PREFIX_AFTER.match(text[match.end:match.end + 4])
@@ -1251,7 +1251,7 @@ def suppress_ip_not_a_host(text: str, match: RawMatch) -> bool:
 #: The specimen of a form: "das Muster „C01X00T47“". Only "Muster": "z. B.",
 #: "e.g." and "np." introduce real values in prose as often as samples --
 #: "Kennzeichen (z. B. K-D 102 für S. Keller)" is S. Keller's plate.
-_EXAMPLE_BEFORE = re.compile(r"(?<![A-Za-z])muster\s*[:,]?\s*[„\"«']?$", re.IGNORECASE)
+_EXAMPLE_BEFORE = re.compile(r"(?<![A-Za-z])muster\s*[:,]?\s*[„\"«']?\Z", re.IGNORECASE)
 
 #: A dummy value, written in placeholder glyphs: "XX0000000", "999 999 9999",
 #: "00000/00/0000", or MAC groups of one repeated letter ("aa:bb:cc:dd:ee:ff"):
@@ -1260,17 +1260,17 @@ _EXAMPLE_BEFORE = re.compile(r"(?<![A-Za-z])muster\s*[:,]?\s*[„\"«']?$", re.I
 #: or "90000", which are Ghent and Belfort.
 _DUMMY_VALUE = re.compile(
     r"^(?=(?:[\s:\-./]*[X09]){5})(?:[X\s:\-./]*[X][X0\s:\-./]*|[X9\s:\-./]*X[X9\s:\-./]*"
-    r"|[0\s:\-./]+|[9\s:\-./]+)$"
-    r"|^(?:([a-fA-F])\1[:\-]){2,}([a-fA-F])\2$")
+    r"|[0\s:\-./]+|[9\s:\-./]+)\Z"
+    r"|^(?:([a-fA-F])\1[:\-]){2,}([a-fA-F])\2\Z")
 
 #: Algorithm names in a key or signature line: "ED25519", "SHA256".
 _ALGORITHM = re.compile(
     r"^(?:ED25519|ED448|SHA-?(?:1|224|256|384|512)|MD5|AES-?\d{3}|RSA-?\d{3,4}"
-    r"|[HRE]S(?:256|384|512))$", re.IGNORECASE)
+    r"|[HRE]S(?:256|384|512))\Z", re.IGNORECASE)
 
 #: A date exactly, which no national number is written as.
 _EXACT_DOTTED_DATE = re.compile(
-    r"^(?:0[1-9]|[12]\d|3[01])\.(?:0[1-9]|1[0-2])\.(?:19|20)\d\d$")
+    r"^(?:0[1-9]|[12]\d|3[01])\.(?:0[1-9]|1[0-2])\.(?:19|20)\d\d\Z")
 
 
 def suppress_dummy_value(text: str, match: RawMatch) -> bool:
@@ -1297,7 +1297,7 @@ def suppress_not_an_identifier(text: str, match: RawMatch) -> bool:
         return not any(c.isdigit() for c in value)
     if etype == EntityType.LICENSE_PLATE:
         return bool(_ALGORITHM.match(value)
-                    or re.search(r"§\s*$", text[max(0, match.start - 4):match.start]))
+                    or re.search(r"§\s*\Z", text[max(0, match.start - 4):match.start]))
     if etype == EntityType.NATIONAL_ID:
         return bool(_EXACT_DOTTED_DATE.match(value))
     return False
@@ -1314,7 +1314,7 @@ def suppress_phone_service_number(text: str, match: RawMatch) -> bool:
 #: The French national phone pattern takes exactly that, grouping
 #: 07.10.20|26 08 as five pairs, and cut the stamp to "[PHONE]:42"
 #: (rules-engine#101). Only when the minutes follow, so the stamp is certain.
-_DATE_THEN_HOUR = re.compile(r"^\d{2}([-/.])\d{2}\1\d{4}\s+\d{1,2}$")
+_DATE_THEN_HOUR = re.compile(r"^\d{2}([-/.])\d{2}\1\d{4}\s+\d{1,2}\Z")
 _MINUTES_AFTER = re.compile(r"^:\d{2}(?!\d)")
 
 
@@ -1336,7 +1336,7 @@ def suppress_phone_date_overlap(text: str, match: RawMatch) -> bool:
 _ID_CONNECTORS = "-/._+"
 
 #: A reference marker directly before the token: "#FR-S2", "№ …", "n° …".
-_REFERENCE_MARK_BEFORE = re.compile(r"(?:#|№|(?<![A-Za-z])[nN][°º])\s?$")
+_REFERENCE_MARK_BEFORE = re.compile(r"(?:#|№|(?<![A-Za-z])[nN][°º])\s?\Z")
 
 
 def _joined_to_more(text: str, start: int, end: int) -> bool:
@@ -1382,7 +1382,7 @@ def suppress_card_inside_digit_run(text: str, match: RawMatch) -> bool:
     # expiry ("4111 1111 1111 1111 1225 123"), and dropping the card left a
     # phone to claim eight of its digits and the rest in the clear
     # (rules-engine#152).
-    return bool(re.search(rf"(?<!\d)\d{{4}}{s}$", before)
+    return bool(re.search(rf"(?<!\d)\d{{4}}{s}\Z", before)
                 or re.match(rf"{s}\d{{4}}{s}\d{{4}}(?!\d)", after))
 
 
@@ -1400,7 +1400,7 @@ def suppress_plate_in_compound(text: str, match: RawMatch) -> bool:
     # Only suppress if there are 2+ letters before the hyphen (a real word, not a plate segment)
     if match.start >= 3:
         three_before = text[max(0, match.start - 10):match.start]
-        if re.search(r"[A-Za-zÄÖÜäöüß]{2,}-$", three_before):
+        if re.search(r"[A-Za-zÄÖÜäöüß]{2,}-\Z", three_before):
             return True
 
     # A plate is a token of its own. Inside a longer identifier -- "TF-284-KL-00874",
@@ -1528,7 +1528,7 @@ def suppress_postal_inside_iban(text: str, match: RawMatch) -> bool:
     # Also: if preceded by a digit and a space (inside "IS47 0111 0147...")
     if start >= 5:
         prefix = text[start - 5:start]
-        if re.search(r"[A-Z]{2}\d{2}\s$", prefix):
+        if re.search(r"[A-Z]{2}\d{2}\s\Z", prefix):
             return True
     return False
 
@@ -1606,7 +1606,7 @@ def suppress_postal_as_house_number(text: str, match: RawMatch) -> bool:
     # If preceded by a street name pattern (word + space), it's a house number
     before = text[max(0, match.start - 30):match.start]
     # Street name immediately before: "Austurstræti 186" → 186 is house number
-    if re.search(r"[a-záéíóúýþæöðA-ZÁÉÍÓÚÝÞÆÖÐ]{3,}\s+$", before):
+    if re.search(r"[a-záéíóúýþæöðA-ZÁÉÍÓÚÝÞÆÖÐ]{3,}\s+\Z", before):
         # Check if followed by comma + space + digit (address structure)
         after = text[match.end:match.end + 5]
         if not re.match(r",?\s+[A-ZÁÉÍÓÚÝÞÆÖÐ]", after):
@@ -1746,14 +1746,14 @@ def _is_heading_shape(text: str, start: int, end: int, token: str) -> bool:
 #: A personal title right before the token: "Dr. HOFFMANN", "Mme JANSSENS".
 _TITLE_BEFORE = re.compile(
     r"(?<![A-Za-z])(?:dr|prof|mr|mrs|ms|mme|mlle|m|herr|frau|dhr|mevr|sig|sra?)"
-    r"\.?\s+$", re.IGNORECASE)
+    r"\.?\s+\Z", re.IGNORECASE)
 
 
 #: A BIC/SWIFT label touching the token: "BIC: ", "SWIFT-Code:\n", "Code SWIFT : ",
 #: "BIC/SWIFT: ", "BIC Bank A: ", "(BIC ".
 _BIC_LABEL_BEFORE = re.compile(
     r"(?<![A-Za-z])(?:bic|swift)(?:[\s/\-]*(?:code|swift|bic))?(?:\s+bank\s+\w{1,3})?"
-    r"[\s:.\-()]*$", re.IGNORECASE)
+    r"[\s:.\-()]*\Z", re.IGNORECASE)
 
 
 def _bic_shaped_word(text: str, start: int, end: int, token: str) -> bool:
@@ -2006,7 +2006,7 @@ def suppress_requires_context(text: str, match: RawMatch) -> bool:
 #: `model='/var/lib/...'`.
 _ASSIGNMENT_KEY = re.compile(
     r"[\n,;{}()\[\]|:=]([^\n,;{}()\[\]|:=]{1,48}?)[\"'`]?\]?[ \t]*[:=][ \t]?[\"'`\[{(]?"
-    r"[^\s\"'`:=]{0,40}$")
+    r"[^\s\"'`:=]{0,40}\Z")
 
 #: What separates the words of a key: "aws_secret_access_key",
 #: "Ocp-Apim-Subscription-Key", "db.password", '"apiKey"'.
@@ -2186,7 +2186,7 @@ def _nothing_but_a_list_between(gap: str) -> bool:
 
 
 #: The birth sign "°" directly before the date, but not the number sign "n°".
-_BIRTH_SIGN = re.compile(r"(?<![a-z])°\s?$")
+_BIRTH_SIGN = re.compile(r"(?<![a-z])°\s?\Z")
 
 
 #: A label that runs straight into a date of its own -- punctuation, at most one
@@ -2294,7 +2294,7 @@ def _line_header(text: str, line_start: int) -> tuple[list[int], list[str]] | No
 _HEADER_REACH = 200
 
 #: A table's rule line: only dashes, equals signs, plus signs, colons, pipes.
-_RULE_LINE = re.compile(r"^[\s\-=+:|]*-[\s\-=+:|]*$")
+_RULE_LINE = re.compile(r"^[\s\-=+:|]*-[\s\-=+:|]*\Z")
 
 
 # ── Dispatch table: entity type → applicable suppressors ────────────────
