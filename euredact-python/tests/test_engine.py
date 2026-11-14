@@ -65,3 +65,17 @@ def test_time_grows_linearly_on_text_dense_with_phone_numbers(separator):
 
     small, large = seconds(500), seconds(2000)
     assert large / small < 8, f"{small:.2f}s -> {large:.2f}s"
+
+
+def test_the_line_memos_do_not_outlive_the_call():
+    """The account-run and column-header memos are module globals. They held
+    the last document, IBAN and phone included, after the call and after
+    clear(), whose docstring promises to free PII (rules-engine#159)."""
+    from euredact import EuRedact
+    from euredact.rules import suppressors
+
+    text = "naam | iban\nJan | NL91ABNA0417164300 tel 0612345678\n"
+    EuRedact().redact(text, countries=["NL"], cache=False)
+    held = [suppressors._ACCOUNT_RUNS_MEMO[0], suppressors._COLUMN_MEMO[0]]
+    assert text not in held
+    assert all("NL91ABNA0417164300" not in h for h in held)

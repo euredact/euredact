@@ -310,6 +310,16 @@ _UNICODE_SPELLINGS = {
     "arabic-indic-digits": lambda t: t.translate(str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")),
     "accented-letters": lambda t: "Ünïcödé " + t.replace("e", "é").replace("a", "ä"),
     "letter-before-each-space": lambda t: t.replace(" ", "é "),
+    # ASCII whitespace that Python's \s matches and RE2's does not
+    # (rules-engine#159). Text extracted from Word carries vertical tabs.
+    "vertical-tab": lambda t: t.replace(" ", "\x0b"),
+    "file-separator": lambda t: t.replace(" ", "\x1c"),
+    # Letters an IGNORECASE ASCII letter matches: Kelvin sign, long s,
+    # dotless i (rules-engine#159).
+    "case-folding-letters": lambda t: t.replace("k", "\u212a").replace("s", "\u017f").replace("i", "\u0131"),
+    # A lone surrogate, as json.loads gives for a "\ud800" escape; the re2
+    # prefilter raised UnicodeEncodeError on it (rules-engine#159).
+    "lone-surrogate": lambda t: t + " \ud800",
     "as-written": lambda t: t,
 }
 
@@ -349,3 +359,22 @@ def test_values_written_with_unicode_spaces_and_digits_are_redacted_on_every_pat
     with _force_path(path):
         result = EuRedact().redact(text, countries=[country], cache=False)
     assert result.redacted_text == expected
+
+
+@pytest.mark.parametrize("path", _PATHS)
+@pytest.mark.parametrize("source, text", [
+    (r"CASE[^A-Za-z ]\d{6}", "Dossier CASE\xa0123456 ok"),
+    (r"CASE[^ ]\d{6}", "Dossier CASE\xa0123456 ok"),
+    # An astral digit: normalize() folds BMP digits only, re2's fold reads it as "0".
+    (r"CASE\s[^0-9]\d{6}", "Dossier CASE \U0001d7ce123456 ok"),
+], ids=["not-letter-or-space", "not-space", "not-digit"])
+def test_a_negated_class_in_a_custom_pattern_is_not_narrowed_by_the_fold(path, source, text):
+    """The fold turns a no-break space into " ", letters into "a" and digits
+    into "0". A negated class that excludes a stand-in then refused, in the
+    re2 prefilter, text Python accepts, and the value was left in the text
+    (rules-engine#159). Such a pattern now runs without a prefilter slot."""
+    with _force_path(path):
+        sdk = EuRedact()
+        sdk.add_custom_pattern("CASE_REF", source)
+        result = sdk.redact(text, cache=False)
+    assert "[CASE_REF]" in result.redacted_text, result.redacted_text

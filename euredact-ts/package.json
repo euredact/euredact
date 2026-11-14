@@ -15,7 +15,7 @@
         "default": "./dist/esm/index.js"
       },
       "require": {
-        "types": "./dist/esm/index.d.ts",
+        "types": "./dist/cjs/index.d.ts",
         "default": "./dist/cjs/index.js"
       }
     }

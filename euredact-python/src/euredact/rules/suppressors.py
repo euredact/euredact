@@ -39,17 +39,20 @@ _CURRENCY_WORD = (
 )
 # On the number's own line: across a break the next line's first word was
 # read as the amount's currency (rules-engine#152, as #51 did for units).
+# Any whitespace but a line break: "0471234567\xa0EUR", with the no-break space
+# French and German typography put before a currency, is an amount
+# (rules-engine#159).
 _CURRENCY_AFTER = re.compile(
-    rf"^[ \t]*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
+    rf"^[^\S\r\n]*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
     re.IGNORECASE,
 )
 # "12385,84 €" or "12385.84 €" — number is integer part of decimal amount
 _CURRENCY_COMMA_AFTER = re.compile(
-    rf"^[.,]\d{{1,2}}[ \t]*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
+    rf"^[.,]\d{{1,2}}[^\S\r\n]*(?:(?:{_CURRENCY_SYMBOL})|(?:{_CURRENCY_WORD})\b)",
     re.IGNORECASE,
 )
 _CURRENCY_BEFORE = re.compile(
-    rf"(?:(?:{_CURRENCY_SYMBOL})|\b(?:{_CURRENCY_WORD}))[ \t]*$",
+    rf"(?:(?:{_CURRENCY_SYMBOL})|\b(?:{_CURRENCY_WORD}))[^\S\r\n]*$",
     re.IGNORECASE,
 )
 # Also catch "Montant TTC :" or "Beløb:" before a number
@@ -1128,7 +1131,7 @@ _NOT_POSTAL_BEFORE = re.compile(
     # A model name with an inner capital ("OptiPlex 7090"), on the number's own
     # line, and not a surname: "Sean McCarthy\n1000 Bruxelles" lost its
     # postcode (rules-engine#152).
-    r"|(?!(?:Mc|Mac|De|Di|Da|Du|Le|La|Van|Von|O)[A-Z])[A-Za-z]*[a-z][A-Z][A-Za-z]*[ \t]+)$")
+    r"|(?!(?:Mc|Mac|De|Di|Da|Du|Le|La|Van|Von|O)[A-Z])[A-Za-z]*[a-z][A-Z][A-Za-z]*[^\S\r\n]+)$")
 
 #: A thousands group of an amount: the "750" of "£28,750,000".
 _GROUP_BEFORE = re.compile(r"\d[,.]$")
@@ -2237,6 +2240,13 @@ def _column_header(text: str, start: int) -> str | None:
 #: The last line's header: (text, line_start, result of _line_header). One
 #: entry, replaced in a single assignment, holding on to one document at most.
 _COLUMN_MEMO: tuple = ("", -1, None)
+
+
+def forget_line_memos() -> None:
+    """Drop the per-line memos, and the document they hold on to."""
+    global _ACCOUNT_RUNS_MEMO, _COLUMN_MEMO
+    _ACCOUNT_RUNS_MEMO = ("", -1, -1, [], [])
+    _COLUMN_MEMO = ("", -1, None)
 
 
 def _line_header(text: str, line_start: int) -> tuple[list[int], list[str]] | None:

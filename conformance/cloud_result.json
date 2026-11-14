@@ -677,6 +677,24 @@
         "prompt_tokens": null,
         "max_response_tokens": null
       }
+    },
+    {
+      "id": "detail-is-a-sentence",
+      "status": 402,
+      "json": {
+        "error": "not enough credits",
+        "detail": "Budget and extra volume are spent"
+      },
+      "expect": {
+        "balance": null,
+        "required": null,
+        "shortfall": null,
+        "prompt_tokens": null,
+        "max_response_tokens": null
+      },
+      "expect_detail": {
+        "message": "Budget and extra volume are spent"
+      }
     }
   ]
 }

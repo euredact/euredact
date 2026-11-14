@@ -77,7 +77,7 @@ narrative lives. Sections here use that vocabulary
   every later call; callers now get their own copy. A new BIC registry
   (`setBicRegistry`) is part of the key.
 - **Allowlist separator folding** applied to every type: folded keys shared
-  the exact keys' space, so `allowlist=["Xk92! mQz7Lp4w"]` exempted the SECRET
+  the exact keys' space, so `allowlist: ["Xk92! mQz7Lp4w"]` exempted the SECRET
   `Xk92!mQz7Lp4w`. Folding is again for the identifier types only.
   *(rules-engine#150)*
 - **Valid identifiers rejected** *(rules-engine#150)*: a Portuguese NIF of a
@@ -162,6 +162,61 @@ narrative lives. Sections here use that vocabulary
     `@`, which can be in the query: a cloud URL span with
     `contact=support@euredact.be` in it was exempted whole. It reads the host.
   - 22 conformance vectors, all failing on 0.8.0.
+
+- **Found in the review before 1.0** *(rules-engine#159)*:
+  - **Offsets after an astral character that NFC rewrites.** The offset
+    mapping was built per UTF-16 unit, so a CJK compatibility ideograph
+    (U+2F800) or a musical symbol (U+1D15E) shifted every later mask: the
+    e-mail's last letter and the phone's last digit stayed in the text. It is
+    built per code point now.
+  - **Windows still measured in UTF-16 units.** The key before a value (60
+    code points) and the sentence after it: emoji earlier on the line hid
+    `password:` from a passphrase, which was left in the text, and pushed the
+    street out of a Belgian postcode's sentence.
+  - **Quadratic time on a repeated document.** The line memos compared whole
+    documents by content, so the same text as a new string (a retry, a
+    re-read file, or any text NFC changes) paid O(n) per candidate: 17 s for
+    629 KB. They live on the call's scratch now and are dropped with it, so
+    the module no longer keeps the last document either.
+  - **Amounts with a no-break space before the currency** were redacted
+    (`0471234567\u00a0EUR` → `[SSN]`): #152 wrote "same line" as `[ \t]*`.
+  - **`referentialIntegrity` gave one value two labels** when it was spelled
+    two ways (NFD and NFC, full-width and ASCII digits). The labels, and the
+    allowlist, read the normalised spelling again: `allowlist: ["0612345678"]`
+    exempts `０６１２３４５６７８`.
+  - **A detection ending at the end of a decomposed text** was one character
+    short: `Volg @jose\u0301` left the accent outside the mask.
+  - **Parity with Python:** an e-mail domain with `_` (`jan@ex_ample.be`) is
+    detected; `st` after a count is a unit; a URL's host for
+    `allowlistDomains` is read as Python reads it (`bücher.de` stays
+    `bücher.de`, a port out of range or `0x7f.1` is kept as written), not by
+    WHATWG `URL`.
+  - **A cached result's `evidence` and `inferredCountries`** were shared
+    with the cache, like `detections` before #150.
+  - **A 402 whose `detail` is a sentence** keeps it as `detail.message`, as
+    Python does.
+  - **Unknown country codes.** The warning said detection continued with the
+    shared patterns only; every pattern runs. `NotConfiguredError` no longer
+    suggests that setting `EUREDACT_API_KEY` is enough, nor a `fetchImpl` the
+    top-level calls do not take.
+  - 13 conformance vectors (each failing on `ed70b2c` in at least one SDK),
+    a shared 402 case, and unit tests for the rest.
+
+### Changed
+
+- **1.0 API surface** *(rules-engine#159)*. `RedactResult.degraded` is
+  documented as reserved: always `false` in 1.x. CommonJS consumers get
+  their own type declarations (`require.types` pointed at the ESM ones, and
+  TypeScript refused them with TS1479). `ApiClientOptions`, the type of the
+  `Account` and `Jobs` options, is exported.
+
+### Removed
+
+- **`COUNTRY_CONFIGS`, `getBicRegistry`, `SEED_BIC6_PREFIXES` and the
+  `PatternDef` / `CountryConfig` types** from the entry point, before 1.0
+  froze them *(rules-engine#159)*. They were undocumented engine internals,
+  and `COUNTRY_CONFIGS` was mutable: emptying it switched detection off for
+  every later `EuRedact`. `availableCountries()` covers the documented use.
 
 ## 0.8.0 (2026-10-31)
 
@@ -252,7 +307,7 @@ narrative lives. Sections here use that vocabulary
 - **An allowlisted value inside a longer cloud span stays visible.** The
   allowlist matched a detection whole, which suits the rules engine, whose
   spans are shaped like the values they find. The model's spans are not:
-  given `allowlist=["ACME NV"]` and a cloud span `ACME NV Brussel`, the
+  given `allowlist: ["ACME NV"]` and a cloud span `ACME NV Brussel`, the
   whole span was masked, allowlisted value included (rules-engine#141).
   The value is now cut out of every cloud span that contains it, as a
   whole word and case-insensitively; what is left, trimmed of spaces and

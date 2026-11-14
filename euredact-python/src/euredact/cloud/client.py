@@ -70,7 +70,7 @@ class NotConfiguredError(CloudError):
     def __init__(self, message: str | None = None) -> None:
         super().__init__(message or (
             "Cloud tier not configured. Call euredact.configure(api_key=...) "
-            "first, or set EUREDACT_API_KEY."))
+            "first, or euredact.configure() with EUREDACT_API_KEY set."))
 
 
 class QuotaExceededError(CloudError):
@@ -321,6 +321,10 @@ class _BaseClient:
     def _raise_for(self, status: int, payload: dict) -> None:
         error = payload.get("error", f"HTTP {status}")
         detail = payload.get("detail") or {}
+        if not isinstance(detail, dict):
+            # A detail that is a sentence ("Budget spent") broke the typed
+            # errors' parsing (rules-engine#159); keep it, under a key.
+            detail = {"message": detail}
         if status == 401:
             raise CloudError(f"authentication failed: {error}", status=status)
         if status == 402:

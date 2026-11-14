@@ -311,3 +311,21 @@ def test_a_urls_domain_is_its_host_not_what_follows_an_at_in_its_query():
     assert _domain_of(EntityType.URL, "https://crm.example.com/c?ssn=1&contact=support@euredact.be") == "crm.example.com"
     assert _domain_of(EntityType.URL, "https://jan@crm.example.com/x") == "crm.example.com"
     assert _domain_of(EntityType.EMAIL, "support@euredact.be") == "euredact.be"
+
+
+@pytest.mark.parametrize("url, host", [
+    ("https://bücher.de/x", "bücher.de"),
+    ("https://euredact.be:99999/x", "euredact.be"),
+    ("http://[::1]/", "::1"),
+    ("https://0x7f.1/", "0x7f.1"),
+    ("https://evil.com\\@euredact.be/", "evil.com"),
+    ("https://euredact.be./x", "euredact.be"),
+])
+def test_a_urls_host_is_read_the_same_in_both_sdks(url, host):
+    """Python read hosts with urlsplit, TypeScript with WHATWG URL; they
+    disagreed on these, and urlsplit sent a backslash URL's exemption to the
+    host after it (rules-engine#159). The same table is in the TypeScript
+    allowlist test."""
+    from euredact.sdk import _domain_of
+    from euredact.types import EntityType
+    assert _domain_of(EntityType.URL, url) == host

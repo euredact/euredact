@@ -8298,6 +8298,139 @@
       ],
       "expectRedactedText": "Tel: [PHONE]-62657",
       "notes": "rules-engine#152: dropped by a suppressor broader than its stated condition."
+    },
+    {
+      "id": "unicode-vertical-tab-grouped-phone",
+      "text": "Tel: 06\u000b12\u000b34\u000b56\u000b78",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Tel: [PHONE]",
+      "notes": "rules-engine#159: with [fast], the re2 prefilter read a vertical tab, which Python's \\s matches and RE2's does not, as a non-space and skipped the pattern; the phone was left in the text. Text extracted from Word documents carries these as line breaks."
+    },
+    {
+      "id": "unicode-vertical-tab-grouped-iban",
+      "text": "IBAN BE71\u000b0961\u000b2345\u000b6769",
+      "countries": null,
+      "expectRedactedText": "IBAN [BANK_ACCOUNT]",
+      "notes": "rules-engine#159: as the phone case, for an IBAN."
+    },
+    {
+      "id": "unicode-lone-surrogate-does-not-stop-detection",
+      "text": "Tel 0612345678 \ud800",
+      "countries": [
+        "NL"
+      ],
+      "mustDetect": {
+        "PHONE": [
+          "0612345678"
+        ]
+      },
+      "notes": "rules-engine#159: with [fast], a lone surrogate (from json.loads of a \\ud800 escape, or surrogateescape decoding) raised UnicodeEncodeError in the re2 prefilter instead of redacting."
+    },
+    {
+      "id": "currency-after-a-no-break-space-is-an-amount",
+      "text": "Ontvangen: 0471234567 EUR via overschrijving",
+      "countries": null,
+      "expectRedactedText": "Ontvangen: 0471234567 EUR via overschrijving",
+      "notes": "rules-engine#159: #152 limited the currency suppressor to one line by writing [ \\t]*, which also dropped the no-break space that French and German typography put before a currency. Same line, any space now."
+    },
+    {
+      "id": "currency-zloty-after-a-no-break-space-is-an-amount",
+      "text": "Wpłata 600123456 zł od klienta",
+      "countries": null,
+      "expectRedactedText": "Wpłata 600123456 zł od klienta",
+      "notes": "rules-engine#159: as the EUR case, with a letter symbol."
+    },
+    {
+      "id": "nfd-handle-at-end-of-text-keeps-its-accent",
+      "text": "Volg @josé",
+      "countries": null,
+      "mustDetect": {
+        "SOCIAL_HANDLE": [
+          "@josé"
+        ]
+      },
+      "expectRedactedText": "Volg [SOCIAL_HANDLE]",
+      "notes": "rules-engine#159: a detection ending at the end of a decomposed text was mapped back one character short, leaving the combining accent outside the mask."
+    },
+    {
+      "id": "astral-compatibility-ideograph-before-values",
+      "text": "丽 Mail: jan.peeters@example.be, tel +32 470 12 34 56",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "丽 Mail: [EMAIL], tel [PHONE]",
+      "notes": "rules-engine#159: TypeScript built its offset mapping per UTF-16 unit, so an astral character that NFC rewrites shifted every later mask: the e-mail's last letter and the phone's last digit were left in the text."
+    },
+    {
+      "id": "astral-musical-symbol-before-values",
+      "text": "𝅗𝅥 Mail: jan.peeters@example.be, tel +32 470 12 34 56",
+      "countries": [
+        "BE"
+      ],
+      "expectRedactedText": "𝅗𝅥 Mail: [EMAIL], tel [PHONE]",
+      "notes": "rules-engine#159: as the ideograph case, for a character NFC expands (2 units to 4)."
+    },
+    {
+      "id": "secret-under-a-key-after-emoji",
+      "text": "🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑🔑 password: Correct-Horse-Battery",
+      "countries": null,
+      "mustDetect": {
+        "SECRET": [
+          "Correct-Horse-Battery"
+        ]
+      },
+      "notes": "rules-engine#159: TypeScript measured the key window before a value in UTF-16 units, so emoji earlier on the line pushed the key out of reach and the password was not seen as being under a credential key."
+    },
+    {
+      "id": "postal-sentence-window-after-emoji",
+      "text": "Rustige ligging in 2018 🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠 vlakbij de straat",
+      "countries": [
+        "BE"
+      ],
+      "mustDetect": {
+        "POSTAL_CODE": [
+          "2018"
+        ]
+      },
+      "notes": "rules-engine#159: TypeScript measured the sentence window after a value in UTF-16 units (#151 converted only the window before it), so the street was out of reach and the postcode was read as a year."
+    },
+    {
+      "id": "email-domain-with-an-underscore",
+      "text": "Mail jan@ex_ample.be graag",
+      "countries": null,
+      "mustDetect": {
+        "EMAIL": [
+          "jan@ex_ample.be"
+        ]
+      },
+      "notes": "rules-engine#159: the TypeScript e-mail domain class lacked the underscore Python's \\w includes."
+    },
+    {
+      "id": "unit-st-after-a-count-is-not-a-phone",
+      "text": "Bestelling: 0612345678 st",
+      "countries": [
+        "NL"
+      ],
+      "mustNotDetect": [
+        "PHONE"
+      ],
+      "notes": "rules-engine#159: TypeScript's unit list lacked Python's 'st' (stuks)."
+    },
+    {
+      "id": "allowlist-matches-full-width-digits",
+      "text": "Bel ０６１２３４５６７８ of mail",
+      "countries": [
+        "NL"
+      ],
+      "options": {
+        "allowlist": [
+          "0612345678"
+        ]
+      },
+      "expectRedactedText": "Bel ０６１２３４５６７８ of mail",
+      "notes": "rules-engine#159: since #150 a detection's text is the document's, so an allowlist entry in ASCII digits no longer matched a value written in full-width digits. The allowlist also tries the normalised spelling again."
     }
   ]
 }

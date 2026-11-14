@@ -33,10 +33,11 @@ const CURRENCY_WORD =
   "euro|euros|dollar|dollars|pond|kronor|kroner|kronur|kr|" +
   "złoty|korun|forint|lei|leva";
 // On the number's own line: across a break the next line's first word was the
-// amount's currency (rules-engine#152, as #51 did for units).
-const CURRENCY_AFTER = new RegExp(`^[ \\t]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
-const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}[ \\t]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
-const CURRENCY_BEFORE = new RegExp(`(?:(?:${CURRENCY_SYMBOL})|\\b(?:${CURRENCY_WORD}))[ \\t]*$`, "iu");
+// amount's currency (rules-engine#152, as #51 did for units). Any whitespace but
+// a line break: "0471234567\u00a0EUR" is an amount (rules-engine#159).
+const CURRENCY_AFTER = new RegExp(`^[^\\S\\r\\n]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
+const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}[^\\S\\r\\n]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
+const CURRENCY_BEFORE = new RegExp(`(?:(?:${CURRENCY_SYMBOL})|\\b(?:${CURRENCY_WORD}))[^\\S\\r\\n]*$`, "iu");
 const AMOUNT_LABEL_BEFORE =
   /\b(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|Upphæð|Importe|Importo|Valore|Wartość|Kwota|Částka|Összeg|Sum|Beloop|Prix|Preis|Price|Loyer|Miete|Huur|Rent|Betrag)(?:\s+\w+)?\s*:?\s*$/i; // second word separate: not "Rent"+"enversicherungsnummer" (rules-engine#111)
 
@@ -44,7 +45,7 @@ const AMOUNT_LABEL_BEFORE =
 // because JS \b is ASCII-only and fails on Unicode letters (e.g. "München" → \bm\b matches M before ü)
 // Horizontal space only: a unit is on the number's own line (rules-engine#51).
 // A size in bytes: "48213377 bytes total" in a build log (rules-engine#136).
-const UNIT_AFTER = /^[ \t]*(?:bytes?|octets?|KiB|MiB|GiB|TiB|kg|km|cm|mm|m[²³]|ml|mg|GB|MB|KB|TB|%|jaar|maanden|weken|dagen|uur|minuten|seconden|stuks|pcs|pieces|ans|mois|semaines|jours|heures|Jahre|Monate|Wochen|Tage|Stunden)(?![a-zA-Z\u00C0-\u024F\u0400-\u04FF])/i;
+const UNIT_AFTER = /^[ \t]*(?:bytes?|octets?|KiB|MiB|GiB|TiB|kg|km|cm|mm|m[²³]|ml|mg|GB|MB|KB|TB|%|jaar|maanden|weken|dagen|uur|minuten|seconden|stuks|st(?![a-zA-Z\u00C0-\u024F\u0400-\u04FF])(?!\.\s*[A-ZÄÖÜÅÆØÁÉÍÓÚ])|pcs|pieces|ans|mois|semaines|jours|heures|Jahre|Monate|Wochen|Tage|Stunden)(?![a-zA-Z\u00C0-\u024F\u0400-\u04FF])/i;
 
 // Same missing-boundary flaw: "ref" matched the tail of "kortref".
 const REFERENCE_BEFORE = /\b(?:dossier|ref\.?|referentie|reference|référence|factuurnummer|invoice\s*(?:nr|number|no)?|bestelnummer|order\s*(?:nr|number|no)?|kenmerk|ordernummer|Aktenzeichen|numéro\s*de\s*(?:dossier|facture|commande)|bestellnummer|Rechnungsnummer|artikelnr|article\s*no|contract\s*(?:nr|number|no)?|pagina|page|Seite|blz\.?|Facture\s*n[°o]?|Faktura\s*n[°or]\.?|Lasku\s*n[°or]o?\.?|Rechnung\s*(?:Nr|n[°o])?|faktura\s*(?:nr|n[°o])?|bestilling\s*(?:nr|n[°o])?|bestelling\s*n[°or]\.?|Reikningur\s*nr|ticket|incident\s*(?:report|nr|no)?|case\s*(?:nr|no|id)?|zaaknummer|meldingsnummer|Vorgangsnummer|Vorgang|Störungsmeldung|saksnummer|ärendenummer|sagsnummer|asianumero|Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.#]?\s*$/i;
@@ -511,7 +512,7 @@ const SENTENCE_BREAK_G = /[.!?][ \t\n]|\n/g;
 // The value's own sentence, bounded either side.
 function sentenceAround(text: string, start: number, end: number, reach = 160): string {
   let before = cpBefore(text, start, reach);
-  let after = text.slice(end, end + reach);
+  let after = cpAfter(text, end, reach);
   let lastEnd = -1;
   SENTENCE_BREAK_G.lastIndex = 0;
   for (let m = SENTENCE_BREAK_G.exec(before); m !== null; m = SENTENCE_BREAK_G.exec(before)) {
@@ -646,7 +647,7 @@ const COUNT_LABEL_BEFORE =
 // The model-name branch ("OptiPlex 7090") is same-line and skips surnames:
 // "Sean McCarthy\n1000 Bruxelles" lost its postcode (rules-engine#152).
 const NOT_POSTAL_BEFORE =
-  /(?<![A-Za-z0-9_])(?:(?:ISO(?:\/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*|(?!(?:Mc|Mac|De|Di|Da|Du|Le|La|Van|Von|O)[A-Z])[A-Za-z]*[a-z][A-Z][A-Za-z]*[ \t]+)$/;
+  /(?<![A-Za-z0-9_])(?:(?:ISO(?:\/IEC)?|IEC|EN|DIN(?:\s+EN)?|NEN(?:-EN)?|NF\s+EN|BS(?:\s+EN)?|PN-EN|ÖNORM)[\s\-]*|(?!(?:Mc|Mac|De|Di|Da|Du|Le|La|Van|Von|O)[A-Z])[A-Za-z]*[a-z][A-Z][A-Za-z]*[^\S\r\n]+)$/;
 
 /**
  * What else a number is, by what touches it (rules-engine#126): a build,
@@ -933,18 +934,23 @@ function suppressPostalInsideIban(text: string, match: RawMatch): boolean {
 // run a human wrote as one account number, including the ones that fail their
 // checksum, because those are exactly the ones no structured detector claims.
 /**
- * The offsets of every line break in the last text seen, for the per-candidate
- * line lookups below. `lastIndexOf("\n")` walks back to the start of the line
- * for each candidate, which on one long line of numbers made the suppressors
- * quadratic (rules-engine#150). One entry: it holds on to one document at most.
+ * The offsets of every line break in the document, for the per-candidate line
+ * lookups below. `lastIndexOf("\n")` walks back to the start of the line for
+ * each candidate, which on one long line of numbers made the suppressors
+ * quadratic (rules-engine#150). Kept on the call's scratch: a module-level
+ * memo compared every new text to the last one by content, which was itself
+ * quadratic for a repeated document, and held on to it after the call
+ * (rules-engine#159).
  */
-let newlineMemo: { text: string; at: number[] } | null = null;
-
 function newlines(text: string): number[] {
-  if (newlineMemo !== null && newlineMemo.text === text) return newlineMemo.at;
+  const sc = activeScratch;
+  if (sc !== null && sc.text === text) return (sc.newlineAt ??= lineBreaks(text));
+  return lineBreaks(text);
+}
+
+function lineBreaks(text: string): number[] {
   const at: number[] = [];
   for (let i = text.indexOf("\n"); i >= 0; i = text.indexOf("\n", i + 1)) at.push(i);
-  newlineMemo = { text, at };
   return at;
 }
 
@@ -995,12 +1001,12 @@ function suppressPhoneInsideAccountRun(text: string, match: RawMatch): boolean {
 }
 
 /** The last line's account runs, found once for every candidate on it: a
- *  scan per candidate was quadratic on a long line of numbers (rules-engine#150). */
-let accountRunsMemo: { text: string; lineStart: number; lineEnd: number; starts: number[]; ends: number[] } | null = null;
-
+ *  scan per candidate was quadratic on a long line of numbers (rules-engine#150).
+ *  Kept on the call's scratch (rules-engine#159). */
 function accountRuns(text: string, lineStart: number, lineEnd: number): [number[], number[]] {
-  const memo = accountRunsMemo;
-  if (memo !== null && memo.text === text && memo.lineStart === lineStart && memo.lineEnd === lineEnd) {
+  const sc = activeScratch !== null && activeScratch.text === text ? activeScratch : null;
+  const memo = sc?.accountRuns;
+  if (memo !== undefined && memo.lineStart === lineStart && memo.lineEnd === lineEnd) {
     return [memo.starts, memo.ends];
   }
   const line = text.slice(lineStart, lineEnd);
@@ -1011,7 +1017,7 @@ function accountRuns(text: string, lineStart: number, lineEnd: number): [number[
     starts.push(lineStart + m.index);
     ends.push(lineStart + m.index + m[0].length);
   }
-  accountRunsMemo = { text, lineStart, lineEnd, starts, ends };
+  if (sc !== null) sc.accountRuns = { lineStart, lineEnd, starts, ends };
   return [starts, ends];
 }
 
@@ -1156,13 +1162,31 @@ function buildDocumentWords(text: string): Set<string> {
  */
 export class SuppressionScratch {
   private words: Set<string> | null = null;
+  /** Line-break offsets, the last line's account runs and its column header. */
+  newlineAt?: number[];
+  accountRuns?: { lineStart: number; lineEnd: number; starts: number[]; ends: number[] };
+  column?: { lineStart: number; found: [number[], string[]] | null };
 
-  constructor(private readonly text: string) {}
+  constructor(readonly text: string) {}
 
   documentWords(): Set<string> {
     if (this.words === null) this.words = buildDocumentWords(this.text);
     return this.words;
   }
+}
+
+/**
+ * The scratch of the detection call in progress, so the line helpers can keep
+ * their memos on it. Detection is synchronous, so one is active at a time; the
+ * engine sets it and clears it in a `finally`. Compared to the text by `===`,
+ * which is the same string object throughout a call, so the check is a
+ * pointer comparison.
+ */
+let activeScratch: SuppressionScratch | null = null;
+
+/** @internal The engine's hook around one detection call. */
+export function activateScratch(scratch: SuppressionScratch | null): void {
+  activeScratch = scratch;
 }
 
 /**
@@ -1433,7 +1457,7 @@ function suppressRequiresContext(text: string, match: RawMatch): boolean {
  * a key too. The span may start inside the value: the token rule finds
  * `var/lib/...` in `model='/var/lib/...'`.
  */
-const ASSIGNMENT_KEY = /[\n,;{}()[\]|:=]([^\n,;{}()[\]|:=]{1,48}?)["'`]?\]?[ \t]*[:=][ \t]?["'`[{(]?[^\s"'`:=]{0,40}$/;
+const ASSIGNMENT_KEY = /[\n,;{}()[\]|:=]([^\n,;{}()[\]|:=]{1,48}?)["'`]?\]?[ \t]*[:=][ \t]?["'`[{(]?[^\s"'`:=]{0,40}$/u;
 /** What separates the words of a key: "aws_secret_access_key", "db.password", '"apiKey"'. */
 const KEY_SEPARATORS = /[\s_\-.:"'`$[\]{}()/\\,;|@#]+/g;
 /** Credential words that name a credential only as a key: `pass=`, `pwd:`, `"pin":`. */
@@ -1450,8 +1474,10 @@ function underACredentialKey(text: string, match: RawMatch): boolean {
 }
 
 function assignmentKey(text: string, start: number): string | null {
-  const lo = Math.max(0, start - 60);
-  const found = ASSIGNMENT_KEY.exec((lo === 0 ? "\n" : "") + text.slice(lo, start));
+  // In code points, as Python counts: emoji before a key took two units each
+  // and pushed "password" out of the window (rules-engine#159).
+  const window = cpBefore(text, start, 60);
+  const found = ASSIGNMENT_KEY.exec((window.length === start ? "\n" : "") + window);
   return found === null ? null : found[1];
 }
 
@@ -1592,13 +1618,14 @@ function columnHeader(text: string, start: number): string | null {
   // The header depends on the line, not on the value: found once per line, it
   // serves every candidate on it. Per candidate, splitting the line made a long
   // delimited line quadratic (rules-engine#150).
-  const memo = columnMemo;
+  const sc = activeScratch !== null && activeScratch.text === text ? activeScratch : null;
+  const memo = sc?.column;
   let found: [number[], string[]] | null;
-  if (memo !== null && memo.text === text && memo.lineStart === lineStart) {
+  if (memo !== undefined && memo.lineStart === lineStart) {
     found = memo.found;
   } else {
     found = lineHeader(text, lineStart);
-    columnMemo = { text, lineStart, found };
+    if (sc !== null) sc.column = { lineStart, found };
   }
   if (found === null) return null;
   const [separators, heads] = found;
@@ -1611,8 +1638,6 @@ function columnHeader(text: string, start: number): string | null {
   return heads[lo].toLowerCase();
 }
 
-/** The last line's header, one entry, holding on to one document at most. */
-let columnMemo: { text: string; lineStart: number; found: [number[], string[]] | null } | null = null;
 
 /** The header cells over the line at `lineStart`, and the offsets of the
  *  separator splitting both, or null when the line sits in no table. */

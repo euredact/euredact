@@ -256,3 +256,26 @@ class TestPublicSurface:
         for field in ("redacted_text", "detections", "tokens", "exempted",
                       "source", "degraded", "detection_mode"):
             assert field in RedactResult.__dataclass_fields__, field
+
+
+def test_coref_is_not_an_option():
+    """The reserved coref and coref_model parameters were removed before 1.0
+    rather than frozen unbuilt (rules-engine#159)."""
+    import pytest
+    import euredact as _e
+    with pytest.raises(TypeError):
+        _e.redact("x", coref=True)  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        _e.EuRedact().redact("x", coref_model="default")  # type: ignore[call-arg]
+
+
+def test_the_top_level_names_match_the_typescript_sdk():
+    """LEGACY_TYPE_ALIASES, canonical_type and CountryEvidence were exported by
+    the TypeScript SDK only, though the README documents the alias table for
+    both (rules-engine#159)."""
+    import euredact as _e
+    for name in ("LEGACY_TYPE_ALIASES", "canonical_type", "CountryEvidence"):
+        assert name in _e.__all__ and hasattr(_e, name), name
+    assert _e.canonical_type(" iban ") == "BANK_ACCOUNT"
+    assert _e.canonical_type("credential") == "SECRET"
+    assert _e.canonical_type("employee_id") == "EMPLOYEE_ID"

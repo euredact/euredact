@@ -172,6 +172,55 @@ narrative lives. Sections here use that vocabulary
   often than on 0.8.0. A test makes the first calls from a fresh process
   behind a barrier and asserts empty stderr.
 
+- **Found in the review before 1.0** *(rules-engine#159)*:
+  - **`[fast]` and odd characters.** The re2 prefilter read a vertical tab
+    and `\x1c`–`\x1f`, which Python's `\s` matches and RE2's does not, as
+    non-space, and skipped the pattern: `Tel: 06\x0b12\x0b34\x0b56\x0b78`
+    (Word line breaks after text extraction) came back unchanged. A lone
+    surrogate (`json.loads` of `"\ud800"`) raised `UnicodeEncodeError`
+    instead of redacting. A custom pattern with a negated class (`[^ ]`,
+    `[^0-9]`) could refuse the folded text #150 introduced; it now runs
+    without a prefilter slot. The built-in patterns were not affected.
+  - **Amounts with a no-break space before the currency** were redacted
+    (`0471234567\u00a0EUR` → `[SSN]`): #152 wrote "same line" as `[ \t]*`,
+    which dropped the no-break space French and German put there.
+  - **`referential_integrity` gave one value two labels** when it was
+    spelled two ways (NFD and NFC, full-width and ASCII digits), since #150
+    made a detection's text the document's. The labels, and the allowlist,
+    read the normalised spelling again: `allowlist=["0612345678"]` exempts
+    `０６１２３４５６７８`.
+  - **A detection ending at the end of a decomposed text** was one character
+    short: `Volg @jose\u0301` left the accent outside the mask.
+  - **A 402 whose `detail` is a sentence** raised `AttributeError` instead of
+    `InsufficientCreditsError`; the sentence is kept as `detail["message"]`.
+  - **The line memos held the last document** (IBAN and phone included)
+    after the call and after `clear()`. They are dropped when the call ends.
+  - **A URL's host** for `allowlist_domains` is read as a browser reads it,
+    the same in both SDKs: `https://evil.com\@euredact.be/` is `evil.com`,
+    which `urlsplit` read as `euredact.be`.
+  - **Unknown country codes.** The warning said detection continued with the
+    shared patterns only; every pattern runs, as without `countries`. The
+    text now says so. `NotConfiguredError` no longer suggests that setting
+    `EUREDACT_API_KEY` is enough: `configure()` reads it.
+  - 13 conformance vectors (each failing on `ed70b2c` in at least one SDK),
+    a shared 402 case, and unit tests for the rest.
+
+### Changed
+
+- **1.0 API surface** *(rules-engine#159)*. `LEGACY_TYPE_ALIASES`,
+  `canonical_type` and `CountryEvidence` are exported at the top level, as
+  in TypeScript. `Credits.budget` and `Credits.extra` are keyword-only, so
+  `Credits(...)` built positionally keeps `raw` fifth. `RedactResult.degraded`
+  is documented as reserved: always `False` in 1.x. The package is marked
+  Production/Stable and lists Python 3.14, which CI now tests.
+
+### Removed
+
+- **`coref` and `coref_model`**, reserved parameters that were ignored in
+  rules mode and raised in cloud mode, the empty `coref` extra and the
+  unimplemented `euredact.coref` module, rather than freeze them unbuilt
+  into 1.0 *(rules-engine#159)*.
+
 ## 0.8.0 (2026-10-31)
 
 ### Added

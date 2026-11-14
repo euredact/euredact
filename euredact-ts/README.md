@@ -150,9 +150,6 @@ interface RedactOptions {
 | `chunkOffset` | `0` | Where this chunk starts in the whole document. Only rebases spans recorded in `context`; returned detections stay relative to `text`. |
 | `cache` | `true` | Reuse the result for an identical input and configuration. |
 
-TypeScript has no `coref` option; the Python SDK accepts one as a reserved
-no-op.
-
 #### `redactAsync(text, options?)`
 
 ```ts
@@ -264,7 +261,7 @@ interface RedactResult {
   redactedText: string;       // The input text with PII replaced
   detections: Detection[];    // All PII spans found
   source: string;             // "rules" or "cloud"
-  degraded: boolean;          // True if the engine fell back to a simpler mode
+  degraded: boolean;          // reserved: always false in 1.x
 
   // Country inference — see "Country-independent detection"
   inferredCountries: Array<[string, number]>; // [country, confidence], strongest first
@@ -378,7 +375,8 @@ A label can also *rule a type out*. A four-digit run is not a postal code when
 a founding or payment participle introduces it (`Opgericht in 2016`,
 `Fondée en 2017`) or when it sits in a telephone parenthetical (`(toest. 3841)`,
 `(ext. 2219)`). Postal codes that merely look like years are unaffected —
-Antwerp's `2018` in `rustige ligging in 2018` is still a `POSTAL_CODE`.
+Antwerp's `2018` in `Lange Nieuwstraat 12, rustige ligging in 2018` is still a
+`POSTAL_CODE`: the street is its evidence.
 
 A label never moves a span; it only decides the label. Which characters are
 masked is unchanged either way.
@@ -474,7 +472,7 @@ label, redact them as one text, or use `referentialIntegrity: true`, whose
 > returns may still change, while the SDK's cloud API (functions, options,
 > result fields, error classes) is covered by the 1.x promise in
 > [Versioning](https://github.com/euredact/euredact#versioning). The rules engine is unaffected:
-> `mode="rules"` is the default and works without a key.
+> `mode: "rules"` is the default and works without a key.
 
 The rule engine catches what has a shape: IBANs, national IDs, phone numbers,
 anything with a checksum. It cannot catch what does not — a person's name, an
@@ -484,7 +482,7 @@ asked only *what did the rules miss?*
 ```ts
 import { configure, redactAsync } from "euredact";
 
-configure({ apiKey: "erk_..." });               // or set EUREDACT_API_KEY
+configure({ apiKey: "erk_..." });               // or configure() with EUREDACT_API_KEY set
 const result = await redactAsync(text, { countries: ["BE"], mode: "cloud" });
 
 result.source;                                   // "cloud"
@@ -524,8 +522,9 @@ given and returns spans relative to it: the local masking happens in
 already masked.
 
 The package stays **zero-dependency** — the client uses the platform's own
-`fetch`. Node 18+ provides one; on Node 16 the rules engine is unaffected and a
-`fetchImpl` can be supplied.
+`fetch`. Node 18+ provides one; on Node 16 the rules engine is unaffected, and
+`redactAsync` in cloud mode needs a global `fetch` polyfill. `Account`, `Jobs`
+and `Batches` also take a `fetchImpl` of their own.
 
 ### What leaves your machine
 
@@ -603,7 +602,7 @@ The token suffixes are random per call, so yours will differ.
 
 **Read that output carefully: `Bas Verhoeven` is still there.** That is the whole
 trade-off and it is why the cloud tier exists. The local engine masks what has a
-shape — the IBAN and the address — and cannot mask a name, an employer or a
+shape — the e-mail address and the IBAN — and cannot mask a name, an employer or a
 diagnosis, because it cannot find them. So this pattern keeps every identifier
 the engine detects inside your process and sends the prose, names included.
 `mode: "cloud"` sends that same masked prose to a model trained to find the
@@ -738,8 +737,9 @@ for (const batch of await new Batches().list(20)) {
 
 #### Creating the clients
 
-`Account` and `Jobs` read the configuration `configure()` set (or
-`EUREDACT_API_KEY`). Both take two optional arguments:
+`Account` and `Jobs` read the configuration `configure()` set. Setting
+`EUREDACT_API_KEY` is not enough on its own: `configure()` reads it, so call it
+once. Both take two optional arguments:
 `new Account(config?, { fetchImpl? })`. `config` is a `CloudConfig` of its own,
 for a second key or another endpoint: a plain object with `apiKey`, `baseUrl`,
 `timeoutMs`, `pollTimeoutMs`, `maxRetries` and `headers`, checked for an
@@ -770,7 +770,16 @@ interface AccountSummary {
   raw: Record<string, unknown>;
 }
 interface Credits { balance: number | null; granted: number | null; spent: number | null;
-                    unit: string | null /* "tokens" */; raw: Record<string, unknown> }
+                    unit: string | null /* "tokens" */;
+                    budget: Budget | null /* null: no Budget, or an older service */;
+                    extra: Extra | null; raw: Record<string, unknown> }
+interface Budget {                   // this period's, used first
+  granted: number | null; remaining: number | null;
+  expiresAt: string | null;          // ISO 8601; what is left lapses then
+}
+interface Extra {                    // prepaid extra volume, used after the Budget
+  remaining: number | null; nextExpiry: string | null; expiringNext: number | null;
+}
 interface CreditEntry {              // rolled up per minute, reason and direction
   at: string | null; delta: number | null /* negative for a debit */;
   reason: string | null; count: number | null; jobId: string | null; sourceRef: string | null;
@@ -1029,12 +1038,12 @@ Rijksregisternummer [NATIONAL_ID] van onze klant. | declared | country: BE | cou
 | `countries: ["NL"]` | None — every country's patterns still run | Attributed normally; a non-Dutch hit gets `outOfScope: true` and `countryConfidence: 0` |
 | `countries: ["BE"]` | None | The Belgian hit is corroborated: `countryConfidence` ~0.88, `outOfScope: false` |
 | `countries` omitted | None | `detectionMode: "inferred"`; the country is inferred from the document and nothing is out of scope, because nothing was declared |
-| `countryHint: ["BE"]` | None | A *prior*: it corroborates Belgian attribution **without** widening or narrowing scope, so `out_of_scope` still reflects `countries` alone |
+| `countryHint: ["BE"]` | None | A *prior*: it corroborates Belgian attribution **without** widening or narrowing scope, so `outOfScope` still reflects `countries` alone |
 
 ### How to use each one
 
 - **`countries: [...]`** — you know where the document is from. Use it. It
-  improves attribution and makes `out_of_scope` meaningful, and it is the
+  improves attribution and makes `outOfScope` meaningful, and it is the
   cheapest path because country inference is skipped.
 - **`countries` omitted** — you do not know. The engine infers from the document
   and reports `inferredCountries` with confidences.
@@ -1063,7 +1072,8 @@ accepted as equivalents: `GB`/`UK` and `GR`/`EL`. Codes are case-insensitive
 and whitespace-tolerant.
 
 An **unrecognised** code does not throw — it logs an `[euredact]` warning and
-detection continues with the shared, country-independent patterns. Throwing on
+is ignored. Detection is otherwise unchanged: every pattern still runs (see
+below). Throwing on
 an unknown locale invites callers to wrap the call in `try/catch` and skip
 redaction entirely, failing open with unredacted PII.
 
@@ -1161,7 +1171,7 @@ for (const page of pages) {
 }
 
 // page 1: "Factuur — IBAN NL91ABNA0417164300, info@example.nl"
-// page 7: "Telefoon 0612345678"  -> PHONE (NL), not NATIONAL_ID (DK)
+// page 7: "0612345678"  -> PHONE (NL), not NATIONAL_ID (DK)
 ```
 
 `chunkOffset` rebases spans recorded in the context so they point into the whole
@@ -1327,7 +1337,7 @@ Declaring a country helps where a value is genuinely ambiguous and the document
 carries no other signal:
 
 ```ts
-redact("Telefon: 0708787668", { countryHint: ["SE"] }).detections[0];
+redact("0708787668", { countryHint: ["SE"] }).detections[0];
 // PHONE / SE — without the hint this is a valid Danish CPR and nothing says otherwise
 ```
 
@@ -1494,9 +1504,10 @@ list is merged with it.
 
 - **Nothing is excluded by default.** Every type is detected and redacted
   unless you name it.
-- **Names are checked.** They are case-insensitive, and legacy names resolve
-  (`IBAN` is `BANK_ACCOUNT`, `CREDENTIAL` is `SECRET`). A registered custom
-  pattern's name works too. An unknown name throws, so a typo
+- **Names are checked.** Built-in names are case-insensitive, and legacy names
+  resolve (`IBAN` is `BANK_ACCOUNT`, `CREDENTIAL` is `SECRET`). A registered
+  custom pattern's name works too, spelled as it was registered. An unknown name
+  throws, so a typo
   cannot silently switch nothing off.
 - **It applies to each span's final type.** In
   `NHS Number: 5556953627` the digits also pass the Austrian SVNr check.
@@ -1621,8 +1632,8 @@ bundler, edge-runtime and Deno compatibility — would buy nothing.
 
 | Package | |
 |---|---:|
-| Tarball | 232 kB |
-| Unpacked | 817 kB |
+| Tarball | 327 kB |
+| Unpacked | 1.2 MB |
 | Runtime dependencies | **0** |
 
 Measured with `npm pack --dry-run` with the bundled BIC prefix list, which

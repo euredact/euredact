@@ -119,9 +119,9 @@ euredact.redact(
     referential_integrity: bool = False,
     tokenize: bool = False,
     allowlist: list[str] | None = None,
+    allowlist_domains: list[str] | None = None,
+    exclude_types: list[str] | None = None,
     detect_dates: bool = False,
-    coref: bool = False,
-    coref_model: str = "default",
     cache: bool = True,
     idempotency_key: str | None = None,
 ) -> RedactResult
@@ -135,7 +135,7 @@ keyword-only.
 | Parameter | Default | Description |
 |---|---|---|
 | `text` | — | Input text to scan. Longer than `max_input_length` raises `ValueError`. |
-| `countries` | `None` | ISO 3166-1 alpha-2 codes that define **scope** (e.g. `["NL", "BE"]`). `None` loads all 31. This never gates what is looked for: a detection attributed elsewhere is flagged `out_of_scope`, never dropped. Passing a bare string raises `TypeError`. See [Country codes](#country-codes). |
+| `countries` | `None` | ISO 3166-1 alpha-2 codes that define **scope** (e.g. `["NL", "BE"]`). `None` loads all 31. This never gates what is looked for: a detection attributed elsewhere is flagged `out_of_scope`, never dropped. Passing a bare string raises `TypeError`. `mode="cloud"` needs exactly one country and raises `ValueError` otherwise. See [Country codes](#country-codes). |
 | `country_hint` | `None` | A **prior only**. Helps resolve an ambiguous value without narrowing scope or flagging anything out of scope. See [Country Hints](#country-hints). |
 | `detect_dates` | `False` | Include `DOB` and `DATE_OF_DEATH`. Off by default: a bare date without keyword or structural context is deferred to the cloud tier. When on, the engine applies keyword and JSON/CSV-header checks. |
 
@@ -162,13 +162,6 @@ The three output styles are mutually exclusive in practice — pick at most one.
 | `chunk_offset` | `0` | Where this chunk starts in the whole document. Used only to rebase spans recorded in `context`; returned detections are always relative to `text`. |
 | `cache` | `True` | Reuse the result for an identical input and configuration. Set `False` for one-off calls on sensitive text, or when timing the engine. |
 
-**Not yet implemented**
-
-| Parameter | Default | Description |
-|---|---|---|
-| `coref` | `False` | Reserved for pronoun/coreference resolution. Accepted and ignored in rules mode; raises in cloud mode. |
-| `coref_model` | `"default"` | Reserved, with `coref`. |
-
 #### `euredact.redact_batch()`
 
 ```python
@@ -176,10 +169,13 @@ euredact.redact_batch(
     texts: list[str],
     *,
     countries: list[str] | None = None,
+    country_hint: list[str] | None = None,
     mode: str = "rules",
     referential_integrity: bool = False,
     tokenize: bool = False,
     allowlist: list[str] | None = None,
+    allowlist_domains: list[str] | None = None,
+    exclude_types: list[str] | None = None,
     detect_dates: bool = False,
     cache: bool = True,
 ) -> list[RedactResult]
@@ -337,7 +333,7 @@ class RedactResult:
     redacted_text: str          # The input text with PII replaced
     detections: list[Detection] # All PII spans found
     source: str = "rules"       # Detection backend ("rules")
-    degraded: bool = False      # True if the engine fell back to a simpler mode
+    degraded: bool = False      # reserved: always False in 1.x
 
     # Country inference — see "Country-independent detection"
     inferred_countries: tuple[tuple[str, float], ...] = ()  # (country, confidence), strongest first
@@ -451,7 +447,8 @@ A label can also *rule a type out*. A four-digit run is not a postal code when
 a founding or payment participle introduces it (`Opgericht in 2016`,
 `Fondée en 2017`) or when it sits in a telephone parenthetical (`(toest. 3841)`,
 `(ext. 2219)`). Postal codes that merely look like years are unaffected —
-Antwerp's `2018` in `rustige ligging in 2018` is still a `POSTAL_CODE`.
+Antwerp's `2018` in `Lange Nieuwstraat 12, rustige ligging in 2018` is still a
+`POSTAL_CODE`: the street is its evidence.
 
 A label never moves a span; it only decides the label. Which characters are
 masked is unchanged either way.
@@ -547,7 +544,7 @@ pip install 'euredact[cloud]'
 ```python
 import euredact
 
-euredact.configure(api_key="erk_...")          # or set EUREDACT_API_KEY
+euredact.configure(api_key="erk_...")          # or configure() with EUREDACT_API_KEY set
 result = euredact.redact(text, countries=["BE"], mode="cloud")
 
 result.source                                   # "cloud"
@@ -652,7 +649,7 @@ The token suffixes are random per call, so yours will differ.
 
 **Read that output carefully: `Bas Verhoeven` is still there.** That is the
 whole trade-off and it is why the cloud tier exists. The local engine masks what
-has a shape — the IBAN and the address — and cannot mask a name, an employer or
+has a shape — the e-mail address and the IBAN — and cannot mask a name, an employer or
 a diagnosis, because it cannot find them. So this pattern keeps every identifier
 the engine detects inside your process and sends the prose, names included.
 `mode="cloud"` sends that same masked prose to a model trained to find the
@@ -790,7 +787,8 @@ with Batches() as batches:
 #### Creating the clients
 
 `Account`, `Jobs`, `Batches`, `CloudClient` and `AsyncCloudClient` all read the
-configuration `euredact.configure()` set (or `EUREDACT_API_KEY`). Each also
+configuration `euredact.configure()` set. Setting `EUREDACT_API_KEY` is not
+enough on its own: `configure()` reads it, so call it once. Each also
 accepts:
 
 - **`config=`**, a `CloudConfig` of its own, for a second key or another
@@ -833,6 +831,16 @@ class AccountSummary:
 class Credits:
     balance: int | None; granted: int | None; spent: int | None
     unit: str | None                  # "tokens"
+    budget: Budget | None             # None: no Budget, or an older service
+    extra: Extra | None
+
+class Budget:                         # this period's, used first
+    granted: int | None; remaining: int | None
+    expires_at: str | None            # ISO timestamp; what is left lapses then
+
+class Extra:                          # prepaid extra volume, used after the Budget
+    remaining: int | None
+    next_expiry: str | None; expiring_next: int | None
 
 class CreditEntry:                    # rolled up per minute, reason and direction
     at: str | None                    # ISO timestamp
@@ -963,7 +971,7 @@ euredact.configure(
 
 | Parameter | Default | Environment variable | Description |
 |---|---|---|---|
-| `api_key` | — | `EUREDACT_API_KEY` | Your API key. Required; `configure()` raises without one. |
+| `api_key` | — | `EUREDACT_API_KEY` | Your API key. Required; `configure()` raises without one. The variable is read by `configure()`, not by the cloud calls. |
 | `base_url` | `https://api.euredact.dev` | `EUREDACT_BASE_URL` | Service endpoint. Must be `https://`; plain `http://` is refused except to `localhost`, `127.0.0.1` or `::1`, so the key and the text never travel unencrypted. |
 | `timeout_s` | `90.0` | — | Per-request timeout. |
 | `poll_timeout_s` | `900.0` | — | Ceiling for polling a document that outlives the synchronous window. |
@@ -980,8 +988,8 @@ it); `NotFoundError` (404); `ResultExpiredError` (410); and `CloudError` for
 the rest, with `status` and `detail`.
 
 Options the service cannot honour raise rather than being ignored: multiple
-`countries`, `country_hint`, `context`/`chunk_offset`, `referential_integrity`
-and `coref`. `tokenize`, `allowlist` and `allowlist_domains` are honoured: the SDK applies them to
+`countries` (cloud mode needs exactly one), `country_hint`, `context`/`chunk_offset`
+and `referential_integrity`. `tokenize`, `allowlist` and `allowlist_domains` are honoured: the SDK applies them to
 the spans the service returns and rebuilds the text from those.
 
 ### Batches
@@ -1174,13 +1182,15 @@ spellings are accepted as equivalents:
 | `GR` | `EL` | Greece |
 
 Codes are case-insensitive and whitespace-tolerant. An **unrecognised** code
-does not raise — it emits an `UnknownCountryWarning` and detection continues
-with the shared, country-independent patterns:
+does not raise — it emits an `UnknownCountryWarning` and is ignored. Detection
+is otherwise unchanged: every pattern still runs (see
+[country-independent detection](#country-independent-detection)):
 
 ```python
-euredact.redact(text, countries=["ZZ"])
-# UnknownCountryWarning: Unknown country code: 'ZZ'. Continuing with shared
-# country-independent patterns only (email, IBAN, international phone, ...).
+euredact.redact("Werknemer met BSN 111222333", countries=["ZZ"]).redacted_text
+# UnknownCountryWarning: Unknown country code: 'ZZ'. It is ignored; every
+# pattern still runs. Available: [...]
+# 'Werknemer met BSN [NATIONAL_ID]'
 ```
 
 This is deliberate. Raising on an unknown locale invites callers to wrap the
@@ -1462,7 +1472,7 @@ Declaring a country helps where a value is genuinely ambiguous and the document
 carries no other signal:
 
 ```python
-euredact.redact("Telefon: 0708787668", country_hint=["SE"]).detections[0]
+euredact.redact("0708787668", country_hint=["SE"]).detections[0]
 # PHONE / SE  — without the hint this is a valid Danish CPR and nothing says otherwise
 ```
 
@@ -1484,7 +1494,7 @@ contain no IBAN, no `+CC` number and no ccTLD infers nothing at all, even when
 page 1 identified the document beyond doubt:
 
 ```python
-euredact.redact("Telefoon 0612345678")
+euredact.redact("0612345678")
 # -> NATIONAL_ID (DK)   <- a valid Danish CPR, and nothing here says otherwise
 ```
 
@@ -1500,13 +1510,14 @@ for page in pages:
     offset += len(page)
 
 # page 1: "Factuur — IBAN NL91ABNA0417164300, info@example.nl"
-# page 7: "Telefoon 0612345678"  -> PHONE (NL)
+# page 7: "0612345678"  -> PHONE (NL)
 ```
 
 `chunk_offset` rebases spans recorded in the context so they point into the
 whole document. Returned detections stay relative to the chunk you passed in.
 
-A context is thread-safe — `aredact_batch` fans chunks across a thread pool.
+A context is thread-safe, so chunks may be redacted from several threads with
+the same one.
 Caching is disabled automatically while one is in use, because the result then
 depends on evidence the text alone does not determine.
 
@@ -1691,9 +1702,10 @@ list is merged with it.
 
 - **Nothing is excluded by default.** Every type is detected and redacted
   unless you name it.
-- **Names are checked.** They are case-insensitive, and legacy names resolve
-  (`IBAN` is `BANK_ACCOUNT`, `CREDENTIAL` is `SECRET`). A registered custom
-  pattern's name works too. An unknown name raises `ValueError`, so a typo
+- **Names are checked.** Built-in names are case-insensitive, and legacy names
+  resolve (`IBAN` is `BANK_ACCOUNT`, `CREDENTIAL` is `SECRET`). A registered
+  custom pattern's name works too, spelled as it was registered. An unknown name
+  raises `ValueError`, so a typo
   cannot silently switch nothing off.
 - **It applies to each span's final type.** In
   `NHS Number: 5556953627` the digits also pass the Austrian SVNr check.
@@ -1777,14 +1789,16 @@ Two caveats that are about *sharing*, not locking:
 ### Suppression Zones
 
 When a regex matches a pattern that has a checksum validator but the checksum
-fails, the matched span becomes a "suppression zone." Any purely regex-based
-detection fully contained within that zone is suppressed as a false positive.
+fails, the matched span becomes a "suppression zone". It acts on candidates
+without a validator of their own, in two ways:
 
-For example, the text `BE71 0012 3456 7890` matches the Belgian IBAN regex but
-fails mod-97 validation. Without suppression zones, sub-parts of this span might
-be incorrectly detected as a license plate (`BE71`) or a phone number
-(`0012 3456`). The suppression zone prevents these false positives while
-correctly not reporting an invalid IBAN.
+- **A strict part of the zone, of any type, is dropped.** It is a fragment of
+  the rejected identifier, not a separate value. `BE71 0012 3456 7890` matches
+  the Belgian IBAN regex but fails mod-97; without the zone, `BE71` could come
+  back as a licence plate and `0012 3456` as a phone number. The invalid IBAN is
+  not reported either.
+- **A candidate of the same type inside the zone is demoted** to tier −1 (below),
+  not removed: it can still claim characters that nothing else wants.
 
 ### Deduplication Priority
 
@@ -1814,10 +1828,12 @@ Two tiers are less obvious than they look:
   tier 1. Entities that carry their own country vouch for themselves (an IBAN
   emits evidence for its own country), so a foreign IBAN in a domestic invoice
   keeps tier 3.
-- **Nothing is deleted for failing a checksum.** A failed checksum demotes
-  rather than removes, and only candidates of *the same entity type*: it is
-  evidence against that type, not against the span. Deleting instead removed 454
-  detections across the corpus, of which 454 overlapped real labelled PII.
+- **A failed checksum never deletes a competing reading of the same value.** It
+  demotes rather than removes, and only candidates of *the same entity type*: it
+  is evidence against that type, not against the span. Deleting instead removed
+  454 detections across the corpus, of which 454 overlapped real labelled PII.
+  The one removal is a strict fragment of the rejected value (see
+  [Suppression Zones](#suppression-zones)).
 
 ## Adding a New Country
 
@@ -1876,9 +1892,8 @@ documents (~3,450 chars).
 | Memory per country | ~50 KB | ~50 KB | ~50 KB |
 
 The spread matters more than the median: **cost tracks identifier density, not
-length.** At an identical 3,424 characters, the cheapest document in the corpus
-takes 4.8 ms on `[fast]` and the dearest 9.5 ms; across the whole long cohort
-the range is 6.2–15.8 ms. A profile shows why — the dominant cost is not the
+length.** The long cohort's documents are all about the same length, and on
+`[fast]` their 10th–90th percentile still spans 6.2–15.8 ms. A profile shows why — the dominant cost is not the
 pattern scan but the cue and suppressor checks that run per candidate match, so
 a document dense in identifiers pays for every one of them. Quote a figure for
 *your* documents, not this table.
@@ -1898,9 +1913,10 @@ detected — both are covered by `tests/test_scan_path_parity.py`, which runs
 every available scan path against the plain-Python one and requires them to
 agree:
 
-- **`google-re2`** builds a prefilter over every pattern it can express (324 of
-  347). One DFA pass per 1 KB window reports which patterns match anywhere in
-  it — typically 42 of 314 for a real document — and only those are then run.
+- **`google-re2`** builds a prefilter over every pattern it can express (345 of
+  373). One DFA pass per 1 KB window reports which patterns match anywhere in
+  it — for the corpus's short records a median of 99 of the 345 — and only
+  those are then run.
   A pattern RE2 rejects only for a lookaround is prefiltered by the same pattern
   with its lookarounds removed, a superset that can never skip a real match.
   The rest, chiefly the `SECRET` rules and patterns that can match further than
@@ -1918,7 +1934,7 @@ document size alone: the same engine runs 1.4× faster on dense records and
 ~3× faster on prose-heavy documents where whole windows can be skipped.
 
 The TypeScript SDK needs no such extra — V8's regex engine has literal
-prefilters CPython lacks, and measured on the same documents it runs roughly 3×
+prefilters CPython lacks, and measured on the same documents it runs about 6–7×
 faster than the accelerated Python path.
 
 ## Versioning

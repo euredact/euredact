@@ -240,6 +240,7 @@ export interface RedactResult {
   redactedText: string;
   detections: Detection[];
   source: string;
+  /** Reserved: always false in 1.x. Kept so that a future fallback mode can say so without an API change. */
   degraded: boolean;
   /**
    * Countries this document appears to belong to, strongest first, as

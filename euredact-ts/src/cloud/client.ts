@@ -96,7 +96,7 @@ export function requireFetch(supplied?: typeof fetch): typeof fetch {
   if (typeof impl !== "function") {
     throw new NotConfiguredError(
       "the cloud tier needs a global fetch. Node 18+ provides one; on Node 16 " +
-        "supply one via the fetchImpl option or install a polyfill.",
+        "install a fetch polyfill (Account, Jobs and Batches also take a fetchImpl).",
     );
   }
   return impl;
@@ -241,7 +241,10 @@ export function isQuota(payload: Record<string, unknown>): boolean {
 /** The error for a non-success answer. @internal Shared with batches and account. */
 export function cloudErrorFor(status: number, payload: Record<string, unknown>): CloudError {
   const message = typeof payload.error === "string" ? payload.error : `HTTP ${status}`;
-  const detail = (payload.detail && typeof payload.detail === "object"
+  // A detail that is a sentence ("Budget spent") is kept under a key, as in
+  // Python (rules-engine#159).
+  const detail = (typeof payload.detail === "string" ? { message: payload.detail }
+    : payload.detail && typeof payload.detail === "object"
     ? payload.detail : {}) as Record<string, unknown>;
   if (status === 401) return new CloudError(`authentication failed: ${message}`, status);
   if (status === 402) return new InsufficientCreditsError(message, status, detail);

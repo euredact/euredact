@@ -334,15 +334,30 @@ def _fold_char(ch: str) -> str:
     Chosen from the predicates Python's ``re`` uses on ``str`` patterns, so
     that RE2's ASCII ``\\s``, ``\\d``, ``\\w`` and ``\\b`` agree with Python's
     Unicode ones on the folded text: whitespace becomes " ", a decimal digit
-    "0", any other word character "a". Anything else, and all of ASCII, is
-    left as it is.
+    "0", any other word character "a". Anything else is left as it is.
+
+    Two exceptions within ASCII: the vertical tab and the separators
+    ``\x1c``-``\x1f`` are Python whitespace and not RE2's, so they become " "
+    too; a value broken by vertical tabs, as text extracted from Word often
+    is, was skipped by the prefilter (rules-engine#159). A letter Python's
+    case-insensitive matching equates with an ASCII one (the Kelvin sign with
+    "k", "ſ" with "s", "ı" with "i") becomes that letter, and a lone surrogate,
+    which RE2 cannot be handed at all, becomes "?" (it raised
+    ``UnicodeEncodeError``).
     """
+    if ch in _ODD_ASCII_SPACE:
+        return " "
     if ch.isascii():
         return ch
+    if "\ud800" <= ch <= "\udfff":
+        return "?"
     if ch.isspace():
         return " "
     if ch.isdecimal():
         return "0"
+    for case in (ch.lower(), ch.upper()):
+        if len(case) == 1 and case.isascii() and case.isalpha():
+            return case
     if ch.isalnum():
         return "a"
     return ch
@@ -359,9 +374,20 @@ class _FoldTable(dict):
 _FOLD = _FoldTable()
 
 
+#: Negated class bodies that agree on folded text: "not a letter" and
+#: "horizontal whitespace" (the "^" included).
+_NEGATED_CLASSES_RE2_SAFE = frozenset({"^\\W\\d_", "^\\S\\r\\n"})
+
+#: ASCII characters Python's ``\s`` matches and RE2's does not.
+_ODD_ASCII_SPACE = frozenset("\x0b\x1c\x1d\x1e\x1f")
+_HAS_ODD_ASCII_SPACE = re.compile("[\x0b\x1c-\x1f]")
+
+
 def _fold_for_re2(text: str) -> str:
     """*text* as the RE2 prefilter reads it; see :func:`_fold_char`."""
-    return text if text.isascii() else text.translate(_FOLD)
+    if text.isascii() and not _HAS_ODD_ASCII_SPACE.search(text):
+        return text
+    return text.translate(_FOLD)
 
 
 def _for_re2(pattern: str) -> str | None:
@@ -410,6 +436,7 @@ def _for_re2(pattern: str) -> str | None:
                 continue
         elif ch == "[" and not in_class:
             in_class, class_start, class_wide = True, len(out), False
+            class_src = i + 1
             out.append(ch)
             i += 1
             if i < n and pattern[i] == "^":
@@ -422,6 +449,13 @@ def _for_re2(pattern: str) -> str | None:
         elif ch == "]" and in_class:
             in_class = False
             negated = out[class_start + 1:class_start + 2] == ["^"]
+            # A negated class with members of its own can refuse a stand-in
+            # Python's text never had: "[^A-Za-z ]" rejects the "a" an "é"
+            # becomes. Only the two forms that read folded text exactly as
+            # Python reads the original are kept; any other negated class
+            # makes the pattern run without a prefilter (rules-engine#159).
+            if negated and pattern[class_src:i] not in _NEGATED_CLASSES_RE2_SAFE:
+                return None
             if class_wide and not negated:
                 out.append("a0 ")
             out.append(ch)
@@ -531,12 +565,13 @@ class MultiPatternMatcher:
                 try:
                     automaton.Add(exact)
                 except Exception:  # noqa: BLE001 - RE2 rejects some Python syntax
-                    # RE2 has no lookaround. Removing one only drops a
-                    # constraint, so the stripped pattern matches a superset:
-                    # as a prefilter it can let a pattern run needlessly, never
-                    # skip a window where the exact pattern matches. A guard
-                    # like "(?![.,/:]\d)" used to cost a broad pattern its
-                    # prefilter entirely (rules-engine#72).
+                    # Lookarounds were stripped above, so this is the rare
+                    # pattern RE2 rejects for another reason, or one whose
+                    # lookaround could not be stripped. Removing a lookaround
+                    # only drops a constraint, so the stripped pattern matches
+                    # a superset: as a prefilter it can let a pattern run
+                    # needlessly, never skip a window where the exact pattern
+                    # matches (rules-engine#72).
                     stripped = _strip_lookarounds(source)
                     superset = _for_re2(stripped) if stripped is not None else None
                     try:
@@ -619,10 +654,11 @@ class MultiPatternMatcher:
         :func:`_for_re2`); the patterns themselves run on the text as it is.
 
         One DFA pass per window reports which patterns match anywhere in it —
-        typically 42 of 314 for a real document. Only those are then run, over
-        the full text, exactly as the sequential path would run them. Skipping
-        a pattern that matches nowhere cannot change the result, so this is a
-        pure speed-up rather than a second set of semantics.
+        for the corpus's short records a median of 99 of the 345. Only those
+        are then run, over the full text, exactly as the sequential path would
+        run them. Skipping a pattern that matches nowhere cannot change the
+        result, so this is a pure speed-up rather than a second set of
+        semantics.
         """
         candidates: set[int] = set()
         folded = _fold_for_re2(text)

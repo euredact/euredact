@@ -112,6 +112,17 @@ LEGACY_TYPE_ALIASES: dict[str, str] = {
 }
 
 
+def canonical_type(name: str) -> str:
+    """Resolve a possibly-legacy type name to its canonical form.
+
+    ``canonical_type("IBAN") == "BANK_ACCOUNT"``. An unrecognised name is
+    returned upper-cased rather than dropped. Mirrors the TypeScript SDK's
+    ``canonicalType``, which both SDKs now export (rules-engine#159).
+    """
+    upper = str(name or "").strip().upper()
+    return LEGACY_TYPE_ALIASES.get(upper, upper)
+
+
 class DetectionSource(str, Enum):
     """Where a detection originated."""
 
@@ -265,6 +276,8 @@ class RedactResult:
     redacted_text: str
     detections: list[Detection]
     source: str = "rules"
+    #: Reserved: always False in 1.x. Kept so that a future fallback mode can
+    #: say so without an API change.
     degraded: bool = False
 
     inferred_countries: tuple[tuple[str, float], ...] = ()

@@ -31,7 +31,8 @@ const CASES = JSON.parse(
 ) as {
   results: Array<{ id: string; wire: Json; expect: Json }>;
   throttling: Array<{ id: string; status: number; json?: Json; text?: string; expect: string }>;
-  insufficient_credits: Array<{ id: string; status: number; json?: Json; text?: string; expect: Json }>;
+  insufficient_credits: Array<{ id: string; status: number; json?: Json; text?: string; expect: Json;
+                                 expect_detail?: Json }>;
   batches: Array<{ id: string; wire: Json; expect: Json }>;
   account: Record<string, { wire: Json; expect: unknown }>;
 };
@@ -102,7 +103,7 @@ for (const c of CASES.insufficient_credits) {
     const got = snake({ balance: err.balance, required: err.required, shortfall: err.shortfall,
                         promptTokens: err.promptTokens, maxResponseTokens: err.maxResponseTokens });
     assert.deepEqual(got, c.expect);
-    assert.deepEqual(err.detail, (c.json?.detail as Json | undefined) ?? {});
+    assert.deepEqual(err.detail, c.expect_detail ?? (c.json?.detail as Json | undefined) ?? {});
   });
 }
 
@@ -203,6 +204,32 @@ test("a 402 on an account read is not retried", async () => {
   const err = await a.summary().then(() => null, e => e);
   assert.ok(err instanceof InsufficientCreditsError);
   assert.equal(requests.length, 1);
+});
+
+test("a 402 from jobs, batches and redactAsync is the same error", async () => {
+  const c = CASES.insufficient_credits[0];
+  const answer = { status: c.status, json: c.json };
+  config({ maxRetries: 3 } as Partial<CloudConfig>);
+  const j = jobs(answer);
+  const fromJobs = await j.jobs.retrieve("j1").then(() => null, e => e);
+  const b = service(answer);
+  const fromBatches = await batches(b.fetchImpl).list().then(() => null, e => e);
+  const top = service(answer);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = top.fetchImpl;
+  let fromRedact: unknown;
+  try {
+    fromRedact = await new EuRedact().redactAsync(DOC, { countries: ["BE"], mode: "cloud" })
+      .then(() => null, e => e);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  for (const [err, requests] of [[fromJobs, j.requests], [fromBatches, b.requests],
+                                 [fromRedact, top.requests]] as const) {
+    assert.ok(err instanceof InsufficientCreditsError);
+    assert.equal(err.shortfall, 2770);
+    assert.equal(requests.length, 1);
+  }
 });
 
 test("account credit history", async () => {

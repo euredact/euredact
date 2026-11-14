@@ -36,28 +36,37 @@ export function normalize(text: string): [string, number[] | null] {
 }
 
 function buildOffsetMapping(original: string, normalized: string): number[] {
-  // Precompute cumulative NFD lengths for normalized characters
-  const normNfdCum = [0];
-  for (let i = 0; i < normalized.length; i++) {
-    normNfdCum.push(normNfdCum[i] + normalized[i].normalize("NFD").length);
+  // By code point, one entry per UTF-16 unit of the normalised text. Walking
+  // units called normalize() on each half of a surrogate pair, and after an
+  // astral character NFC changes (U+2F800, U+1D15E) every later mask was off
+  // and left characters of an e-mail visible (rules-engine#159).
+  const normNfdCum: number[] = [0];
+  const normUnitStart: number[] = [];
+  for (const ch of normalized) {
+    for (let k = 0; k < ch.length; k++) normUnitStart.push(normNfdCum.length - 1);
+    normNfdCum.push(normNfdCum[normNfdCum.length - 1] + ch.normalize("NFD").length);
+  }
+  const origNfdCum: number[] = [0];
+  const origUnitOf: number[] = [];
+  let unit = 0;
+  for (const ch of original) {
+    origUnitOf.push(unit);
+    unit += ch.length;
+    origNfdCum.push(origNfdCum[origNfdCum.length - 1] + ch.normalize("NFD").length);
   }
 
-  // Precompute cumulative NFD lengths for original characters
-  const origNfdCum = [0];
-  for (let i = 0; i < original.length; i++) {
-    origNfdCum.push(origNfdCum[i] + original[i].normalize("NFD").length);
-  }
-
-  // Two-pointer scan: map each normalized position to its original position
+  // Two-pointer scan over code points; each normalised unit maps to the
+  // original unit where its code point's NFD run starts.
   const normToOrig: number[] = [];
+  const cpOrig = origUnitOf.length;
   let origPtr = 0;
-  for (let normIdx = 0; normIdx < normalized.length; normIdx++) {
-    const nfdStart = normNfdCum[normIdx];
-    while (origPtr + 1 < original.length && origNfdCum[origPtr + 1] <= nfdStart) {
-      origPtr++;
-    }
-    normToOrig.push(origPtr);
+  for (let u = 0; u < normalized.length; u++) {
+    const nfdStart = normNfdCum[normUnitStart[u]];
+    while (origPtr + 1 < cpOrig && origNfdCum[origPtr + 1] <= nfdStart) origPtr++;
+    normToOrig.push(cpOrig === 0 ? 0 : origUnitOf[origPtr]);
   }
+  // The end of the text maps to the end of the original (rules-engine#159).
+  normToOrig.push(original.length);
   return normToOrig;
 }
 
