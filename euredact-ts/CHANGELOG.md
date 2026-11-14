@@ -221,6 +221,8 @@ narrative lives. Sections here use that vocabulary
     with the cache, like `detections` before #150.
   - **A 402 whose `detail` is a sentence** keeps it as `detail.message`, as
     Python does.
+  - **README package size** is measured from a clean build, as the publish
+    workflow builds it; it gave 232 kB for a 308 kB package (rules-engine#148).
   - **Unknown country codes.** The warning said detection continued with the
     shared patterns only; every pattern runs. `NotConfiguredError` no longer
     suggests that setting `EUREDACT_API_KEY` is enough, nor a `fetchImpl` the

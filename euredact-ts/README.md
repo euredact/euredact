@@ -1634,13 +1634,15 @@ bundler, edge-runtime and Deno compatibility — would buy nothing.
 | Package | |
 |---|---:|
 | Tarball | 327 kB |
-| Unpacked | 1.2 MB |
+| Unpacked | 1.18 MB, 109 files |
 | Runtime dependencies | **0** |
 
-Measured with `npm pack --dry-run` with the bundled BIC prefix list, which
-accounts for about 60 kB of the tarball (shipped in both the ESM and CJS builds). A stale duplicate of this section
-previously quoted 0.02 ms and 86 KB; both were wrong, and the figures above are
-the measured ones.
+Measured from a clean build, the way the publish workflow makes the package:
+`npm ci && npm run build && npm pack`. Measured that way, 0.8.0 gives 308,170
+bytes, the tarball npm serves for it; an earlier figure here (232 kB) came from
+a stale local build (rules-engine#148). 1.0.0 is larger because the CommonJS
+build now ships its own type declarations. The bundled BIC prefix list
+accounts for about 60 kB of the tarball, shipped in both the ESM and CJS builds.
 
 ## CommonJS
 
