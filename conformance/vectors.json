@@ -8431,6 +8431,45 @@
       },
       "expectRedactedText": "Bel ０６１２３４５６７８ of mail",
       "notes": "rules-engine#159: since #150 a detection's text is the document's, so an allowlist entry in ASCII digits no longer matched a value written in full-width digits. The allowlist also tries the normalised spelling again."
+    },
+    {
+      "id": "bic-gleif-october-openbank-letters-only",
+      "text": "Überweisung an DE89 3704 0044 0532 0130 00, OPENDEFF, Verwendungszweck Miete",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "BIC": [
+          "OPENDEFF"
+        ]
+      },
+      "notes": "rules-engine#161: an institution the October 2026 GLEIF mapping added. A letters-only code beside an IBAN, with no BIC label, is masked only when the bundled mapping knows the institution (#57); the September list did not."
+    },
+    {
+      "id": "bic-gleif-october-revolut-at-letters-only",
+      "text": "Konto AT61 1904 3002 3457 3201 bei REVOATWW, bitte bis Freitag",
+      "countries": [
+        "AT"
+      ],
+      "mustDetect": {
+        "BIC": [
+          "REVOATWW"
+        ]
+      },
+      "notes": "rules-engine#161: an institution the October 2026 GLEIF mapping added. A letters-only code beside an IBAN, with no BIC label, is masked only when the bundled mapping knows the institution (#57); the September list did not."
+    },
+    {
+      "id": "bic-gleif-october-sogedeff",
+      "text": "Payment to DE89 3704 0044 0532 0130 00 via SOGEDEFF today",
+      "countries": [
+        "DE"
+      ],
+      "mustDetect": {
+        "BIC": [
+          "SOGEDEFF"
+        ]
+      },
+      "notes": "rules-engine#161: an institution the October 2026 GLEIF mapping added. A letters-only code beside an IBAN, with no BIC label, is masked only when the bundled mapping knows the institution (#57); the September list did not."
     }
   ]
 }

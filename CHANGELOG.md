@@ -39,6 +39,7 @@ which both test suites run.
 - `LEGACY_TYPE_ALIASES`, `canonical_type` and `CountryEvidence` are exported at the top level, as they were in TypeScript; `Credits.budget` and `Credits.extra` are keyword-only; the package is marked Production/Stable and lists Python 3.14. *(Python only)* *(rules-engine#159)*
 - CommonJS consumers get their own type declarations (TypeScript refused the ESM ones with TS1479), and `ApiClientOptions` is exported. *(TypeScript only)* *(rules-engine#159)*
 - `RedactResult.degraded` is documented as reserved: always false in 1.x. *(rules-engine#159)*
+- The bundled BIC6 list is the October 2026 GLEIF BIC-to-LEI mapping (10,380 prefixes; 35 added, 37 removed): a letters-only code of a newly listed bank beside an IBAN (`OPENDEFF`, `REVOATWW`) is masked without a BIC label. *(rules-engine#161)*
 
 ### Removed
 

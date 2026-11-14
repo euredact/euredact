@@ -48,6 +48,32 @@ narrative lives. Sections here use that vocabulary
   both SDKs: three 402 bodies (full, partly malformed, not JSON) and three
   credit answers (no breakdown, Budget and extra, extra only).
 
+### Changed
+
+- **BIC list refreshed to the October 2026 GLEIF mapping** *(rules-engine#161)*.
+  It was September's: 10,382 BIC6 prefixes, now 10,380, with 35 added and 37
+  removed. The list decides only whether a letters-only code beside an IBAN,
+  with no BIC label, is a bank or a word (#57), and 13 of the additions and 4
+  of the removals have such a code. `OPENDEFF`, `SOGEDEFF` and `REVOATWW` are
+  now masked there. `SCFBESMM` (Santander Consumer Finance, now Openbank's
+  `OPENESMM`) and three others are treated like any unlisted bank: masked
+  behind a `BIC:` label or as an 11-character code, not bare. The SWIFT
+  notice in `NOTICE` is dated October 2026. Three conformance vectors.
+
+- **1.0 API surface** *(rules-engine#159)*. `LEGACY_TYPE_ALIASES`,
+  `canonical_type` and `CountryEvidence` are exported at the top level, as
+  in TypeScript. `Credits.budget` and `Credits.extra` are keyword-only, so
+  `Credits(...)` built positionally keeps `raw` fifth. `RedactResult.degraded`
+  is documented as reserved: always `False` in 1.x. The package is marked
+  Production/Stable and lists Python 3.14, which CI now tests.
+
+### Removed
+
+- **`coref` and `coref_model`**, reserved parameters that were ignored in
+  rules mode and raised in cloud mode, the empty `coref` extra and the
+  unimplemented `euredact.coref` module, rather than freeze them unbuilt
+  into 1.0 *(rules-engine#159)*.
+
 ### Fixed
 
 - **Values written with Unicode spaces and digits** *(rules-engine#150)*.
@@ -204,22 +230,6 @@ narrative lives. Sections here use that vocabulary
     `EUREDACT_API_KEY` is enough: `configure()` reads it.
   - 13 conformance vectors (each failing on `ed70b2c` in at least one SDK),
     a shared 402 case, and unit tests for the rest.
-
-### Changed
-
-- **1.0 API surface** *(rules-engine#159)*. `LEGACY_TYPE_ALIASES`,
-  `canonical_type` and `CountryEvidence` are exported at the top level, as
-  in TypeScript. `Credits.budget` and `Credits.extra` are keyword-only, so
-  `Credits(...)` built positionally keeps `raw` fifth. `RedactResult.degraded`
-  is documented as reserved: always `False` in 1.x. The package is marked
-  Production/Stable and lists Python 3.14, which CI now tests.
-
-### Removed
-
-- **`coref` and `coref_model`**, reserved parameters that were ignored in
-  rules mode and raised in cloud mode, the empty `coref` extra and the
-  unimplemented `euredact.coref` module, rather than freeze them unbuilt
-  into 1.0 *(rules-engine#159)*.
 
 ## 0.8.0 (2026-10-31)
 
