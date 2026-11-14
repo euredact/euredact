@@ -29,6 +29,8 @@ which both test suites run.
 
 ### Added
 
+- Versioning: from 1.0.0 the API follows Semantic Versioning (nothing public is removed or renamed within 1.x; detection changes are not breaking and are always listed), with minor releases quarterly and patch releases for leaks whenever needed. See the README's Versioning section.
+
 - `InsufficientCreditsError`: a cloud call on an account whose Budget and extra volume are spent (HTTP 402) raises it at once, never retried, with `balance`, `required`, `shortfall`, `prompt_tokens` and `max_response_tokens` from the service's detail. It is a `CloudError`, which a 402 raised before. *(rules-engine#145)*
 - `Credits.budget` and `Credits.extra`: what the balance is made of, this period's Budget (`granted`, `remaining`, `expires_at`) and prepaid extra volume (`remaining`, `next_expiry`, `expiring_next`). The Budget is used first. Both are `None` when the service sends none. *(rules-engine#146)*
 
