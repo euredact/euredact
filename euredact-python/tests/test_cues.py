@@ -291,6 +291,10 @@ class TestCrossSdkCueTable:
             assert py_type.value == ts_type
             # Python leaves "/" unescaped; a JavaScript regex literal cannot.
             expected = re.sub(r"(?<!\\)/", r"\\/", py_pattern.pattern)
+            # Python's \Z is JavaScript's $ without the m flag: the end of the
+            # text only. Python's own $ also matches before a final newline
+            # (rules-engine#166).
+            expected = expected.replace(r"\Z", "$")
             assert expected == ts_pattern, f"{py_type.value} differs between the SDKs"
 
     @pytest.mark.skipif(not TS_CUES.exists(), reason="TypeScript SDK not in this checkout")
