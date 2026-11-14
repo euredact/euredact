@@ -1309,7 +1309,8 @@ Table License Agreement; its required notice is in `NOTICE`. They tell a real
 bank from an ordinary word next to an IBAN, but do not by themselves license a
 code in bare prose: with that many real prefixes, some words begin with one
 (`DERNIERS` → `DERN`+`IE`, an Irish institution). `scripts/refresh_bic_registry.py`
-regenerates the list; GLEIF publishes the mapping monthly.
+regenerates the list; GLEIF publishes the mapping monthly, and the bundled
+copy is refreshed before every quarterly minor release.
 
 The complete SWIFTRef BIC Directory is a commercial product and is not
 bundled. Deployments holding it install it at startup, where it works like the
