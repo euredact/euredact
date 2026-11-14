@@ -239,6 +239,11 @@ publish run's job list before reacting: if `publish-python` succeeded, the
 upload happened. `skip-existing: true` means a *genuinely* stale build also
 reports success, so the version at the tag (step 4) is what rules that out.
 
+The package size in the TypeScript README (*Package* table) is measured from
+a clean build. Check it against what npm serves:
+`npm view euredact@X.Y.Z dist.unpackedSize` and the tarball's byte count. If
+they differ by more than rounding, file an issue (rules-engine#148).
+
 Metadata of any kind is still not the final word — install and exercise the new
 release's actual features, not just its version string. A correct
 `__version__` on code that predates the feature would pass a version check and
