@@ -279,3 +279,21 @@ def test_the_top_level_names_match_the_typescript_sdk():
     assert _e.canonical_type(" iban ") == "BANK_ACCOUNT"
     assert _e.canonical_type("credential") == "SECRET"
     assert _e.canonical_type("employee_id") == "EMPLOYEE_ID"
+
+
+def test_the_placeholder_formats_are_the_documented_ones():
+    """The README's Versioning section promises these three formats for 1.x
+    (rules-engine#168); the TypeScript spec test holds the same."""
+    import re as _re
+
+    from euredact import EuRedact as _EuRedact
+    from euredact.sdk import TOKEN_ALPHABET, TOKEN_SUFFIX_LENGTH
+    text = "Mail jan@example.nl, BSN 111222333"
+    plain = _EuRedact().redact(text, countries=["NL"], cache=False)
+    assert plain.redacted_text == "Mail [EMAIL], BSN [NATIONAL_ID]"
+    labelled = _EuRedact().redact(text, countries=["NL"], cache=False, referential_integrity=True)
+    assert _re.fullmatch(r"Mail EMAIL_[1-9]\d*, BSN NATIONAL_ID_[1-9]\d*", labelled.redacted_text)
+    assert (TOKEN_ALPHABET, TOKEN_SUFFIX_LENGTH) == ("BCDFGHJKLMNPQRSTVWXZ23456789", 4)
+    tokens = _EuRedact().redact(text, countries=["NL"], cache=False, tokenize=True)
+    assert _re.fullmatch(r"Mail EMAIL_[BCDFGHJKLMNPQRSTVWXZ2-9]{4}, BSN NATIONAL_ID_[BCDFGHJKLMNPQRSTVWXZ2-9]{4}",
+                         tokens.redacted_text)

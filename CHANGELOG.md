@@ -36,6 +36,7 @@ which both test suites run.
 
 ### Changed
 
+- Documentation: the README's Versioning section defines the 1.x public API, including the placeholder formats (`[TYPE]`, `TYPE_N`, `TYPE_XXXX`) and the country codes, says a detection change is never breaking, and lists the supported versions (1.0.x current, 0.x unsupported, the previous minor gets leak fixes for three months). *(rules-engine#168)*
 - `LEGACY_TYPE_ALIASES`, `canonical_type` and `CountryEvidence` are exported at the top level, as they were in TypeScript; `Credits.budget` and `Credits.extra` are keyword-only; the package is marked Production/Stable and lists Python 3.14. *(Python only)* *(rules-engine#159)*
 - CommonJS consumers get their own type declarations (TypeScript refused the ESM ones with TS1479), and `ApiClientOptions` is exported. *(TypeScript only)* *(rules-engine#159)*
 - `RedactResult.degraded` is documented as reserved: always false in 1.x. *(rules-engine#159)*

@@ -24,7 +24,11 @@ From 1.0.0 (decided 2026-11-14) releases follow the README's
   figures on the release commit (step 3) and regenerates
   `docs/corpus-results.{json,md}`. Before it, refresh the bundled BIC list
   with the `bic-refresh` skill: its own issue and PR, merged before the
-  release commit, so the release measures the list it ships.
+  release commit, so the release measures the list it ships. In the release
+  commit, update the README's *Supported versions* table: the new minor is
+  current, the one before it receives leak fixes for three more months (give
+  the end date), and anything older is unsupported. The package READMEs
+  summarise it; keep them in step.
 - **`1.x.y`, whenever needed**: a fix for a value left unredacted
   (`sev:leak`) or for a broken release, as soon as it is merged and verified.
   Do not hold a leak fix for the quarter. A patch release carries only fixes:

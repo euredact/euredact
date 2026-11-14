@@ -368,6 +368,18 @@ test("the entry point does not export the engine's internals", () => {
   assert.equal(api.canonicalType("employee_id"), "EMPLOYEE_ID");
 });
 
+test("the placeholder formats are the documented ones", () => {
+  // The README's Versioning section promises these three formats for 1.x
+  // (rules-engine#168); test_api_contract.py holds the same.
+  const text = "Mail jan@example.nl, BSN 111222333";
+  assert.equal(new EuRedact().redact(text, { countries: ["NL"], cache: false }).redactedText,
+    "Mail [EMAIL], BSN [NATIONAL_ID]");
+  assert.match(new EuRedact().redact(text, { countries: ["NL"], cache: false, referentialIntegrity: true }).redactedText,
+    /^Mail EMAIL_[1-9]\d*, BSN NATIONAL_ID_[1-9]\d*$/);
+  assert.match(new EuRedact().redact(text, { countries: ["NL"], cache: false, tokenize: true }).redactedText,
+    /^Mail EMAIL_[BCDFGHJKLMNPQRSTVWXZ2-9]{4}, BSN NATIONAL_ID_[BCDFGHJKLMNPQRSTVWXZ2-9]{4}$/);
+});
+
 // --- Referential integrity (mirrors tests/test_redact.py::TestRedactionOutput) ---
 
 test("referential integrity numbers each distinct value", () => {

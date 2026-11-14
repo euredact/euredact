@@ -50,6 +50,15 @@ narrative lives. Sections here use that vocabulary
 
 ### Changed
 
+- **Documentation: the 1.x public API and supported versions** *(rules-engine#168)*.
+  The README's Versioning section now defines the public API: exported
+  functions, classes and options, result fields, `EntityType` names, error
+  classes, the three placeholder formats (`[TYPE]`, `TYPE_N`, `TYPE_XXXX` with
+  its alphabet) and the country codes. It says that a detection change (a new
+  or stricter pattern, a leak fix, a changed type) is never breaking, and
+  carries a supported-versions table: 1.0.x current, 0.x unsupported, and the
+  previous minor receiving leak fixes for three months after its successor.
+
 - **BIC list refreshed to the October 2026 GLEIF mapping** *(rules-engine#161)*.
   It was September's: 10,382 BIC6 prefixes, now 10,380, with 35 added and 37
   removed. The list decides only whether a letters-only code beside an IBAN,
