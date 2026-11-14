@@ -16,6 +16,7 @@ import contextlib
 import os
 import re
 import sys
+import threading
 from dataclasses import dataclass
 from typing import Any, Iterator
 
@@ -318,6 +319,15 @@ def _strip_lookarounds(pattern: str) -> str | None:
     return "".join(out)
 
 
+#: Serialises re2 prefilter builds across the process; see _build_re2.
+_RE2_BUILD_LOCK = threading.Lock()
+
+#: The start of a lookahead or lookbehind group, outside a character class or
+#: an escape is not distinguished here: a false hit only costs the stripping
+#: pass, which leaves a pattern without one unchanged.
+_HAS_LOOKAROUND = re.compile(r"\(\?<?[=!]")
+
+
 def _fold_char(ch: str) -> str:
     """The ASCII stand-in the RE2 prefilter sees for one character.
 
@@ -496,12 +506,24 @@ class MultiPatternMatcher:
         automaton = _re2.Set.SearchSet()
         slots: list[int | None] = []
         added = 0
-        with _silence_stderr():
+        # One build at a time in the process: _silence_stderr swaps file
+        # descriptor 2 for everyone, and two builds interleaving their swaps
+        # let one's rejections through while the other had restored it
+        # (rules-engine#157).
+        with _RE2_BUILD_LOCK, _silence_stderr():
             for _compiled, pdef, _code in patterns:
                 if _max_match_width(pdef.pattern) > _RE2_OVERLAP:
                     slots.append(None)
                     continue
                 source = _ascii_word_boundaries(pdef.pattern)
+                # A lookaround is the one thing RE2 always rejects, and the
+                # rewrite gives most digit patterns one. Strip it before the
+                # first try instead of after a rejection RE2 prints: the same
+                # superset, without the error (rules-engine#157).
+                if _HAS_LOOKAROUND.search(source):
+                    stripped = _strip_lookarounds(source)
+                    if stripped is not None:
+                        source = stripped
                 exact = _for_re2(source)
                 if exact is None:
                     slots.append(None)
