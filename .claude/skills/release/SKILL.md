@@ -13,6 +13,29 @@ the same version number.
 came from doing these steps out of order. Reasons are given inline so the
 order survives contact with a hurry.
 
+## Which version: the 1.x rhythm
+
+From 1.0.0 (decided 2026-11-14) releases follow the README's
+[Versioning](../../../README.md#versioning) section:
+
+- **`1.x.0`, quarterly**, at the start of February, May, August and November:
+  everything merged since the last minor release — new identifiers, countries,
+  options, cloud features. A minor release always re-measures the accuracy
+  figures on the release commit (step 3) and regenerates
+  `docs/corpus-results.{json,md}`.
+- **`1.x.y`, whenever needed**: a fix for a value left unredacted
+  (`sev:leak`) or for a broken release, as soon as it is merged and verified.
+  Do not hold a leak fix for the quarter. A patch release carries only fixes:
+  a new option or API waits for the next `1.x.0`. Its notes say whether the
+  figures moved; re-measure if the fix touched ranking, suppression or
+  validation.
+- **API stability**: within 1.x nothing public is removed or renamed
+  (functions, options, result fields, `EntityType` names, error classes). A
+  deprecation warns from a minor release and is removed no earlier than 2.0.
+  Detection changes are never breaking, but every one is in the changelog.
+- **When unsure** whether a change is a fix or a feature, it is a feature,
+  and waits for the quarter, unless it closes a leak.
+
 ## 0. Land any workflow changes on `main` first
 
 If `.github/workflows/publish.yml` needs a change, push it **before** tagging.

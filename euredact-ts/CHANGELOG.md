@@ -15,6 +15,15 @@ narrative lives. Sections here use that vocabulary
 
 ### Added
 
+- **1.0.0 and a release rhythm.** The API is now stable under Semantic
+  Versioning: within 1.x no function, option, result field, `EntityType` name
+  or error class is removed or renamed. What is detected is not part of that
+  promise, so that a fix for a value left unredacted can ship in any release.
+  Minor releases come quarterly (February, May, August, November), patch
+  releases with such fixes whenever needed. The cloud tier is a public beta
+  from 16 November 2026: the service may still change, the SDK's cloud API is
+  covered by the same promise.
+
 - **`InsufficientCreditsError` for a 402.** Once metering is on, a cloud
   call on an account whose Budget and extra volume are spent gets HTTP 402.
   The SDK raised a plain `CloudError` for it, so a caller had to branch on

@@ -40,7 +40,7 @@ console.log(result.redactedText);
 
 - **31 European countries** with country-specific patterns
 - **41 PII entity types:** national IDs, IBANs, phone numbers, email, VAT numbers, license plates, credit cards, BIC/SWIFT, VIN, IMEI, GPS coordinates, UUIDs, social handles, IP/IPv6, MAC addresses, secrets/API keys, and more
-- **Optional [euRedact Cloud](#cloud-tier) (private alpha):** `mode="cloud"` adds a fine-tuned model for the categories that have no shape to match on — person names, organisations, job titles, diagnoses
+- **Optional [euRedact Cloud](#cloud-tier) (public beta):** `mode="cloud"` adds a fine-tuned model for the categories that have no shape to match on — person names, organisations, job titles, diagnoses
 - **Checksum validation:** IBAN (mod-97), Luhn (credit cards/IMEI), and 30+ country-specific validators (Dutch BSN 11-proof, Belgian national number, French NIR, etc.)
 - **Secret/API key detection:** known-prefix patterns for AWS, GitHub, Stripe, OpenAI, Slack, JWT, SendGrid + Shannon entropy-based fallback for generic secrets near context keywords
 - **Context-aware:** keyword proximity checks and structural detection (JSON field names, CSV headers) for ambiguous patterns like dates of birth
@@ -110,11 +110,12 @@ only checksum-backed types.
 
 ## Cloud tier
 
-> **Status: private alpha.** The cloud tier is in closed testing — it is **not**
-> in public beta and is not generally available. Keys are issued to alpha
-> participants only, and the request/response surface may still change between
-> releases. The rules engine below is unaffected and is the supported path:
-> `mode="rules"` is the default and carries no alpha caveat.
+> **Status: public beta, from 16 November 2026.** Keys are issued through the
+> sign-up at euredact.dev. The service is in beta: its model and the fields it
+> returns may still change, while the SDK's cloud API (functions, options,
+> result fields, error classes) is covered by the 1.x promise in
+> [Versioning](#versioning). The rules engine is unaffected:
+> `mode="rules"` is the default and works without a key.
 
 The rule engine catches what has a shape: IBANs, national IDs, phone numbers,
 anything with a checksum. It cannot catch what does not — a person's name, an
@@ -432,6 +433,30 @@ conformance/        Shared test vectors, run by both SDKs
 euredact-python/    Python SDK (pip install euredact)
 euredact-ts/        TypeScript/Node.js SDK (npm install euredact)
 ```
+
+## Versioning
+
+From 1.0.0, euRedact follows [Semantic Versioning](https://semver.org/) for its
+**API**: function and option names, result fields, `EntityType` names and error
+classes. Within 1.x nothing is removed or renamed; a deprecated name keeps
+working, warns, and goes no earlier than 2.0. `IBAN` and `CREDENTIAL` remain
+aliases of `BANK_ACCOUNT` and `SECRET` throughout 1.x.
+
+**What is detected is not part of that promise.** Every release masks something
+more, or more precisely, and a fix for a leak must be able to ship in any
+release. A change in detection is never treated as breaking; each one is listed
+in the changelog, with its conformance vector and, for a minor release, the
+re-measured accuracy figures.
+
+Releases follow a quarterly rhythm:
+
+- **`1.x.0`**, at the start of February, May, August and November: new
+  identifiers, countries, options and cloud features, with the accuracy figures
+  measured again on the release commit.
+- **`1.x.y`**, whenever needed: fixes for values left unredacted (a leak) or a
+  broken release, outside the quarterly cycle and as soon as they are verified.
+
+Both SDKs always carry the same version number.
 
 ## Changelog
 

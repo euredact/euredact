@@ -528,11 +528,12 @@ label, redact them as one text, or use `referential_integrity=True`, whose
 
 ## Cloud tier
 
-> **Status: private alpha.** The cloud tier is in closed testing — it is **not**
-> in public beta and is not generally available. Keys are issued to alpha
-> participants only, and the request/response surface may still change between
-> releases. The rules engine below is unaffected and is the supported path:
-> `mode="rules"` is the default and carries no alpha caveat.
+> **Status: public beta, from 16 November 2026.** Keys are issued through the
+> sign-up at euredact.dev. The service is in beta: its model and the fields it
+> returns may still change, while the SDK's cloud API (functions, options,
+> result fields, error classes) is covered by the 1.x promise in
+> [Versioning](https://github.com/euredact/euredact#versioning). The rules engine is unaffected:
+> `mode="rules"` is the default and works without a key.
 
 The rule engine catches what has a shape: IBANs, national IDs, phone numbers,
 anything with a checksum. It cannot catch what does not — a person's name, an
@@ -940,8 +941,9 @@ except CloudError as exc:
 | `RateLimitedError` | 429 | the edge's rate limit, still hit after every retry | yes, `max_retries` times with backoff |
 | `CloudError` | 5xx, `None` | the service or the network failed | yes for reads and `redact`; never for `revoke_key` |
 
-**Availability:** like the rest of the cloud tier, these calls are in private
-alpha, and the response shapes may still change between releases. The batch
+**Availability:** like the rest of the cloud tier, these calls are in public
+beta: the service may add fields to its answers, and the SDK's API for them is
+covered by the 1.x promise. The batch
 calls, `Batches.list()` included, answer `NotFoundError` until batches are
 enabled on the service (see [Batches](#batches)).
 
@@ -961,7 +963,7 @@ euredact.configure(
 
 | Parameter | Default | Environment variable | Description |
 |---|---|---|---|
-| `api_key` | — | `EUREDACT_API_KEY` | Your alpha key. Required; `configure()` raises without one. |
+| `api_key` | — | `EUREDACT_API_KEY` | Your API key. Required; `configure()` raises without one. |
 | `base_url` | `https://api.euredact.dev` | `EUREDACT_BASE_URL` | Service endpoint. Must be `https://`; plain `http://` is refused except to `localhost`, `127.0.0.1` or `::1`, so the key and the text never travel unencrypted. |
 | `timeout_s` | `90.0` | — | Per-request timeout. |
 | `poll_timeout_s` | `900.0` | — | Ceiling for polling a document that outlives the synchronous window. |
@@ -984,7 +986,7 @@ the spans the service returns and rebuilds the text from those.
 
 ### Batches
 
-> **Availability:** private alpha, like the rest of the cloud tier. Batches
+> **Availability:** public beta, like the rest of the cloud tier. Batches
 > need **retention** on the workspace (see below); while batches are not
 > enabled on the service, every batch call answers `NotFoundError`
 > (`batches_not_enabled`).
@@ -1918,6 +1920,15 @@ document size alone: the same engine runs 1.4× faster on dense records and
 The TypeScript SDK needs no such extra — V8's regex engine has literal
 prefilters CPython lacks, and measured on the same documents it runs roughly 3×
 faster than the accelerated Python path.
+
+## Versioning
+
+From 1.0.0 the API (function and option names, result fields, `EntityType`
+names, error classes) follows Semantic Versioning: nothing is removed or renamed
+within 1.x. What is detected is not part of that promise, so that a fix for a
+value left unredacted can ship in any release. Minor releases come quarterly
+(February, May, August, November); patch releases with such fixes come whenever
+needed. Details: [Versioning](https://github.com/euredact/euredact#versioning).
 
 ## License
 
