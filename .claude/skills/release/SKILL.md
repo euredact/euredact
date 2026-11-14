@@ -22,7 +22,9 @@ From 1.0.0 (decided 2026-11-14) releases follow the README's
   everything merged since the last minor release — new identifiers, countries,
   options, cloud features. A minor release always re-measures the accuracy
   figures on the release commit (step 3) and regenerates
-  `docs/corpus-results.{json,md}`.
+  `docs/corpus-results.{json,md}`. Before it, refresh the bundled BIC list
+  with the `bic-refresh` skill: its own issue and PR, merged before the
+  release commit, so the release measures the list it ships.
 - **`1.x.y`, whenever needed**: a fix for a value left unredacted
   (`sev:leak`) or for a broken release, as soon as it is merged and verified.
   Do not hold a leak fix for the quarter. A patch release carries only fixes:
