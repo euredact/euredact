@@ -149,7 +149,7 @@ def test_a_402_raises_insufficient_credits_at_once(case):
     err = exc.value
     assert isinstance(err, CloudError) and err.status == 402
     assert {k: getattr(err, k) for k in case["expect"]} == case["expect"]
-    assert err.detail == (case.get("json") or {}).get("detail", {})
+    assert err.detail == case.get("expect_detail", (case.get("json") or {}).get("detail", {}))
 
 
 def test_a_402_from_the_top_level_cloud_call_is_the_same_error():
@@ -172,6 +172,24 @@ def test_a_402_on_an_account_read_is_not_retried():
     with pytest.raises(InsufficientCreditsError):
         account.summary()
     assert len(service.requests) == 1
+
+
+def test_a_402_from_jobs_is_the_same_error():
+    _configure(max_retries=3)
+    service = _Service(_answer(CASES["insufficient_credits"][0]))
+    with pytest.raises(InsufficientCreditsError) as exc:
+        Jobs(client=service.client()).retrieve("j1")
+    assert len(service.requests) == 1
+    assert exc.value.shortfall == 2770
+
+
+def test_a_402_from_batches_is_the_same_error(tmp_path):
+    _configure(max_retries=3)
+    service = _Service(_answer(CASES["insufficient_credits"][0]))
+    with pytest.raises(InsufficientCreditsError) as exc:
+        Batches(batch_dir=tmp_path, client=service.client()).list()
+    assert len(service.requests) == 1
+    assert exc.value.shortfall == 2770
 
 
 # -- top-level idempotency key -------------------------------------------------
@@ -381,3 +399,12 @@ def test_a_job_id_is_escaped_into_the_path():
     service, jobs = _jobs((200, ACCOUNT["job_pending"]["wire"]))
     jobs.retrieve("a/b")
     assert service.requests[0].url.raw_path == b"/v1/jobs/a%2Fb"
+
+
+def test_credits_keeps_its_positional_fields():
+    """budget and extra came before raw, so Credits(...) built positionally
+    with raw fifth set budget instead (rules-engine#159). They are keyword-only."""
+    from euredact.cloud.account import Credits
+    c = Credits(120, 1000, 880, "tokens", {"balance": 120})
+    assert c.raw == {"balance": 120}
+    assert c.budget is None and c.extra is None

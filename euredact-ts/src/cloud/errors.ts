@@ -26,7 +26,7 @@ export class NotConfiguredError extends CloudError {
     super(
       message ??
         "Cloud tier not configured. Call euredact.configure({ apiKey }) first, " +
-          "or set EUREDACT_API_KEY.",
+          "or configure() with EUREDACT_API_KEY set.",
     );
     this.name = "NotConfiguredError";
   }

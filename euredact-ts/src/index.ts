@@ -1,9 +1,11 @@
 export { EntityType, DetectionSource, LEGACY_TYPE_ALIASES, canonicalType } from "./types.js";
-export type { CloudInfo, Detection, Exemption, RedactResult, Unlocated, Usage, UsageFactor, PatternDef, CountryConfig, CountryEvidence } from "./types.js";
+export type { CloudInfo, Detection, Exemption, RedactResult, Unlocated, Usage, UsageFactor, CountryEvidence } from "./types.js";
 export { DocumentContext } from "./rules/context.js";
 export { EuRedact, restore, type RedactOptions } from "./sdk.js";
-export { COUNTRY_CONFIGS } from "./rules/countries/index.js";
-export { setBicRegistry, getBicRegistry, SEED_BIC6_PREFIXES, type BicRegistryProvider } from "./rules/bicRegistry.js";
+// Not COUNTRY_CONFIGS, getBicRegistry or SEED_BIC6_PREFIXES: engine internals, and
+// COUNTRY_CONFIGS is mutable (emptying it disabled detection). 1.0 freezes what is
+// exported here (rules-engine#159).
+export { setBicRegistry, type BicRegistryProvider } from "./rules/bicRegistry.js";
 export {
   configure,
   getConfig,
@@ -22,6 +24,7 @@ export {
   ResultExpiredError,
   TooLargeError,
   type AccountSummary,
+  type ApiClientOptions,
   type ApiKey,
   type Budget,
   type CreditEntry,

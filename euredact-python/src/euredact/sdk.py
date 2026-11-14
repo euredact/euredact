@@ -13,7 +13,6 @@ from bisect import bisect_left, bisect_right
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import Callable, Iterator, Mapping
-from urllib.parse import urlsplit
 
 from euredact.cache import ResultCache
 from euredact.normalizer import map_offset_to_original, normalize
@@ -346,18 +345,39 @@ def _domain_of(entity_type: EntityType | str, value: str) -> str | None:
         return None
     v = _allowlist_key(value)
     if "://" in v:
-        # A URL's host, not whatever follows its last "@": in
-        # "https://crm.example.com/c?ssn=…&contact=support@euredact.be" that is
-        # the query, and allowlist_domains=["euredact.be"] exempted the whole
-        # URL, the number in it included (rules-engine#152).
-        try:
-            return urlsplit(v).hostname
-        except ValueError:
-            return None
+        return _url_host(v)
     if "@" in v:
         return v.rsplit("@", 1)[1].strip("<>[](),;:\"'")
     v = re.sub(r"^[a-z][a-z0-9+.\-]*://", "", v)
     return v.split("/", 1)[0].split(":", 1)[0].strip("<>[](),;:\"'") or None
+
+
+#: A URL's authority: after the scheme, up to "/", "?", "#" or a backslash,
+#: which browsers read as "/".
+_URL_AUTHORITY = re.compile(r"^[a-z][a-z0-9+.\-]*://([^/?#\\]*)")
+
+
+def _url_host(url: str) -> str | None:
+    """A URL's host, read as a browser reads it, the same in both SDKs.
+
+    Not whatever follows its last "@": in
+    "https://crm.example.com/c?ssn=…&contact=support@euredact.be" that is the
+    query, and allowlist_domains=["euredact.be"] exempted the whole URL, the
+    number in it included (rules-engine#152). Not ``urlsplit`` either, which
+    reads "https://evil.com\\@euredact.be/" as euredact.be where a browser
+    goes to evil.com, and disagreed with the TypeScript SDK on ports, IPv6
+    brackets and international hosts (rules-engine#159). The host is kept as
+    written, without IDNA encoding.
+    """
+    found = _URL_AUTHORITY.match(url)
+    if found is None:
+        return None
+    host = found.group(1).rsplit("@", 1)[-1]
+    if host.startswith("["):
+        host = host[1:].split("]", 1)[0]
+    else:
+        host = host.split(":", 1)[0]
+    return host.strip(".") or None
 
 
 def _matching_rule(
@@ -369,7 +389,10 @@ def _matching_rule(
     differ when normalisation changed the document, and the cloud tier's text
     is whatever the service reported.
     """
-    for candidate in (slice_, det.text):
+    # The value as the patterns read it too (NFC, ASCII digits): an entry
+    # "0612345678" is the full-width spelling of the same number
+    # (rules-engine#159).
+    for candidate in (slice_, det.text, normalize(det.text)[0]):
         if not candidate:
             continue
         rule = allowed.get(_allowlist_key(candidate))
@@ -691,7 +714,10 @@ class EuRedact:
             return token_mapper.get_token
         if referential_integrity:
             mapper = self._referential_mapper
-            return lambda det, _slice: mapper.get_label(det.text, det.entity_type)
+            # Keyed on the value as the patterns read it (NFC, ASCII digits):
+            # a detection's text is the document's, and "josé" written
+            # decomposed and composed is one value (rules-engine#159).
+            return lambda det, _slice: mapper.get_label(normalize(det.text)[0], det.entity_type)
         return lambda det, _slice: f"[{_type_label(det.entity_type)}]"
 
     def redact(
@@ -709,8 +735,6 @@ class EuRedact:
         allowlist_domains: list[str] | None = None,
         exclude_types: list[str] | None = None,
         detect_dates: bool = False,
-        coref: bool = False,
-        coref_model: str = "default",
         cache: bool = True,
         idempotency_key: str | None = None,
     ) -> RedactResult:
@@ -777,7 +801,7 @@ class EuRedact:
                 text, countries=countries, country_hint=country_hint,
                 context=context, chunk_offset=chunk_offset,
                 referential_integrity=referential_integrity, tokenize=tokenize,
-                allowed=allowed, domains=domains, excluded=excluded, coref=coref,
+                allowed=allowed, domains=domains, excluded=excluded,
                 cache=cache, idempotency_key=idempotency_key,
             )
         if idempotency_key is not None:
@@ -898,10 +922,9 @@ class EuRedact:
             text, detections, self._label_for(referential_integrity, token_mapper)
         )
 
-        # Step 16: [COREF EXTENSION] — no-op
-
         # Report the inference so it can be audited. Spans in `evidence` are
-        # offsets into the normalised text, matching `detections`.
+        # offsets into the normalised text that was scanned; unlike
+        # `detections`, they are not mapped back to the text as given.
         ranked = sorted(
             weights_to_ranking(country_scores).items(),
             key=lambda kv: (-kv[1], kv[0]),
@@ -936,7 +959,6 @@ class EuRedact:
         tokenize: bool,
         allowed: dict[str, str],
         domains: dict[str, str],
-        coref: bool,
         cache: bool,
         idempotency_key: str | None = None,
         excluded: frozenset[str] = frozenset(),
@@ -974,8 +996,6 @@ class EuRedact:
         if referential_integrity:
             raise ValueError(
                 "referential_integrity is not supported in cloud mode")
-        if coref:
-            raise ValueError("coref is not supported in cloud mode")
 
         with CloudClient() as client:
             # Dates are always on, whatever detect_dates says: that is the
@@ -1032,8 +1052,6 @@ class EuRedact:
         allowlist_domains: list[str] | None = None,
         exclude_types: list[str] | None = None,
         detect_dates: bool = False,
-        coref: bool = False,
-        coref_model: str = "default",
         cache: bool = True,
         idempotency_key: str | None = None,
     ) -> RedactResult:
@@ -1059,8 +1077,6 @@ class EuRedact:
                 allowlist_domains=allowlist_domains,
                 exclude_types=exclude_types,
                 detect_dates=detect_dates,
-                coref=coref,
-                coref_model=coref_model,
                 cache=cache,
                 idempotency_key=idempotency_key,
             ),

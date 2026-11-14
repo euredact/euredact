@@ -33,7 +33,7 @@ keywords = [
     "masking", "anonymization", "referential-integrity",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
@@ -42,6 +42,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Text Processing",
@@ -67,7 +68,6 @@ Issues = "https://github.com/euredact/euredact/issues"
 # The cloud tier speaks HTTP; nothing else in the package does.
 cloud = ["httpx>=0.27"]
 fast = ["pyahocorasick>=2.0.0", "google-re2>=1.1"]
-coref = []
 dev = [
     "pyahocorasick>=2.0.0",
     "google-re2>=1.1",

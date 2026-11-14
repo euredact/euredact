@@ -69,6 +69,11 @@ def _build_offset_mapping(original: str, normalized: str) -> list[int]:
         while orig_ptr + 1 < len(original) and orig_nfd_cum[orig_ptr + 1] <= nfd_start:
             orig_ptr += 1
         norm_to_orig.append(orig_ptr)
+    # The end of the text maps to the end of the original. Extrapolating one
+    # past the last character landed inside a decomposed cluster: a detection
+    # ending on "é" written e + U+0301 left the accent outside the mask
+    # (rules-engine#159).
+    norm_to_orig.append(len(original))
 
     return norm_to_orig
 

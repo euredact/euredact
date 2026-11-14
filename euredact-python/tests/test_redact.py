@@ -1,5 +1,7 @@
 """Integration tests: full pipeline."""
 
+import pytest
+
 import euredact
 from euredact.types import EntityType
 
@@ -66,6 +68,18 @@ class TestRedactionOutput:
         label = result.redacted_text.split(" en later ")[0]
         assert label.startswith("EMAIL_")
         assert result.redacted_text.count(label) == 2
+
+    @pytest.mark.parametrize("text, expected", [
+        ("Mail jose\u0301@x.be of jos\u00e9@x.be", "Mail EMAIL_1 of EMAIL_1"),
+        ("Bel 0612345678 of \uff10\uff16\uff11\uff12\uff13\uff14\uff15\uff16\uff17\uff18",
+         "Bel PHONE_1 of PHONE_1"),
+    ], ids=["nfd-and-nfc", "ascii-and-full-width-digits"])
+    def test_referential_integrity_labels_a_value_once_however_it_is_spelled(self, text, expected):
+        """Since a detection's text is the document's (#150), the mapper keyed
+        on it gave two spellings of one value two labels (rules-engine#159)."""
+        result = euredact.EuRedact().redact(
+            text, countries=["NL"], referential_integrity=True, cache=False)
+        assert result.redacted_text == expected
 
     def test_source_is_rules(self):
         result = euredact.redact("Test", countries=["NL"])

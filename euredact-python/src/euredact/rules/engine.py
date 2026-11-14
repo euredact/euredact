@@ -14,6 +14,7 @@ from euredact.rules.matchers import MultiPatternMatcher, RawMatch
 from euredact.rules.registry import CountryRegistry
 from euredact.rules.structural import detect_structural_dob
 from euredact.rules.suppressors import (
+    forget_line_memos,
     labelled_a_passport,
     should_suppress_claim,
     should_suppress_span,
@@ -416,8 +417,8 @@ class RuleEngine:
             if country_codes is None:
                 configs = self._registry.load_all()
             else:
-                # An unknown code warns and yields None; detection continues
-                # with the shared patterns rather than raising.
+                # An unknown code warns and yields None rather than raising;
+                # the code is ignored.
                 configs = [self._registry.load(c) for c in country_codes]
                 configs = [c for c in configs if c is not None]
                 # Always load shared patterns
@@ -482,6 +483,21 @@ class RuleEngine:
         It is scored alongside this text's own evidence but is **not** returned,
         so a caller accumulating evidence never counts it twice.
         """
+        try:
+            return self._detect_with_evidence(text, country_codes, country_hint, prior_evidence)
+        finally:
+            # The suppressors' per-line memos hold the text they were built
+            # for; a document must not outlive its call in them, or clear()
+            # would not free it (rules-engine#159).
+            forget_line_memos()
+
+    def _detect_with_evidence(
+        self,
+        text: str,
+        country_codes: list[str] | None,
+        country_hint: list[str] | None,
+        prior_evidence: list[CountryEvidence] | None,
+    ) -> tuple[list[Detection], list[CountryEvidence], dict[str, float]]:
         check_country_arg(country_codes, "countries")
         check_country_arg(country_hint, "country_hint")
 

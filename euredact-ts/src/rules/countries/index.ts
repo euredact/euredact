@@ -211,7 +211,7 @@ const SHARED: CountryConfig = {
     // The second lookbehind refuses to start a match after `<word-char>'`,
     // which is a match already in progress; without it every apostrophe was a
     // fresh start offset and the scan went quadratic. Mirrors Python.
-    p(EntityType.EMAIL, String.raw`(?<![\p{L}\p{N}._%+\-])(?<![\p{L}\p{N}._%+\-]')[\p{L}\p{N}._%+\-]+(?:'[\p{L}\p{N}._%+\-]+)*@(?:[\p{L}\p{N}\-]+\.)+[a-zA-Z]{2,}(?![\p{L}\p{N}_])`),
+    p(EntityType.EMAIL, String.raw`(?<![\p{L}\p{N}._%+\-])(?<![\p{L}\p{N}._%+\-]')[\p{L}\p{N}._%+\-]+(?:'[\p{L}\p{N}._%+\-]+)*@(?:[\p{L}\p{N}_\-]+\.)+[a-zA-Z]{2,}(?![\p{L}\p{N}_])`),
     // IBAN (any country) — structure + mod-97 only. Country-specific IBAN
     // patterns still exist and win on identical spans; this one guarantees an
     // IBAN is never missed just because its country was not requested.

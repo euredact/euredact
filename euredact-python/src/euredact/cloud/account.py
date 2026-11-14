@@ -155,9 +155,11 @@ class Credits:
     granted: int | None
     spent: int | None
     unit: str | None
-    budget: Budget | None = None
-    extra: Extra | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
+    # After raw and keyword-only: added in 1.0, so code building Credits
+    # positionally (raw fifth) keeps working (rules-engine#159).
+    budget: Budget | None = field(default=None, kw_only=True)
+    extra: Extra | None = field(default=None, kw_only=True)
 
     @classmethod
     def _from(cls, raw: dict[str, Any]) -> Credits:

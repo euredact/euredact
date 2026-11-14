@@ -192,6 +192,19 @@ test("a URL's domain is its host, not what follows an @ in its query", () => {
   assert.equal(domainOf(EntityType.EMAIL, "support@euredact.be"), "euredact.be");
 });
 
+test("a URL's host is read the same in both SDKs", () => {
+  // TypeScript read hosts with WHATWG URL, Python with urlsplit; they disagreed
+  // on these (rules-engine#159). The same table is in test_allowlist.py.
+  for (const [url, host] of [
+  ["https://bücher.de/x", "bücher.de"],
+  ["https://euredact.be:99999/x", "euredact.be"],
+  ["http://[::1]/", "::1"],
+  ["https://0x7f.1/", "0x7f.1"],
+  ["https://evil.com\\@euredact.be/", "evil.com"],
+  ["https://euredact.be./x", "euredact.be"],
+  ]) assert.equal(domainOf(EntityType.URL, url), host, url);
+});
+
 test("a BIC registry that throws leaves the BIC masked", () => {
   // Fail closed: it fell back to the seed list, which does not know this one,
   // and the BIC was suppressed (rules-engine#152).

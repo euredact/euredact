@@ -318,7 +318,6 @@ def test_a_retry_reuses_the_idempotency_key():
     ({"countries": ["BE", "NL"]}, "exactly one country"),
     ({"countries": ["BE"], "country_hint": ["NL"]}, "country_hint"),
     ({"countries": ["BE"], "referential_integrity": True}, "referential_integrity"),
-    ({"countries": ["BE"], "coref": True}, "coref"),
 ])
 def test_unsupported_options_raise_rather_than_being_ignored(kwargs, match):
     """Ignoring one silently returns a result that is not what was asked for."""

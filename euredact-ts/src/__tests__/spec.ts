@@ -14,6 +14,7 @@ import { setBicRegistry } from "../rules/bicRegistry.js";
 import { resolveCountryCode } from "../rules/engine.js";
 import { CUES, CUE_WINDOW, cuedType, retypedBy } from "../rules/cues.js";
 import { validateBic, validateE164, validateIban } from "../rules/validators.js";
+import * as api from "../index.js";
 
 const sdk = new EuRedact();
 
@@ -354,6 +355,19 @@ test("a declined identifier the document labels is masked, not dropped", () => {
 test("an unlabelled checksum failure is still declined", () =>
   assert.deepEqual(sdk.redact("Referentie 85.03.19-284.73", { countries: ["BE"] }).detections, []));
 
+// --- The 1.0 entry point (mirrors tests/test_api_contract.py) ---
+
+test("the entry point does not export the engine's internals", () => {
+  // COUNTRY_CONFIGS was exported unfrozen: emptying it switched detection off
+  // for every later EuRedact (rules-engine#159).
+  for (const name of ["COUNTRY_CONFIGS", "getBicRegistry", "SEED_BIC6_PREFIXES"]) {
+    assert.ok(!(name in api), name);
+  }
+  assert.equal(api.canonicalType(" iban "), "BANK_ACCOUNT");
+  assert.equal(api.canonicalType("credential"), "SECRET");
+  assert.equal(api.canonicalType("employee_id"), "EMPLOYEE_ID");
+});
+
 // --- Referential integrity (mirrors tests/test_redact.py::TestRedactionOutput) ---
 
 test("referential integrity numbers each distinct value", () => {
@@ -371,6 +385,17 @@ test("referential integrity is not served from a plain cache hit", () => {
   assert.ok(labelled.redactedText.includes("EMAIL_1"));
   assert.ok(labelled.redactedText.includes("EMAIL_2"));
 });
+test("referential integrity labels a value once however it is spelled", () => {
+  // Since a detection's text is the document's (#150), the mapper keyed on it
+  // gave two spellings of one value two labels (rules-engine#159).
+  for (const [text, expected] of [
+    ["Mail jose\u0301@x.be of jos\u00e9@x.be", "Mail EMAIL_1 of EMAIL_1"],
+    ["Bel 0612345678 of \uff10\uff16\uff11\uff12\uff13\uff14\uff15\uff16\uff17\uff18", "Bel PHONE_1 of PHONE_1"],
+  ]) {
+    const r = new EuRedact().redact(text, { countries: ["NL"], referentialIntegrity: true, cache: false });
+    assert.equal(r.redactedText, expected);
+  }
+});
 
 // ── Cached results are the caller's own (rules-engine#150) ─────────────
 
@@ -380,6 +405,19 @@ test("mutating a cached result does not change the next one", () => {
   first.detections.length = 0;
   const again = sdk.redact("Mail piet@example.be", { countries: ["BE"] });
   assert.deepEqual(again.detections.map(d => d.text), ["piet@example.be"]);
+});
+
+test("mutating a cached result's evidence does not change the next one", () => {
+  // copy() left evidence and inferredCountries shared (rules-engine#159).
+  const sdk = new EuRedact();
+  const text = "IBAN BE71 0961 2345 6769";
+  const first = sdk.redact(text);
+  assert.ok(first.evidence.length > 0 && first.inferredCountries.length > 0);
+  first.evidence.length = 0;
+  first.inferredCountries.length = 0;
+  const again = sdk.redact(text);
+  assert.ok(again.evidence.length > 0);
+  assert.ok(again.inferredCountries.length > 0);
 });
 
 test("an NFC spelling is not answered with the cached NFD result", () => {
@@ -394,12 +432,13 @@ test("an NFC spelling is not answered with the cached NFD result", () => {
 
 test("a new BIC registry is not answered from the cache", () => {
   const sdk = new EuRedact();
-  const before = sdk.redact("BIC GEBABEBB", { countries: ["BE"] });
+  // ABCD is no known bank, so without a label the code is left alone until a
+  // registry vouches for it.
+  assert.equal(sdk.redact("ABCDBEBB", { countries: ["BE"] }).redactedText, "ABCDBEBB");
   try {
-    setBicRegistry(["GEBABEBB"]);
-    const after = sdk.redact("BIC GEBABEBB", { countries: ["BE"] });
-    // Computed afresh rather than served: a different object with its own detections.
-    assert.notEqual(after.detections, before.detections);
+    setBicRegistry(["ABCDBE"]);
+    // A stale cache answer would still be the unmasked text.
+    assert.equal(sdk.redact("ABCDBEBB", { countries: ["BE"] }).redactedText, "[BIC]");
     assert.equal((sdk as unknown as { cache: { store: Map<string, unknown> } }).cache.store.size, 2);
   } finally {
     setBicRegistry(null);

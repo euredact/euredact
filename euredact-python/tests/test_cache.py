@@ -87,12 +87,14 @@ class TestCachedResultsAreTheCallersOwn:
         from euredact.rules import bic_registry
         sdk = EuRedact()
         before = bic_registry.registry_generation()
-        sdk.redact("BIC GEBABEBB", countries=["BE"])
+        # ABCD is no known bank, so without a label the code is left alone
+        # until a registry vouches for it.
+        assert sdk.redact("ABCDBEBB", countries=["BE"]).redacted_text == "ABCDBEBB"
         try:
-            bic_registry.set_bic_registry({"GEBABEBB"})
+            bic_registry.set_bic_registry({"ABCDBE"})
             assert bic_registry.registry_generation() == before + 1
-            key_mode_changed = sdk.redact("BIC GEBABEBB", countries=["BE"])
-            assert key_mode_changed is not None
+            # A stale cache answer would still be the unmasked text.
+            assert sdk.redact("ABCDBEBB", countries=["BE"]).redacted_text == "[BIC]"
             # The second call computed afresh: its key differs, so the cache
             # now holds two entries for the one text.
             assert len(sdk._cache._store) == 2

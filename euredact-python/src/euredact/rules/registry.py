@@ -73,14 +73,13 @@ class CountryRegistry:
     def warn_unknown(self, country_code: str) -> None:
         """Warn that *country_code* is not recognised, without raising.
 
-        Detection continues with the shared, country-independent patterns.
-        Raising would invite callers to wrap the call in ``try/except`` and skip
-        redaction entirely — failing open, with unredacted PII.
+        The code is ignored and every pattern still runs. Raising would
+        invite callers to wrap the call in ``try/except`` and skip redaction
+        entirely — failing open, with unredacted PII.
         """
         warnings.warn(
-            f"Unknown country code: {country_code!r}. Continuing with "
-            f"shared country-independent patterns only (email, IBAN, "
-            f"international phone, credit card, ...). "
+            f"Unknown country code: {country_code!r}. It is ignored; every "
+            f"pattern still runs. "
             f"Available: {sorted(self.available_countries)}",
             UnknownCountryWarning,
             stacklevel=3,
@@ -92,8 +91,8 @@ class CountryRegistry:
         An unrecognised code returns ``None`` with a warning rather than
         raising: a redaction library that throws on an unknown locale invites
         callers to wrap it in ``try/except`` and skip redaction entirely,
-        which fails open and leaks PII. Detection continues with the shared
-        (country-independent) patterns.
+        which fails open and leaks PII. The code is ignored; every pattern
+        still runs.
         """
         code = self.resolve(country_code)
         if code is None:

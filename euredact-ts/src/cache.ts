@@ -25,6 +25,9 @@ function copy(result: RedactResult): RedactResult {
     ...result,
     detections: result.detections.map(d => ({ ...d })),
     exempted: result.exempted.map(e => ({ ...e })),
+    // Arrays in TypeScript, where Python has tuples (rules-engine#159).
+    evidence: result.evidence.map(e => ({ ...e })),
+    inferredCountries: result.inferredCountries.map(([c, w]) => [c, w] as [string, number]),
     tokens: { ...result.tokens },
   };
 }

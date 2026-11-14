@@ -381,19 +381,29 @@ function normalizeDomains(values: string[] | null | undefined): Map<string, stri
   return out;
 }
 
+/** A URL's authority: after the scheme, up to "/", "?", "#" or a backslash. */
+const URL_AUTHORITY = /^[a-z][a-z0-9+.\-]*:\/\/([^/?#\\]*)/;
+
+/**
+ * A URL's host, read as a browser reads it, the same in both SDKs: not what
+ * follows the last "@" of the query (rules-engine#152), and not WHATWG `URL`,
+ * which disagreed with the Python SDK on ports, IPv6 brackets and
+ * international hosts (rules-engine#159). Kept as written, without punycode.
+ */
+function urlHost(url: string): string | null {
+  const found = URL_AUTHORITY.exec(url);
+  if (found === null) return null;
+  let host = found[1].slice(found[1].lastIndexOf("@") + 1);
+  host = host.startsWith("[") ? host.slice(1).split("]")[0] : host.split(":")[0];
+  host = host.replace(/^\.+|\.+$/g, "");
+  return host || null;
+}
+
 /** The domain an exemption rule would apply to, or null. @internal Exported for tests. */
 export function domainOf(entityType: EntityType | string, value: string): string | null {
   if (!DOMAIN_BEARING.has(entityType)) return null;
   let v = allowlistKey(value);
-  if (v.includes("://")) {
-    // A URL's host, not whatever follows its last "@" (in the query, that
-    // exempted the whole URL and the number in it) (rules-engine#152).
-    try {
-      return new URL(v).hostname || null;
-    } catch {
-      return null;
-    }
-  }
+  if (v.includes("://")) return urlHost(v);
   if (v.includes("@")) return v.slice(v.lastIndexOf("@") + 1).replace(/^[<[(]+|[>\])(),;:"']+$/g, "") || null;
   v = v.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
   return v.split("/")[0].split(":")[0].replace(/^[<[(]+|[>\])(),;:"']+$/g, "") || null;
@@ -406,7 +416,9 @@ function matchingRule(
   allowed: Map<string, string>,
   domains: Map<string, string>,
 ): [string, "value" | "domain"] | null {
-  for (const candidate of [slice, det.text]) {
+  // The value as the patterns read it too: an entry "0612345678" is the
+  // full-width spelling of the same number (rules-engine#159).
+  for (const candidate of [slice, det.text, normalize(det.text)[0]]) {
     if (!candidate) continue;
     const exact = allowed.get(allowlistKey(candidate));
     if (exact !== undefined) return [exact, "value"];
@@ -788,7 +800,9 @@ export class EuRedact {
     if (tokenMapper !== null) return tokenMapper.getToken;
     if (referentialIntegrity) {
       const mapper = this.referentialMapper;
-      return (det) => mapper.getLabel(det.text, det.entityType);
+      // Keyed on the value as the patterns read it (NFC, ASCII digits): one
+      // value spelt two ways is one value (rules-engine#159).
+      return (det) => mapper.getLabel(normalize(det.text)[0], det.entityType);
     }
     return (det) => `[${det.entityType}]`;
   }
@@ -1009,7 +1023,8 @@ export class EuRedact {
     const redacted = applyReplacements(text, detections, this.labelFor(referentialIntegrity, tokenMapper));
 
     // Report the inference so it can be audited. Spans in `evidence` are
-    // offsets into the normalised text, matching `detections`.
+    // offsets into the normalised text that was scanned; unlike `detections`,
+    // they are not mapped back to the text as given.
     const inferredCountries = [...weightsToRanking(scores).entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 

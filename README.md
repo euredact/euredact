@@ -151,7 +151,7 @@ pip install 'euredact[cloud]'
 ```python
 import euredact
 
-euredact.configure(api_key="erk_...")          # or set EUREDACT_API_KEY
+euredact.configure(api_key="erk_...")          # or configure() with EUREDACT_API_KEY set
 result = euredact.redact(text, countries=["BE"], mode="cloud")
 
 result.source                                   # "cloud"
@@ -167,13 +167,14 @@ hold one code path.
 ```ts
 import { configure, redactAsync } from "euredact";
 
-configure({ apiKey: "erk_..." });               // or EUREDACT_API_KEY
+configure({ apiKey: "erk_..." });               // or configure() with EUREDACT_API_KEY set
 const result = await redactAsync(text, { countries: ["BE"], mode: "cloud" });
 ```
 
 The TypeScript client uses the platform's own `fetch`, so the package stays
 zero-dependency. Node 18+ provides one; on Node 16 the rules engine is
-unaffected and a `fetchImpl` can be supplied. `engines` is unchanged at
+unaffected, and cloud mode needs a global `fetch` polyfill (`Account`, `Jobs`
+and `Batches` also take a `fetchImpl`). `engines` is unchanged at
 `>=16.0.0`.
 
 ### It never falls back
@@ -193,8 +194,8 @@ window is polled transparently. Oversized input raises `TooLargeError` (413) —
 the service refuses it rather than chunking, because the model has never seen a
 chunk boundary. `QuotaExceededError` (429) and `CloudError` cover the rest.
 
-**The local rules engine is unchanged by any of this.** `mode="rules"` is the
-default and behaves exactly as it did in 0.3.9; both packages keep zero required
+**The local rules engine never touches the network.** `mode="rules"` is the
+default and makes no request; both packages keep zero required
 dependencies, with the Python HTTP client behind the `cloud` extra.
 
 ## Custom Patterns
@@ -342,10 +343,9 @@ documents (~3,450 chars), each document distinct.
 | Memory per country | ~50 KB | ~50 KB | ~50 KB |
 
 A spread is quoted because a single number misleads here: **cost tracks
-identifier density, not length.** Documents of *identical* length range over 4×
-— an ordinary chat log of 3,400 characters costs ~4.6 ms on `[fast]`, a
-form-like document of the same size dense in national IDs and IBANs costs
-~20 ms. Most of the time is not in the pattern scan but in the per-candidate
+identifier density, not length.** The real documents are all about the same
+length, and on `[fast]` their 10th–90th percentile still spans 6.2–15.8 ms.
+Most of the time is not in the pattern scan but in the per-candidate
 cue and suppressor checks that run for every match found, so the count of
 *candidates* is what you pay for.
 

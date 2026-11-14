@@ -30,7 +30,9 @@ from euredact.rules.bic_registry import set_bic_registry
 from euredact.rules.context import DocumentContext
 from euredact.sdk import EuRedact, restore
 from euredact.types import (
+    LEGACY_TYPE_ALIASES,
     CloudInfo,
+    CountryEvidence,
     Detection,
     DetectionSource,
     EntityType,
@@ -39,6 +41,7 @@ from euredact.types import (
     Unlocated,
     Usage,
     UsageFactor,
+    canonical_type,
 )
 
 __all__ = [
@@ -54,6 +57,9 @@ __all__ = [
     "Detection",
     "DetectionSource",
     "EntityType",
+    "CountryEvidence",
+    "LEGACY_TYPE_ALIASES",
+    "canonical_type",
     "Exemption",
     "EuRedact",
     "redact",
@@ -125,8 +131,6 @@ def redact(
     allowlist_domains: list[str] | None = None,
     exclude_types: list[str] | None = None,
     detect_dates: bool = False,
-    coref: bool = False,
-    coref_model: str = "default",
     cache: bool = True,
     idempotency_key: str | None = None,
 ) -> RedactResult:
@@ -151,8 +155,6 @@ def redact(
         allowlist_domains=allowlist_domains,
         exclude_types=exclude_types,
         detect_dates=detect_dates,
-        coref=coref,
-        coref_model=coref_model,
         cache=cache,
         idempotency_key=idempotency_key,
     )

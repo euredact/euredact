@@ -1,6 +1,6 @@
 import { DetectionSource, EntityType, type CountryConfig, type CountryEvidence, type Detection, type PatternDef } from "../types.js";
 import { MultiPatternMatcher, type RawMatch } from "./matchers.js";
-import { labelledAPassport, shouldSuppress, SuppressionScratch } from "./suppressors.js";
+import { activateScratch, labelledAPassport, shouldSuppress, SuppressionScratch } from "./suppressors.js";
 import { CUE_TARGETS, CUE_WINDOW, RESCUE_TARGETS, cuedType, retypedBy } from "./cues.js";
 import { detectStructuralDob } from "./structural.js";
 import { COUNTRY_CONFIGS } from "./countries/index.js";
@@ -100,9 +100,8 @@ function warnUnknownCountry(code: string): void {
   warnedCountries.add(code);
   const available = Object.keys(COUNTRY_CONFIGS).filter(c => c !== "SHARED").sort();
   console.warn(
-    `[euredact] Unknown country code: ${JSON.stringify(code)}. Continuing with ` +
-    `shared country-independent patterns only (email, IBAN, international ` +
-    `phone, credit card, ...). Available: ${available.join(", ")}`
+    `[euredact] Unknown country code: ${JSON.stringify(code)}. It is ignored; ` +
+    `every pattern still runs. Available: ${available.join(", ")}`
   );
 }
 
@@ -154,10 +153,9 @@ export class RuleEngine {
       for (const c of countryCodes) {
         const code = resolveCountryCode(c);
         if (code === null) {
-          // Detection continues with the shared, country-independent
-          // patterns. Throwing on an unknown locale invites callers to wrap
-          // the call in try/catch and skip redaction — failing open, with
-          // unredacted PII in the output.
+          // The code is ignored and every pattern still runs. Throwing on an
+          // unknown locale invites callers to wrap the call in try/catch and
+          // skip redaction — failing open, with unredacted PII in the output.
           warnUnknownCountry(c);
           continue;
         }
@@ -206,6 +204,21 @@ export class RuleEngine {
    * of scope. Neither gates what is looked for.
    */
   detectWithEvidence(
+    text: string,
+    countryCodes: string[] | null,
+    countryHint?: string[] | null,
+    priorEvidence?: CountryEvidence[] | null,
+  ): { detections: Detection[]; evidence: CountryEvidence[]; scores: Map<string, number> } {
+    try {
+      return this.detectWithEvidenceOnce(text, countryCodes, countryHint, priorEvidence);
+    } finally {
+      // The suppressors' line memos live on the call's scratch; nothing of the
+      // document outlives the call (rules-engine#159).
+      activateScratch(null);
+    }
+  }
+
+  private detectWithEvidenceOnce(
     text: string,
     countryCodes: string[] | null,
     countryHint?: string[] | null,
@@ -397,6 +410,7 @@ export class RuleEngine {
     // Whole-document facts a suppressor may need, derived at most once per call
     // and discarded with it.
     const scratch = new SuppressionScratch(text);
+    activateScratch(scratch);
 
     for (const { match, hasValidValidator } of validated) {
       if (shouldSuppress(text, match, scratch)) continue;
@@ -444,10 +458,19 @@ export class RuleEngine {
         }
         if (fragment && match.text.startsWith("+")
             && sameStartTypes.has(`${match.start}|${match.patternDef.entityType}`)) {
-          fragment = failedTyped.some(([zs, ze, t]) =>
-            zs >= match.start - longestFailed && zs <= match.start && ze >= match.end
-            && !(zs === match.start && ze === match.end)
-            && !(zs === match.start && t === match.patternDef.entityType));
+          // Only spans starting within longestFailed before us can enclose
+          // us: bisect to them rather than scan all (rules-engine#159).
+          let lo = 0, hi = failedTyped.length;
+          while (lo < hi) {
+            const mid = (lo + hi) >>> 1;
+            if (failedTyped[mid][0] < match.start - longestFailed) lo = mid + 1; else hi = mid;
+          }
+          fragment = false;
+          for (let i = lo; i < failedTyped.length && failedTyped[i][0] <= match.start; i++) {
+            const [zs, ze, t] = failedTyped[i];
+            if (ze >= match.end && !(zs === match.start && ze === match.end)
+                && !(zs === match.start && t === match.patternDef.entityType)) { fragment = true; break; }
+          }
         }
         if (fragment) continue;
       }

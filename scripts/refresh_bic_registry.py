@@ -3,6 +3,7 @@
 
     python3 scripts/refresh_bic_registry.py            # latest published file
     python3 scripts/refresh_bic_registry.py FILE.csv   # a downloaded CSV
+    python3 scripts/refresh_bic_registry.py FILE.zip   # a downloaded zip, as GLEIF publishes it
 
 Writes the same list to both SDKs, and the licence notice to both packages:
 
@@ -67,7 +68,12 @@ def _download() -> tuple[str, bytes]:
     with urllib.request.urlopen(LATEST, timeout=60) as resp:
         meta = json.load(resp)["data"]["attributes"]
     with urllib.request.urlopen(meta["downloadLink"].replace("\\/", "/"), timeout=120) as resp:
-        archive = zipfile.ZipFile(io.BytesIO(resp.read()))
+        return _from_zip(resp.read())
+
+
+def _from_zip(data: bytes) -> tuple[str, bytes]:
+    """The CSV inside a GLEIF zip, with its name, which carries the version."""
+    archive = zipfile.ZipFile(io.BytesIO(data))
     name = next(n for n in archive.namelist() if n.lower().endswith(".csv"))
     return name, archive.read(name)
 
@@ -174,7 +180,12 @@ def write(version: str, source: str, by_country: dict[str, list[str]]) -> int:
 def main() -> int:
     if len(sys.argv) > 1:
         path = Path(sys.argv[1])
-        name, data = path.name, path.read_bytes()
+        # A zip's own name (LEI-BIC-20261030.zip) is not the version's source;
+        # the CSV inside it is, as for a download (rules-engine#163).
+        if path.suffix.lower() == ".zip":
+            name, data = _from_zip(path.read_bytes())
+        else:
+            name, data = path.name, path.read_bytes()
     else:
         name, data = _download()
     version = _version(name)

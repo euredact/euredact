@@ -22,7 +22,9 @@ From 1.0.0 (decided 2026-11-14) releases follow the README's
   everything merged since the last minor release — new identifiers, countries,
   options, cloud features. A minor release always re-measures the accuracy
   figures on the release commit (step 3) and regenerates
-  `docs/corpus-results.{json,md}`.
+  `docs/corpus-results.{json,md}`. Before it, refresh the bundled BIC list
+  with the `bic-refresh` skill: its own issue and PR, merged before the
+  release commit, so the release measures the list it ships.
 - **`1.x.y`, whenever needed**: a fix for a value left unredacted
   (`sev:leak`) or for a broken release, as soon as it is merged and verified.
   Do not hold a leak fix for the quarter. A patch release carries only fixes:
@@ -53,18 +55,29 @@ euredact-python/src/euredact/__init__.py  __version__ = "X.Y.Z"
 euredact-ts/package.json                  "version": "X.Y.Z"
 ```
 
+Then let npm carry it into the lockfile, which otherwise keeps the old version:
+`(cd euredact-ts && npm install --package-lock-only --ignore-scripts)`.
+
 Verify none was missed:
 
 ```bash
 grep -m1 '^version' euredact-python/pyproject.toml
 grep -m1 '__version__' euredact-python/src/euredact/__init__.py
 python3 -c "import json;print(json.load(open('euredact-ts/package.json'))['version'])"
+python3 -c "import json;print(json.load(open('euredact-ts/package-lock.json'))['version'])"
 ```
 
 ## 2. Date the changelogs
 
 Turn `## Unreleased` into `## X.Y.Z (YYYY-MM-DD)` in **both**
 `euredact-python/CHANGELOG.md` and `euredact-ts/CHANGELOG.md`.
+
+The root `CHANGELOG.md` is different (Keep a Changelog, held by
+`tests/test_changelog.py`):
+- keep `## [Unreleased]`, now empty, and add `## [X.Y.Z] - YYYY-MM-DD` beneath
+  it with the entries;
+- point the `[Unreleased]` link at `compare/vX.Y.Z...main`;
+- add an `[X.Y.Z]` link to `compare/vPREV...vX.Y.Z`.
 
 Quote only figures that reproduce. If accuracy numbers are cited, re-measure
 them on the current ground truth rather than carrying forward an older run —
@@ -74,15 +87,16 @@ comparison.
 ## 3. Run the checks locally before pushing
 
 ```bash
-make verify
+make verify RESULTS=docs/corpus-results
 ```
 
 `make check` alone is only what CI runs — lint, both suites, conformance. It
 does **not** cover the corpus, because the corpus lives outside the repository.
 `make verify` adds the three that need it:
 
-- **`make sweep`** — structural properties over every document we have
-  (~187,000). This is where the ranking bugs live. `countries=["NL"]` turning
+- **`make sweep`** — structural properties over 20,000 documents sampled
+  evenly from both corpora (`SWEEP_LIMIT`; `make sweep-full` walks all
+  ~187,000). This is where the ranking bugs live. `countries=["NL"]` turning
   the IP address `194.232.104.77` into a national ID and leaving `.77` in the
   output was found here; the twenty-document version in CI said nothing.
 - **`make parity`** — do both SDKs mask the same characters? Conformance
@@ -95,23 +109,68 @@ does **not** cover the corpus, because the corpus lives outside the repository.
   number quoted in the changelog is one that was just measured rather than
   carried forward.
 
+If the corpus is not on this machine, the three corpus checks cannot run, and
+`make check` is not a substitute. Say so before going further. Release only if
+the owner says to, and record in the release commit that they were skipped.
+Any figure quoted in the changelog then has not been re-measured, so say that
+too. 0.6.0 went out this way.
+
 Run `make verify` after any change to ranking, suppression or validation, not
 just before a release. `ruff` alone has caught a real import-format error that
 would otherwise have failed the release, so do not skip the fast half either.
 
-## 4. Commit, then tag *that* commit
+## 4. Commit, push `main` to both remotes, check, *then* tag
+
+There are two remotes and only one of them publishes. In this checkout `origin`
+is **Forgejo**. `publish.yml`, the GitHub Release and both publish jobs run on
+**GitHub**, and `git push origin` reaches nothing there.
 
 ```bash
-git add -A && git commit          # "Release X.Y.Z"
-git tag -a vX.Y.Z -m "..."        # AFTER the commit, never before
+GH=git@github.com:euredact/euredact.git   # the GitHub repo publish.yml runs in
+
+git add -A && git commit                  # "Release X.Y.Z"
 git push origin main
+git push "$GH" HEAD:refs/heads/main
+
+scripts/release_refs.sh vX.Y.Z            # GATE: must print "ok" before you tag
+
+git tag -a vX.Y.Z -m "..."                # AFTER the commit and the gate, never before
 git push origin vX.Y.Z
+git push "$GH" refs/tags/vX.Y.Z
+
+scripts/release_refs.sh vX.Y.Z --tagged   # GATE: must print "ok" before step 5
 ```
 
-Tagging before the bump commit produces a tag whose code still declares the
-previous version. The workflow then builds the old version and npm rejects it
-with `You cannot publish over the previously published versions` — an error
-that reads as a workflow problem but is a tag-ordering problem.
+`scripts/release_refs.sh` is read-only. It refuses unless:
+- the working tree is clean;
+- `HEAD`, Forgejo `main` and GitHub `main` are the same commit;
+- neither remote already has `vX.Y.Z` on another commit.
+
+With `--tagged`, it also requires the tag on both remotes, on `HEAD`.
+`GITHUB_REMOTE` / `FORGEJO_REMOTE` override the URLs, and
+`tests/test_release_refs.py` replays the 0.6.0 failure against it.
+
+**If it fails, stop.** Fix the remote it names and run it again. Do not tag
+around it, and do not create the Release. It reads over anonymous HTTPS, so it
+runs anywhere. Pushing to GitHub needs credentials: if this machine has none,
+the pushes go from a machine that has them, such as the Forgejo box (see the
+`release-github-remote` memory). The gate is then run again here.
+
+Why both remotes and why this order:
+
+- **0.6.0 was pushed to Forgejo only.** GitHub `main` was still on the 0.5.1
+  commit. The GitHub Release then created its own `v0.6.0` there, and publish
+  rebuilt 0.5.1. Both registries skipped it as already published, and the run
+  reported **success**. Only step 6 showed nothing had shipped.
+- **Tagging before the bump commit** produces a tag whose code still declares
+  the previous version. The workflow builds the old version, and npm rejects it
+  with `You cannot publish over the previously published versions`. That error
+  reads as a workflow problem but is a tag-ordering problem.
+
+If GitHub already has a wrong `vX.Y.Z`, for example one a Release created,
+move it with `git push --force "$GH" refs/tags/vX.Y.Z`. Do that only when
+nothing published from it, and ask first: it rewrites a published ref. Then
+publish with `workflow_dispatch` on `main` (see *Recovering a failed publish*).
 
 The publish workflow runs on GitHub, which receives `main` through Forgejo's
 push mirror. Before tagging, check that GitHub's `main` is the release commit
@@ -125,7 +184,13 @@ vector, and every push since had failed; the fix was a history rewrite
 ## 5. Create a GitHub Release, set as latest
 
 `publish.yml` triggers on `release: [published]` — **a tag push alone publishes
-nothing.** Create the Release from the tag and mark it latest.
+nothing.** Create the Release only after `scripts/release_refs.sh vX.Y.Z --tagged`
+printed `ok`. Create it from the existing tag and mark it latest. If the Release
+form offers to *create* the tag, GitHub does not have it, and the new tag would
+land on whatever GitHub `main` is. Stop and go back to step 4.
+
+The release is not done when the Release exists, or when the run is green.
+It is done when step 6 passes.
 
 **Always hand over the release body as text in the reply, inside a fenced block
 they can copy.** Not as an attachment, and not as "the changelog drops in" —
