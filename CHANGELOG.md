@@ -27,6 +27,8 @@ which both test suites run.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-14
+
 ### Added
 
 - Versioning: from 1.0.0 the API follows Semantic Versioning (nothing public is removed or renamed within 1.x; detection changes are not breaking and are always listed), with minor releases quarterly and patch releases for leaks whenever needed. See the README's Versioning section.
@@ -477,7 +479,8 @@ which both test suites run.
 
 - First release. *(Python only)* 31 countries, 20+ PII entity types, checksum validation, two-pass detection, context-aware detection, batch processing, true async, referential integrity, Aho-Corasick acceleration, and zero required dependencies.
 
-[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v0.8.0...main
+[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v1.0.0...main
+[1.0.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.8.0...v1.0.0
 [0.8.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.1...v0.8.0
 [0.7.1]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.0...v0.7.1
 [0.7.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.6.0...v0.7.0

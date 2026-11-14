@@ -1,6 +1,6 @@
-# Corpus results — euredact 0.8.0 (`a6084bd`)
+# Corpus results — euredact 1.0.0 (`fc82c25`)
 
-Generated 2026-10-31 by `make eval` from `corpus-results.json`, which carries the same figures. Per entity type, under the names the API returns. No aggregate figure is given: each row stands with the conditions below (rules-engine#109).
+Generated 2026-11-14 by `make eval` from `corpus-results.json`, which carries the same figures. Per entity type, under the names the API returns. No aggregate figure is given: each row stands with the conditions below (rules-engine#109).
 
 ## Conditions
 
@@ -35,7 +35,7 @@ Generated 2026-10-31 by `make eval` from `corpus-results.json`, which carries th
 | `PASSPORT` | 1,072 | 879 | 0 | 0 | 193 | 82.00% | 879 | 0 | 100.00% | PASSPORT |
 | `PHONE` | 123,151 | 122,934 | 164 | 51 | 2 | 99.82% | 122,988 | 3 | 100.00% | PHONE |
 | `POSTAL_CODE` | 53,914 | 53,897 | 10 | 0 | 7 | 99.97% | 53,925 | 28 | 99.95% | POSTAL_CODE |
-| `SECRET` | 5,798 | 5,254 | 77 | 175 | 153 | 90.62% | 5,259 | 174 | 96.69% | SECRET |
+| `SECRET` | 5,798 | 5,255 | 77 | 174 | 153 | 90.63% | 5,259 | 174 | 96.69% | SECRET |
 | `SOCIAL_HANDLE` | 2,267 | 2,267 | 0 | 0 | 0 | 100.00% | 2,267 | 0 | 100.00% | SOCIAL_HANDLE |
 | `SSN` | 1,288 | 1,288 | 0 | 0 | 0 | 100.00% | 14,511 | 1 | 99.99% | SOCIAL_SECURITY (also accepts NATIONAL_ID) |
 | `TAX_ID` | 3,729 | 3,729 | 0 | 0 | 0 | 100.00% | 14,969 | 0 | 100.00% | TAX_ID, TAX_ID_PERSONAL |
@@ -65,7 +65,7 @@ Optional: `DOB` — support 89,805, recall 100.00%, detections 89,805, FP 0, pre
 | `PASSPORT` | 1,072 | 879 | 0 | 0 | 193 | 82.00% | 879 | 0 | 100.00% | PASSPORT |
 | `PHONE` | 123,151 | 122,169 | 929 | 51 | 2 | 99.20% | 122,334 | 114 | 99.91% | PHONE |
 | `POSTAL_CODE` | 53,914 | 53,897 | 10 | 0 | 7 | 99.97% | 53,925 | 28 | 99.95% | POSTAL_CODE |
-| `SECRET` | 5,798 | 5,254 | 77 | 175 | 153 | 90.62% | 5,259 | 174 | 96.69% | SECRET |
+| `SECRET` | 5,798 | 5,255 | 77 | 174 | 153 | 90.63% | 5,259 | 174 | 96.69% | SECRET |
 | `SOCIAL_HANDLE` | 2,267 | 2,267 | 0 | 0 | 0 | 100.00% | 2,267 | 0 | 100.00% | SOCIAL_HANDLE |
 | `SSN` | 1,288 | 1,283 | 5 | 0 | 0 | 99.61% | 14,598 | 86 | 99.41% | SOCIAL_SECURITY (also accepts NATIONAL_ID) |
 | `TAX_ID` | 3,729 | 3,709 | 20 | 0 | 0 | 99.46% | 15,171 | 102 | 99.33% | TAX_ID, TAX_ID_PERSONAL |
@@ -136,4 +136,4 @@ Labels per category: `EMAIL` 152,938, `IBAN` 126,428, `PHONE` 123,151, `NATIONAL
 
 ## Regression records
 
-606 records from `tests/regression_corpus.py`, 0 failures, checked in both modes.
+648 records from `tests/regression_corpus.py`, 0 failures, checked in both modes.

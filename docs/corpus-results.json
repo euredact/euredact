@@ -1,12 +1,12 @@
 {
  "engine": {
   "package": "euredact",
-  "version": "0.8.0",
-  "commit": "a6084bd",
-  "describe": "v0.7.1-7-ga6084bd",
+  "version": "1.0.0",
+  "commit": "fc82c25",
+  "describe": "v0.8.0-23-gfc82c25",
   "released": true
  },
- "generated": "2026-10-31",
+ "generated": "2026-11-14",
  "corpus": {
   "files": [
    {
@@ -653,9 +653,9 @@
    },
    "SECRET": {
     "support": 5798,
-    "hits": 5254,
+    "hits": 5255,
     "mistyped": 77,
-    "partial": 175,
+    "partial": 174,
     "misses": 153,
     "unlocatable": 139,
     "categories": [
@@ -664,7 +664,7 @@
     "detections": 5259,
     "tp": 5085,
     "fp": 174,
-    "recall": 90.62,
+    "recall": 90.63,
     "precision": 96.69,
     "also_accepts": []
    },
@@ -1079,9 +1079,9 @@
    },
    "SECRET": {
     "support": 5798,
-    "hits": 5254,
+    "hits": 5255,
     "mistyped": 77,
-    "partial": 175,
+    "partial": 174,
     "misses": 153,
     "unlocatable": 139,
     "categories": [
@@ -1090,7 +1090,7 @@
     "detections": 5259,
     "tp": 5085,
     "fp": 174,
-    "recall": 90.62,
+    "recall": 90.63,
     "precision": 96.69,
     "also_accepts": []
    },
@@ -1216,7 +1216,7 @@
   ]
  },
  "regressions": {
-  "records": 606,
+  "records": 648,
   "failures": 0
  }
 }
