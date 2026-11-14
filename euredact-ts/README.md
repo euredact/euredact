@@ -1667,12 +1667,27 @@ import { redact } from "euredact";   // esbuild --platform=browser, webpack, Vit
 
 ## Versioning
 
-From 1.0.0 the API (function and option names, result fields, `EntityType`
-names, error classes) follows Semantic Versioning: nothing is removed or renamed
-within 1.x. What is detected is not part of that promise, so that a fix for a
-value left unredacted can ship in any release. Minor releases come quarterly
-(February, May, August, November); patch releases with such fixes come whenever
-needed. Details: [Versioning](https://github.com/euredact/euredact#versioning).
+From 1.0.0 the public API follows Semantic Versioning: within 1.x nothing in it
+is removed, renamed or changed in meaning. It covers:
+
+- the exported functions, classes and options, result fields, `EntityType`
+  names and error classes;
+- the placeholder formats: `[TYPE]` by default, `TYPE_N` with `referentialIntegrity: true`
+  (one value keeps its *N* until `clear()`), and `TYPE_XXXX` with `tokenize: true`
+  (four characters from `BCDFGHJKLMNPQRSTVWXZ23456789`, what `restore()` reads);
+  cloud mode always sends the service `[TYPE]`;
+- the country codes: ISO 3166-1 alpha-2, with `UK` and `EL` for `GB` and `GR`
+  (`availableCountries()`).
+
+What is detected is not part of that promise. A new or stricter pattern, a leak
+fix or a changed type is a detection change, never breaking: new detection
+ships in a minor release (quarterly: February, May, August, November), a leak
+fix in a patch release whenever needed.
+
+**Supported versions:** 1.0.x is current and receives every fix; 0.x is
+unsupported from 1.0.0. When the next minor ships, the previous one receives
+leak fixes for three more months. Details:
+[Versioning](https://github.com/euredact/euredact#versioning).
 
 ## License
 

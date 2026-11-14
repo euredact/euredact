@@ -437,16 +437,50 @@ euredact-ts/        TypeScript/Node.js SDK (npm install euredact)
 ## Versioning
 
 From 1.0.0, euRedact follows [Semantic Versioning](https://semver.org/) for its
-**API**: function and option names, result fields, `EntityType` names and error
-classes. Within 1.x nothing is removed or renamed; a deprecated name keeps
-working, warns, and goes no earlier than 2.0. `IBAN` and `CREDENTIAL` remain
-aliases of `BANK_ACCOUNT` and `SECRET` throughout 1.x.
+**public API**, defined below. Within 1.x nothing in it is removed, renamed or
+changed in meaning; a deprecated name keeps working, warns, and goes no earlier
+than 2.0. Adding to it (a new function, option, result field, entity type or
+country) is not breaking. Both SDKs always carry the same version number.
 
-**What is detected is not part of that promise.** Every release masks something
-more, or more precisely, and a fix for a leak must be able to ship in any
-release. A change in detection is never treated as breaking; each one is listed
-in the changelog, with its conformance vector and, for a minor release, the
-re-measured accuracy figures.
+### The public API
+
+- **Functions, classes and options** exported from the package (`redact`,
+  `EuRedact`, `restore`, `configure`, the cloud clients, …), with their names
+  and option names in each SDK's spelling (`exclude_types` / `excludeTypes`).
+  New options are always optional.
+- **Result fields** of `RedactResult`, `Detection`, `Exemption` and the cloud
+  results, with their types.
+- **Entity type names**: the `EntityType` values. `IBAN` and `CREDENTIAL` remain
+  aliases of `BANK_ACCOUNT` and `SECRET` throughout 1.x.
+- **Error classes** and their hierarchy: every cloud error is a `CloudError`.
+- **Placeholder formats.** The redacted text uses exactly these, in both SDKs:
+
+  | Output | Format | Example |
+  |---|---|---|
+  | default | `[TYPE]` | `[EMAIL]` |
+  | `referential_integrity` | `TYPE_N`, *N* a positive integer; one value keeps its *N* on an instance until `clear()` | `EMAIL_1` |
+  | `tokenize` | `TYPE_XXXX`: four characters from `BCDFGHJKLMNPQRSTVWXZ23456789`, random per call; what `restore()` reads | `EMAIL_K7Q2` |
+
+  *TYPE* is the entity type, or a custom pattern's name. Cloud mode sends the
+  service `[TYPE]` placeholders whatever the output format; that is the syntax
+  the cloud model is trained on.
+- **Country codes**: ISO 3166-1 alpha-2, case-insensitive, with `UK` and `EL`
+  accepted for `GB` and `GR`. No supported country is dropped within 1.x;
+  `available_countries()` lists them. An unknown code warns and is ignored.
+
+Not part of it: names starting with `_` or marked `@internal`, modules the
+package does not export, the order in which referential numbers are handed
+out, and the cloud *service* itself, which is a public beta (the SDK's cloud
+API above is covered).
+
+### What is detected is not part of that promise
+
+Every release masks something more, or more precisely. A new or stricter
+pattern, a fix for a value left unredacted, or a span that now gets a different
+type is a **detection change**. It is never treated as breaking: new detection
+ships in a minor release and a leak fix in a patch release, and neither needs
+2.0. Each one is listed in the changelog, with its conformance vector and, for
+a minor release, the re-measured accuracy figures.
 
 Releases follow a quarterly rhythm:
 
@@ -456,7 +490,17 @@ Releases follow a quarterly rhythm:
 - **`1.x.y`**, whenever needed: fixes for values left unredacted (a leak) or a
   broken release, outside the quarterly cycle and as soon as they are verified.
 
-Both SDKs always carry the same version number.
+### Supported versions
+
+| Version | Status | Receives |
+|---|---|---|
+| 1.0.x | current | every fix |
+| 0.x | unsupported from 1.0.0 | nothing; upgrade to 1.0 |
+
+The latest minor release receives every fix. When the next one ships, the
+previous minor receives fixes for values left unredacted (`sev:leak`) for three
+more months, then nothing. Both SDKs are supported together, at the same
+version.
 
 ## Changelog
 
