@@ -92,6 +92,29 @@ class RateLimitedError(QuotaExceededError):
     """
 
 
+class InsufficientCreditsError(CloudError):
+    """402: the account's Budget and extra volume are spent.
+
+    Raised at once and never retried: like the daily quota, it holds until the
+    next period or a top-up (rules-engine#145). The numbers come from the
+    gateway's ``detail``; one it did not send, or sent malformed, is ``None``,
+    and ``detail`` keeps the whole object.
+    """
+
+    def __init__(self, message: str, *, status: int | None = 402,
+                 detail: dict | None = None) -> None:
+        super().__init__(message, status=status, detail=detail)
+        d = self.detail
+        #: Credits left on the account.
+        self.balance: int | None = _integer(d.get("balance"))
+        #: Credits the request needed: its prompt plus the largest response.
+        self.required: int | None = _integer(d.get("required"))
+        #: ``required - balance``: what a top-up has to cover.
+        self.shortfall: int | None = _integer(d.get("shortfall"))
+        self.prompt_tokens: int | None = _integer(d.get("prompt_tokens"))
+        self.max_response_tokens: int | None = _integer(d.get("max_response_tokens"))
+
+
 class NotFoundError(CloudError):
     """404: no such job, batch or key -- or one belonging to another account,
     which the service deliberately does not distinguish."""
@@ -300,6 +323,8 @@ class _BaseClient:
         detail = payload.get("detail") or {}
         if status == 401:
             raise CloudError(f"authentication failed: {error}", status=status)
+        if status == 402:
+            raise InsufficientCreditsError(error, status=status, detail=detail)
         if status == 404:
             raise NotFoundError(error, status=status, detail=detail)
         if status == 410:

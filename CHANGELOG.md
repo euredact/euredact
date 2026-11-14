@@ -27,6 +27,11 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Added
+
+- `InsufficientCreditsError`: a cloud call on an account whose Budget and extra volume are spent (HTTP 402) raises it at once, never retried, with `balance`, `required`, `shortfall`, `prompt_tokens` and `max_response_tokens` from the service's detail. It is a `CloudError`, which a 402 raised before. *(rules-engine#145)*
+- `Credits.budget` and `Credits.extra`: what the balance is made of, this period's Budget (`granted`, `remaining`, `expires_at`) and prepaid extra volume (`remaining`, `next_expiry`, `expiring_next`). The Budget is used first. Both are `None` when the service sends none. *(rules-engine#146)*
+
 ### Fixed
 
 - With `[fast]` installed (google-re2), values written with Unicode spaces were left in the text: a French phone grouped with no-break spaces (`06\u00a012\u00a034\u00a056\u00a078`), an IBAN grouped the same way. The re2 prefilter read `\s`, `\d`, `\w` and `\b` as ASCII and skipped patterns Python would have matched; it now reads the text folded to ASCII stand-ins chosen by Python's own character classes, and matches exactly what the pure-Python install does. *(Python only)* *(rules-engine#150)*

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "How both SDKs read what the cloud service returns beyond spans (rules-engine#89): a result's `cloud` block, which 429 is final, a batch's cost fields, and the account and job endpoints an API key may call. Wire payloads are the gateway's JSON (euredact-inference f2ea1d9); expectations use the Python field names, and the TypeScript test compares after converting its camelCase names. A field of the wrong type reads as null; nothing here may fail a request. `usage` parsing has its own file, cloud_usage.json.",
+  "description": "How both SDKs read what the cloud service returns beyond spans (rules-engine#89): a result's `cloud` block, which 429 is final, a batch's cost fields, and the account and job endpoints an API key may call. Wire payloads are the gateway's JSON (euredact-inference f2ea1d9); expectations use the Python field names, and the TypeScript test compares after converting its camelCase names. A field of the wrong type reads as null; nothing here may fail a request. `usage` parsing has its own file, cloud_usage.json. A 402 is the Budget and extra volume spent (rules-engine#145): InsufficientCreditsError, never retried, its numbers read from `detail` (absent or malformed -> null). `account.credits*` include the Budget and extra-volume breakdown (rules-engine#146), null when the service sends none.",
   "results": [
     {
       "id": "full-answer",
@@ -361,7 +361,9 @@
         "balance": 94880,
         "granted": 100000,
         "spent": 5120,
-        "unit": "tokens"
+        "unit": "tokens",
+        "budget": null,
+        "extra": null
       }
     },
     "credit_history": {
@@ -562,6 +564,119 @@
         "created_at": null,
         "has_result": true
       }
+    },
+    "credits_with_budget_and_extra": {
+      "wire": {
+        "balance": 1180000,
+        "granted": 1500000,
+        "spent": 320000,
+        "unit": "tokens",
+        "budget": {
+          "granted": 250000,
+          "remaining": 180000,
+          "expires_at": "2026-12-01T00:00:00+00:00"
+        },
+        "extra": {
+          "remaining": 1000000,
+          "next_expiry": "2027-11-20T10:12:00+00:00",
+          "expiring_next": 1000000
+        }
+      },
+      "expect": {
+        "balance": 1180000,
+        "granted": 1500000,
+        "spent": 320000,
+        "unit": "tokens",
+        "budget": {
+          "granted": 250000,
+          "remaining": 180000,
+          "expires_at": "2026-12-01T00:00:00+00:00"
+        },
+        "extra": {
+          "remaining": 1000000,
+          "next_expiry": "2027-11-20T10:12:00+00:00",
+          "expiring_next": 1000000
+        }
+      }
+    },
+    "credits_extra_only": {
+      "wire": {
+        "balance": 1000000,
+        "granted": 1000000,
+        "spent": 0,
+        "unit": "tokens",
+        "budget": null,
+        "extra": {
+          "remaining": 1000000,
+          "next_expiry": null,
+          "expiring_next": "soon"
+        }
+      },
+      "expect": {
+        "balance": 1000000,
+        "granted": 1000000,
+        "spent": 0,
+        "unit": "tokens",
+        "budget": null,
+        "extra": {
+          "remaining": 1000000,
+          "next_expiry": null,
+          "expiring_next": null
+        }
+      }
     }
-  }
+  },
+  "insufficient_credits": [
+    {
+      "id": "gateway-credits-spent",
+      "status": 402,
+      "json": {
+        "error": "not enough credits: 120 left, 2,890 needed",
+        "detail": {
+          "balance": 120,
+          "required": 2890,
+          "prompt_tokens": 1890,
+          "max_response_tokens": 1000,
+          "shortfall": 2770
+        }
+      },
+      "expect": {
+        "balance": 120,
+        "required": 2890,
+        "shortfall": 2770,
+        "prompt_tokens": 1890,
+        "max_response_tokens": 1000
+      }
+    },
+    {
+      "id": "detail-partly-missing-or-malformed",
+      "status": 402,
+      "json": {
+        "error": "not enough credits",
+        "detail": {
+          "balance": 0,
+          "required": "lots"
+        }
+      },
+      "expect": {
+        "balance": 0,
+        "required": null,
+        "shortfall": null,
+        "prompt_tokens": null,
+        "max_response_tokens": null
+      }
+    },
+    {
+      "id": "a-402-without-json",
+      "status": 402,
+      "text": "<html><body>Payment Required</body></html>",
+      "expect": {
+        "balance": null,
+        "required": null,
+        "shortfall": null,
+        "prompt_tokens": null,
+        "max_response_tokens": null
+      }
+    }
+  ]
 }

@@ -34,6 +34,7 @@ import {
   CloudError,
   NotConfiguredError,
   NotFoundError,
+  InsufficientCreditsError,
   QuotaExceededError,
   RateLimitedError,
   ResultExpiredError,
@@ -243,6 +244,7 @@ export function cloudErrorFor(status: number, payload: Record<string, unknown>):
   const detail = (payload.detail && typeof payload.detail === "object"
     ? payload.detail : {}) as Record<string, unknown>;
   if (status === 401) return new CloudError(`authentication failed: ${message}`, status);
+  if (status === 402) return new InsufficientCreditsError(message, status, detail);
   if (status === 404) return new NotFoundError(message, status, detail);
   if (status === 410) return new ResultExpiredError(message, status, detail);
   if (status === 413) return new TooLargeError(message, status, detail);

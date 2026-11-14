@@ -13,6 +13,32 @@ narrative lives. Sections here use that vocabulary
 
 ## Unreleased
 
+### Added
+
+- **`InsufficientCreditsError` for a 402.** Once metering is on, a cloud
+  call on an account whose Budget and extra volume are spent gets HTTP 402.
+  The SDK raised a plain `CloudError` for it, so a caller had to branch on
+  `status == 402` (rules-engine#145). It now raises
+  `InsufficientCreditsError`, a `CloudError` subclass, so existing handlers
+  still catch it. It is never retried: like the daily-quota 429, it holds
+  until the next period or a top-up. `balance`, `required`, `shortfall`,
+  `prompt_tokens` and `max_response_tokens` are read from the gateway's
+  `detail`; one it did not send, or sent malformed, is `None`, and `detail`
+  keeps the whole object. Every call raises it the same way: `redact`,
+  `Account`, `Jobs` and `Batches`.
+- **The credit balance broken down.** `Account().credits()` read only
+  `balance`, `granted`, `spent` and `unit`; the service also says what the
+  balance is made of, which callers could reach only through `raw`
+  (rules-engine#146). `Credits` gains `budget` (`granted`, `remaining`,
+  `expires_at`: this period's Budget, used first and lapsing at the period's
+  end) and `extra` (`remaining`, `next_expiry`, `expiring_next`: prepaid
+  volume, used after the Budget). Either is `None` when the service sends
+  none, from an account without a Budget or an older service, and `raw` is
+  unchanged.
+- Both are tested by new cases in `conformance/cloud_result.json`, run by
+  both SDKs: three 402 bodies (full, partly malformed, not JSON) and three
+  credit answers (no breakdown, Budget and extra, extra only).
+
 ### Fixed
 
 - **Values written with Unicode spaces and digits** *(rules-engine#150)*.

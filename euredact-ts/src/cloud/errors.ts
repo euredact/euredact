@@ -56,6 +56,38 @@ export class RateLimitedError extends QuotaExceededError {
   }
 }
 
+const detailInt = (detail: Record<string, unknown>, key: string): number | null => {
+  const v = detail[key];
+  return typeof v === "number" && Number.isInteger(v) ? v : null;
+};
+
+/**
+ * 402: the account's Budget and extra volume are spent. Thrown at once and
+ * never retried: like the daily quota, it holds until the next period or a
+ * top-up (rules-engine#145). The numbers come from the gateway's `detail`; one
+ * it did not send, or sent malformed, is null, and `detail` keeps the object.
+ */
+export class InsufficientCreditsError extends CloudError {
+  /** Credits left on the account. */
+  readonly balance: number | null;
+  /** Credits the request needed: its prompt plus the largest response. */
+  readonly required: number | null;
+  /** `required - balance`: what a top-up has to cover. */
+  readonly shortfall: number | null;
+  readonly promptTokens: number | null;
+  readonly maxResponseTokens: number | null;
+
+  constructor(message: string, status = 402, detail?: Record<string, unknown>) {
+    super(message, status, detail);
+    this.name = "InsufficientCreditsError";
+    this.balance = detailInt(this.detail, "balance");
+    this.required = detailInt(this.detail, "required");
+    this.shortfall = detailInt(this.detail, "shortfall");
+    this.promptTokens = detailInt(this.detail, "prompt_tokens");
+    this.maxResponseTokens = detailInt(this.detail, "max_response_tokens");
+  }
+}
+
 /** 404: no such job, batch or key -- or another account's, which the service
  *  deliberately does not distinguish. */
 export class NotFoundError extends CloudError {

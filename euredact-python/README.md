@@ -751,6 +751,14 @@ is not, because a key cannot do it.
 | `Jobs().retrieve(job_id)` | `GET /v1/jobs/{id}` | `Job` |
 | `Batches().list(limit=20)` | `GET /v1/batches` | `list[Batch]`, newest first; `limit` 1–100 |
 
+`Credits.balance` is what is left in all: this period's Budget
+(`credits.budget`: `granted`, `remaining`, `expires_at`) plus prepaid extra
+volume (`credits.extra`: `remaining`, `next_expiry`, `expiring_next`). A call
+uses the Budget first, then extra volume; Budget left at `expires_at` lapses.
+"How much is left this month" is `credits.budget.remaining`. Either breakdown
+is `None` when the service sends none — an account without a Budget, or an
+older service — and `raw` keeps the whole answer.
+
 ```python
 from euredact.cloud import Account, Batches, Jobs
 
@@ -758,7 +766,11 @@ with Account() as account:
     summary = account.summary()
     if summary.quota_remaining is not None and summary.quota_remaining < 100:
         print(f"{summary.quota_remaining} documents left today")
-    print(account.credits().balance)
+    credits = account.credits()
+    if credits.budget is not None:          # this period's Budget, used first
+        print(f"{credits.budget.remaining} left this period, until {credits.budget.expires_at}")
+    if credits.extra is not None:           # prepaid extra volume, used after the Budget
+        print(f"{credits.extra.remaining} extra, {credits.extra.expiring_next} expiring {credits.extra.next_expiry}")
     for day in account.usage(days=7):
         print(day.day, day.documents, day.tokens, day.failures)
     for key in account.keys():
@@ -893,8 +905,8 @@ of `QuotaExceededError`.
 
 ```python
 from euredact.cloud import (
-    CloudError, NotFoundError, QuotaExceededError, RateLimitedError,
-    ResultExpiredError, TooLargeError,
+    CloudError, InsufficientCreditsError, NotFoundError, QuotaExceededError,
+    RateLimitedError, ResultExpiredError, TooLargeError,
 )
 
 try:
@@ -904,6 +916,9 @@ except RateLimitedError:
     ...  # rate limit still hit after every retry: back off, then retry the same key
 except QuotaExceededError as exc:
     ...  # daily quota used up (exc.detail["used"], exc.detail["limit"]): wait for tomorrow
+except InsufficientCreditsError as exc:
+    ...  # Budget and extra volume spent: exc.balance left, exc.required needed,
+         # exc.shortfall to top up. Wait for the next period, or top up
 except TooLargeError:
     ...  # over the input cap: split the document and send the parts
 except CloudError as exc:
@@ -914,6 +929,7 @@ except CloudError as exc:
 |---|---|---|---|
 | `NotConfiguredError` | — | no API key configured, or `httpx` missing | no |
 | `CloudError` | 401 | the key is wrong or revoked | no |
+| `InsufficientCreditsError` | 402 | the Budget and extra volume are spent; `balance`, `required`, `shortfall`, `prompt_tokens` and `max_response_tokens` say by how much | **no**: it will not clear before the next period or a top-up |
 | `CloudError` | 403 | the service refused the call. Account calls are accepted with an API key while the service does not require a browser `Origin`; if that changes they answer 403 | no |
 | `CloudError` | 403 | `Batches.create` on a workspace without retention: `detail["code"] == "retention_required"` (see [Batches](#batches)) | no |
 | `NotFoundError` | 404 | no such job, batch or key — or another account's; also every batch call, `list()` included, while batches are not enabled on the service (`batches_not_enabled`) | no |
@@ -949,12 +965,13 @@ euredact.configure(
 | `base_url` | `https://api.euredact.dev` | `EUREDACT_BASE_URL` | Service endpoint. Must be `https://`; plain `http://` is refused except to `localhost`, `127.0.0.1` or `::1`, so the key and the text never travel unencrypted. |
 | `timeout_s` | `90.0` | — | Per-request timeout. |
 | `poll_timeout_s` | `900.0` | — | Ceiling for polling a document that outlives the synchronous window. |
-| `max_retries` | `3` | — | Retries for `5xx`, timeouts and the edge's rate-limit `429`. Each carries an `Idempotency-Key`, so a retry after a timeout cannot bill twice, and `Retry-After` is obeyed. A `429` for the daily quota is not retried: it raises `QuotaExceededError` at once. |
+| `max_retries` | `3` | — | Retries for `5xx`, timeouts and the edge's rate-limit `429`. Each carries an `Idempotency-Key`, so a retry after a timeout cannot bill twice, and `Retry-After` is obeyed. A `429` for the daily quota is not retried: it raises `QuotaExceededError` at once, and a `402` raises `InsufficientCreditsError` at once. |
 | `headers` | `None` | — | Extra headers sent with every request. |
 
 `configure()` reads the two environment variables itself, so it must still be
 called — but with no arguments if the environment is set. Errors are
-`NotConfiguredError`; `QuotaExceededError` (429, the daily quota) and its
+`NotConfiguredError`; `InsufficientCreditsError` (402, the Budget and extra
+volume spent); `QuotaExceededError` (429, the daily quota) and its
 subclass `RateLimitedError` (429 from the rate limit, after retries);
 `TooLargeError` (413, the service refuses oversized input rather than chunking
 it); `NotFoundError` (404); `ResultExpiredError` (410); and `CloudError` for

@@ -60,13 +60,43 @@ export interface AccountSummary {
 }
 
 /** `GET /v1/account/credits`: the balance, in credits. */
+/** This period's Budget: what the plan grants each period, used first. */
+export interface Budget {
+  granted: number | null;
+  remaining: number | null;
+  /** When the period ends and what is left of the Budget lapses (ISO 8601). */
+  expiresAt: string | null;
+}
+
+/** Prepaid extra volume, used once the Budget is spent. */
+export interface Extra {
+  remaining: number | null;
+  /** When the oldest extra volume expires (ISO 8601), or null. */
+  nextExpiry: string | null;
+  /** How much expires then. */
+  expiringNext: number | null;
+}
+
+/**
+ * `GET /v1/account/credits`. `balance` is `budget.remaining` plus
+ * `extra.remaining`; a call uses the Budget first, then extra volume
+ * (rules-engine#146). Either breakdown is null when the service sends none.
+ */
 export interface Credits {
   balance: number | null;
   granted: number | null;
   spent: number | null;
   unit: string | null;
+  budget: Budget | null;
+  extra: Extra | null;
   raw: Json;
 }
+
+const isObj = (v: unknown): v is Json => !!v && typeof v === "object" && !Array.isArray(v);
+const toBudget = (v: unknown): Budget | null =>
+  isObj(v) ? { granted: int(v.granted), remaining: int(v.remaining), expiresAt: str(v.expires_at) } : null;
+const toExtra = (v: unknown): Extra | null =>
+  isObj(v) ? { remaining: int(v.remaining), nextExpiry: str(v.next_expiry), expiringNext: int(v.expiring_next) } : null;
 
 /** One line of the credit history: movements rolled up per minute, reason and direction, newest first. */
 export interface CreditEntry {
@@ -229,7 +259,7 @@ export class Account extends ApiClient {
   async credits(): Promise<Credits> {
     const raw = await this.call("GET", "/v1/account/credits");
     return { balance: int(raw.balance), granted: int(raw.granted), spent: int(raw.spent),
-             unit: str(raw.unit), raw };
+             unit: str(raw.unit), budget: toBudget(raw.budget), extra: toExtra(raw.extra), raw };
   }
 
   /** Recent credit movements, newest first (1-500). */
