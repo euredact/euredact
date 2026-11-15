@@ -53,6 +53,11 @@ producing an identical failure that looks like the fix did not work.
 
 ## 1. Bump the version in all three places
 
+Which version: ask the `release-notes` agent (`.claude/agents/release-notes.md`)
+first. It applies the 1.x rhythm below to what changed since the last tag,
+checks the public API for breaks, and says which rule decided. The decision
+is still yours, and a break or an out-of-quarter minor is the owner's.
+
 ```
 euredact-python/pyproject.toml            version = "X.Y.Z"
 euredact-python/src/euredact/__init__.py  __version__ = "X.Y.Z"
@@ -209,7 +214,10 @@ neither works:
 
 So: merge both changelogs into one body, mark any entry that applies to only one
 SDK, drop the sections that belong in a changelog but not in release notes, and
-paste it in the reply. Write it to `~/Desktop/` as well, as a convenience — but
+paste it in the reply. The `release-notes` agent drafts the title and body by
+these rules and returns a table of every claim it checked in both SDKs. Read
+that table, rerun anything it could not verify, and fill in what it asks for,
+such as the false-positive counts from the eval run. Write it to `~/Desktop/` as well, as a convenience — but
 the reply is the deliverable.
 
 **Verify every claim in the body against the tagged commit before writing it.**
