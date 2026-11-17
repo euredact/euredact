@@ -11,6 +11,17 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **A lone surrogate was answered with another text's cached result**
+  *(rules-engine#175)*. The cache key hashed the text as UTF-8, which writes
+  every lone surrogate as U+FFFD, so `"Tel 0612345678 \ud800"` was answered
+  with the cached result of `"Tel 0612345678 \ufffd"`: the redacted text was
+  not the caller's. The key now spells lone surrogates out (and doubles
+  U+FFFF, so the escape cannot be forged); other text is hashed as before.
+
 ## 1.0.0 (2026-11-14)
 
 ### Added

@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- A lone surrogate in the text (from `json.loads` of a `"\ud800"` escape) raised `UnicodeEncodeError` with the default cache in Python, and in TypeScript was answered with the cached result of the same text with U+FFFD. *(rules-engine#175)*
+
 ## [1.0.0] - 2026-11-14
 
 ### Added

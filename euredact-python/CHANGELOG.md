@@ -11,6 +11,20 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **A lone surrogate raised `UnicodeEncodeError` with the cache on**
+  *(rules-engine#175)*. Text from `json.loads` of a `"\ud800"` escape holds a
+  lone surrogate. 1.0.0 fixed the `[fast]` prefilter for it (#159), but the
+  result cache's key still encoded the text strictly, so every entry point
+  with the default `cache=True` raised: `redact`, `redact_batch`,
+  `redact_iter`, `aredact`, `aredact_batch`. The conformance vector runs with
+  the cache off and did not see it; the inference gateway's 1.0.0 upgrade
+  did. The key now encodes with `surrogatepass`, which also keeps `"\ud800"`
+  and `"\ufffd"` apart.
+
 ## 1.0.0 (2026-11-14)
 
 ### Added

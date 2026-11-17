@@ -442,6 +442,24 @@ test("an NFC spelling is not answered with the cached NFD result", () => {
   assert.equal(nfc.slice(r.detections[0].start, r.detections[0].end), "jan@example.be");
 });
 
+test("a lone surrogate is not answered with another text's cached result", () => {
+  // The key hashed UTF-8, which writes a lone surrogate as U+FFFD: "…\ud800"
+  // got the cached result of "…\ufffd" (rules-engine#175).
+  const sdk = new EuRedact();
+  const a = sdk.redact("Tel 0612345678 \ufffd", { countries: ["NL"] });
+  const b = sdk.redact("Tel 0612345678 \ud800", { countries: ["NL"] });
+  assert.equal(a.redactedText, "Tel [PHONE] \ufffd");
+  assert.equal(b.redactedText, "Tel [PHONE] \ud800");
+  // The escape cannot be forged: U+FFFF and hex digits are a different entry.
+  const c = sdk.redact("Tel 0612345678 \uffffd800", { countries: ["NL"] });
+  assert.equal(c.redactedText, "Tel [PHONE] \uffffd800");
+  // A well-formed pair is still one character, and a repeat is still a hit.
+  assert.equal(sdk.redact("\u{1F600} 0612345678", { countries: ["NL"] }).redactedText, "\u{1F600} [PHONE]");
+  const size = (sdk as unknown as { cache: { store: Map<string, unknown> } }).cache.store.size;
+  sdk.redact("Tel 0612345678 \ud800", { countries: ["NL"] });
+  assert.equal((sdk as unknown as { cache: { store: Map<string, unknown> } }).cache.store.size, size);
+});
+
 test("a new BIC registry is not answered from the cache", () => {
   const sdk = new EuRedact();
   // ABCD is no known bank, so without a label the code is left alone until a
