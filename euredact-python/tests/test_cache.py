@@ -100,3 +100,29 @@ class TestCachedResultsAreTheCallersOwn:
             assert len(sdk._cache._store) == 2
         finally:
             bic_registry.set_bic_registry(None)
+
+
+class TestLoneSurrogates:
+    """json.loads of a "\\ud800" escape gives a str with a lone surrogate. With
+    the cache on, the key encoded the text strictly and every entry point raised
+    UnicodeEncodeError (rules-engine#175); #159 had fixed only the prefilter."""
+
+    TEXT = "Tel 0612345678 \ud800"
+
+    def test_every_entry_point_redacts_with_the_cache_on(self):
+        import asyncio
+
+        import euredact
+        expected = "Tel [PHONE] \ud800"
+        assert euredact.EuRedact().redact(self.TEXT, countries=["NL"]).redacted_text == expected
+        assert [r.redacted_text for r in euredact.redact_batch([self.TEXT], countries=["NL"])] == [expected]
+        assert [r.redacted_text for r in euredact.redact_iter(iter([self.TEXT]), countries=["NL"])] == [expected]
+        assert asyncio.run(euredact.aredact(self.TEXT, countries=["NL"])).redacted_text == expected
+        assert [r.redacted_text for r in asyncio.run(
+            euredact.aredact_batch([self.TEXT], countries=["NL"]))] == [expected]
+
+    def test_a_lone_surrogate_and_its_replacement_character_are_two_entries(self):
+        from euredact.cache import ResultCache
+        cache = ResultCache()
+        keys = {cache.key(t, ("NL",), "m") for t in ("a\ud800", "a�", "a\udc00", "a\U00010000")}
+        assert len(keys) == 4
