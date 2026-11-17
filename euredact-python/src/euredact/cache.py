@@ -59,7 +59,11 @@ class ResultCache:
         # Fed to the hash in pieces rather than joined into one f-string: the
         # f-string copied the whole document before hashing it.
         h = hashlib.sha256()
-        h.update(text.encode())
+        # surrogatepass: a lone surrogate (json.loads of a "\ud800" escape)
+        # raised UnicodeEncodeError on every call with the cache on
+        # (rules-engine#175). It keeps the key injective: "\ud800" and
+        # "\ufffd" hash differently.
+        h.update(text.encode("utf-8", "surrogatepass"))
         h.update(b"|")
         h.update("|".join(sorted(countries)).encode())
         h.update(b"|")
