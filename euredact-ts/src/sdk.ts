@@ -955,7 +955,12 @@ export class EuRedact {
     // A context makes the result depend on evidence from other chunks, so the
     // text no longer identifies the result. Caching is disabled rather than
     // keyed on the context, whose contents change as chunks arrive.
-    const cache = context !== null ? false : (options.cache ?? true);
+    //
+    // Tokens are minted per call and the mapping is the caller's only copy. A
+    // cached tokenized result gave a second call on the same text the same
+    // tokens, linking the two, and kept the mapping on the instance
+    // (rules-engine#177). Neither looked up nor stored.
+    const cache = context !== null || tokenize ? false : (options.cache ?? true);
 
     const [normalizedText, offsetMapping] = normalize(text);
 

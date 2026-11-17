@@ -61,6 +61,16 @@ class TestTokens:
         b = sdk.redact("mail: jan@example.com", countries=["NL"], tokenize=True, cache=False)
         assert set(a.tokens) != set(b.tokens)
 
+    def test_a_new_call_gets_new_tokens_with_the_default_cache(self, sdk):
+        """The cache answered the second call with the first one's tokens,
+        linking two prompts, and kept the mapping on the instance
+        (rules-engine#177). The test above passed cache=False and missed it."""
+        a = sdk.redact("mail: jan@example.com", countries=["NL"], tokenize=True)
+        b = sdk.redact("mail: jan@example.com", countries=["NL"], tokenize=True)
+        assert set(a.tokens) != set(b.tokens)
+        assert len(sdk._cache._store) == 0
+        assert restore(b.redacted_text, b.tokens) == "mail: jan@example.com"
+
     def test_tokens_are_per_call_not_per_instance(self, sdk):
         """Unlike referential labels, nothing is retained between calls."""
         sdk.redact("mail: jan@example.com", countries=["NL"], tokenize=True)

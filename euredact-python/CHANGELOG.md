@@ -15,6 +15,31 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **`[fast]` was slower than no accelerator** *(rules-engine#176)*. Measured
+  as CPU time per document on one Linux machine, same inputs, `[fast]`
+  went from 1.03 ms per short record and 24.8 ms per identifier-dense
+  document (0.8.0) to 1.55 and 33.0 ms (1.0.0); it is now 0.93 and 23.4 ms.
+  Two causes:
+  - The RE2 prefilter received the engine's digit boundaries as lookarounds,
+    which RE2 cannot read, and dropped them: `\b\d{9}\b` became `\d{9}`
+    and let its pattern run on any longer number, 101 candidates per short
+    record instead of 40. They are now written as classes RE2 can read,
+    accepting every letter a non-ASCII one folds to; a text holding a
+    non-ASCII decimal digit skips the prefilter.
+  - The prefilter's DFA had run out of RE2's default 8 MB of memory since
+    before 1.0.0 and fell back to a slower matcher. It may now use 64 MB:
+    peak memory is about 100 MB per process after 3,250 documents, against
+    43 MB. The pass costs 0.011 ms per short record, against 0.48.
+
+  Results are unchanged: `make eval` is identical, and the scan-parity
+  tests gain five spellings with non-ASCII letters and digits glued to
+  numbers.
+- **Performance figures** *(rules-engine#176)*. The README's tables were
+  measured at 0.4.0 and carried forward unchanged; they now say so, beside
+  a table of the same inputs measured for 0.4.0, 0.8.0, 1.0.0 and this
+  version. The TypeScript SDK is about 2–3× faster than `[fast]` on those
+  inputs, not 6–7×.
+
 - **A lone surrogate raised `UnicodeEncodeError` with the cache on**
   *(rules-engine#175)*. Text from `json.loads` of a `"\ud800"` escape holds a
   lone surrogate. 1.0.0 fixed the `[fast]` prefilter for it (#159), but the
@@ -24,6 +49,17 @@ narrative lives. Sections here use that vocabulary
   the cache off and did not see it; the inference gateway's 1.0.0 upgrade
   did. The key now encodes with `surrogatepass`, which also keeps `"\ud800"`
   and `"\ufffd"` apart.
+
+- **`tokenize` with the default cache reused tokens** *(rules-engine#177)*.
+  With `cache` on, the default, a second `tokenize` call on the same text
+  was answered from the result cache: the same tokens as the first call,
+  which links two prompts the documentation says are tokenized
+  independently, and the token-to-value mapping kept on the instance until
+  eviction or `clear()`, where the documentation says nothing is retained.
+  A tokenized call now neither reads nor fills the cache, as with a
+  `context`; every call mints fresh tokens, and `result.tokens` is the only
+  copy of the mapping. The tests that checked fresh tokens had passed
+  `cache=False`.
 
 ## 1.0.0 (2026-11-14)
 

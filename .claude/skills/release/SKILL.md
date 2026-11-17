@@ -21,7 +21,7 @@ From 1.0.0 (decided 2026-11-14) releases follow the README's
 - **`1.x.0`, quarterly**, at the start of February, May, August and November:
   everything merged since the last minor release — new identifiers, countries,
   options, cloud features. A minor release always re-measures the accuracy
-  figures on the release commit (step 3) and regenerates
+  figures on the code being released (step 3) and regenerates
   `docs/corpus-results.{json,md}`. Before it, refresh the bundled BIC list
   with the `bic-refresh` skill: its own issue and PR, merged before the
   release commit, so the release measures the list it ships. In the release
@@ -116,7 +116,11 @@ does **not** cover the corpus, because the corpus lives outside the repository.
   Instructions for use on euredact.dev read. Commit both with the release, so
   the published figures are the released engine's (rules-engine#109), and a
   number quoted in the changelog is one that was just measured rather than
-  carried forward.
+  carried forward. Generate them with the version bump in the working tree
+  and nothing else uncommitted: the files then name the commit the release
+  commit is built on. They cannot name the release commit itself, whose hash
+  depends on them (rules-engine#176); a later change to docs or tests only
+  does not make them stale, an engine change does.
 
 If the corpus is not on this machine, the three corpus checks cannot run, and
 `make check` is not a substitute. Say so before going further. Release only if

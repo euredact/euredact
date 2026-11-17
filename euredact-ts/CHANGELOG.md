@@ -15,12 +15,45 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **Slower on identifier-dense text in 1.0.0** *(rules-engine#176)*.
+  Measured as CPU time per document on one Linux machine, same inputs:
+  0.46 ms per short record and 7.5 ms per dense document at 0.8.0, 0.57 and
+  11.2 ms at 1.0.0, now 0.53 and 9.2 ms.
+  - **Currency check.** The check for a currency before a value ends in
+    `$`, but V8 tried it from every position of the window, and #152's
+    Unicode lookbehinds made that a tenth of all the time. It now reads
+    the window's end only: its trailing spaces and 12 code units, the most
+    the regex can depend on. 200,000 generated windows give the same
+    answer either way.
+  - **Context windows.** The code-point windows around a candidate (#151)
+    were walked again by every suppressor; the last one is kept on the
+    call's scratch.
+
+  The remaining difference is the cost of the checks #152 added so that
+  real values are no longer dropped. Results are unchanged: conformance,
+  parity and `make eval` are identical, and three vectors pin the currency
+  check's edges.
+- **Performance figures** *(rules-engine#176)*. The README's table was
+  measured at 0.4.0; it now says so and gives the change since on the same
+  inputs. This SDK is about 2–3× faster than Python with `[fast]`, not 6–7×.
+
 - **A lone surrogate was answered with another text's cached result**
   *(rules-engine#175)*. The cache key hashed the text as UTF-8, which writes
   every lone surrogate as U+FFFD, so `"Tel 0612345678 \ud800"` was answered
   with the cached result of `"Tel 0612345678 \ufffd"`: the redacted text was
   not the caller's. The key now spells lone surrogates out (and doubles
   U+FFFF, so the escape cannot be forged); other text is hashed as before.
+
+- **`tokenize` with the default cache reused tokens** *(rules-engine#177)*.
+  With `cache` on, the default, a second `tokenize` call on the same text
+  was answered from the result cache: the same tokens as the first call,
+  which links two prompts the documentation says are tokenized
+  independently, and the token-to-value mapping kept on the instance until
+  eviction or `clear()`, where the documentation says nothing is retained.
+  A tokenized call now neither reads nor fills the cache, as with a
+  `context`; every call mints fresh tokens, and `result.tokens` is the only
+  copy of the mapping. The tests that checked fresh tokens had passed
+  `cache: false`.
 
 ## 1.0.0 (2026-11-14)
 

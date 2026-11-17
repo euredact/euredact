@@ -13,6 +13,7 @@ diverge again regardless of which extras are installed.
 
 import contextlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -320,6 +321,15 @@ _UNICODE_SPELLINGS = {
     # A lone surrogate, as json.loads gives for a "\ud800" escape; the re2
     # prefilter raised UnicodeEncodeError on it (rules-engine#159).
     "lone-surrogate": lambda t: t + " \ud800",
+    # A non-ASCII letter or digit glued to a number. The engine's digit
+    # boundary is ASCII ("é123" matches \b\d{3}\b); the prefilter writes it as
+    # a class that also accepts what a letter folds to, and a text with a
+    # non-ASCII digit skips the prefilter (rules-engine#176).
+    "accented-letter-before-each-number": lambda t: re.sub(r"(\d+)", "é\\1", t),
+    "folding-letters-around-each-number": lambda t: re.sub(r"(\d+)", "ı\\1\u017f", t),
+    "kelvin-sign-before-each-number": lambda t: re.sub(r"(\d+)", "\u212a\\1", t),
+    "astral-digit-before-each-number": lambda t: re.sub(r"(\d+)", "x\U0001d7ce\\1", t),
+    "full-width-digit-after-each-number": lambda t: re.sub(r"(\d+)", "\\1\uff11y", t),
     "as-written": lambda t: t,
 }
 
@@ -378,3 +388,39 @@ def test_a_negated_class_in_a_custom_pattern_is_not_narrowed_by_the_fold(path, s
         sdk.add_custom_pattern("CASE_REF", source)
         result = sdk.redact(text, cache=False)
     assert "[CASE_REF]" in result.redacted_text, result.redacted_text
+
+
+def test_the_folded_word_stand_ins_are_all_there_are():
+    """The digit boundary the prefilter reads accepts each ASCII word character
+    a non-ASCII non-digit folds to. A Unicode update that adds one must add it
+    there too, or "<letter>123" is skipped (rules-engine#176)."""
+    import sys
+    produced = set()
+    for cp in range(0x80, sys.maxunicode + 1):
+        ch = chr(cp)
+        if 0xD800 <= cp <= 0xDFFF or ch.isdecimal():
+            continue
+        folded = matchers._fold_char(ch)
+        if folded != ch and (folded.isalnum() or folded == "_") and folded.isascii():
+            produced.add(folded)
+    assert produced <= set(matchers._FOLDED_WORD_STAND_INS), produced
+
+
+@pytest.mark.skipif(not matchers._HAS_RE2, reason="google-re2 not installed")
+def test_a_digit_pattern_keeps_its_boundaries_in_the_prefilter():
+    """The prefilter read "\\b\\d{9}\\b" as a bare "\\d{9}" and let it through on
+    any longer number: 2.5 times the candidates, and [fast] slower than no
+    accelerator (rules-engine#176). It must still let "é123456789" through,
+    which the engine's ASCII digit boundary matches."""
+    import re2
+    source = matchers._digit_boundaries(matchers._for_re2(matchers._ascii_word_boundaries(
+        r"\b\d{9}\b", matchers._DIGITS_START_MARK, matchers._DIGITS_END_MARK)))
+    s = re2.Set.SearchSet()
+    s.Add(source)
+    s.Compile()
+    fold = matchers._fold_for_re2
+    assert not s.Match(fold("Tel 0612345678"))
+    assert s.Match(fold("Tel 061234567"))
+    assert s.Match(fold("Ref é123456789"))
+    assert s.Match(fold("Ref \u0131123456789\u017f"))
+    assert matchers._RE2_MAX_MEM >= 64 << 20

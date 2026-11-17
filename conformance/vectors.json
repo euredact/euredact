@@ -8522,6 +8522,27 @@
         ]
       },
       "notes": "rules-engine#166: Python's $ also matches just before a final newline, so a context pattern tested on the text before a value fired across the line break and the value at the start of the next line was dropped; TypeScript's $ does not. The Python patterns end in \\Z now."
+    },
+    {
+      "id": "currency-before-a-long-run-of-spaces",
+      "text": "Totaal €                              0471234567 betaald",
+      "countries": null,
+      "expectRedactedText": "Totaal €                              0471234567 betaald",
+      "notes": "rules-engine#176 guard: the TypeScript currency check now reads only the end of the window before a value (its trailing spaces and 12 code units); this pins a long space run, a letter outside the BMP before a letter symbol, and a currency word at the end of the window."
+    },
+    {
+      "id": "currency-zloty-glued-to-a-letter-outside-the-bmp",
+      "text": "Kod 𝐀zł 0471234567",
+      "countries": null,
+      "expectRedactedText": "Kod 𝐀zł [SSN]",
+      "notes": "rules-engine#176 guard: the TypeScript currency check now reads only the end of the window before a value (its trailing spaces and 12 code units); this pins a long space run, a letter outside the BMP before a letter symbol, and a currency word at the end of the window."
+    },
+    {
+      "id": "currency-word-at-the-end-of-a-long-window",
+      "text": "Montant total en EUR    0471234567",
+      "countries": null,
+      "expectRedactedText": "Montant total en EUR    0471234567",
+      "notes": "rules-engine#176 guard: the TypeScript currency check now reads only the end of the window before a value (its trailing spaces and 12 code units); this pins a long space run, a letter outside the BMP before a letter symbol, and a currency word at the end of the window."
     }
   ]
 }

@@ -83,6 +83,18 @@ test("a new call gets new tokens", () => {
   assert.notDeepEqual(Object.keys(a.tokens), Object.keys(b.tokens));
 });
 
+test("a new call gets new tokens with the default cache", () => {
+  // The cache answered the second call with the first one's tokens, linking
+  // two prompts, and kept the mapping on the instance (rules-engine#177). The
+  // test above passes cache: false and missed it.
+  const sdk = new EuRedact();
+  const a = sdk.redact("mail: jan@example.com", { countries: ["NL"], tokenize: true });
+  const b = sdk.redact("mail: jan@example.com", { countries: ["NL"], tokenize: true });
+  assert.notDeepEqual(Object.keys(a.tokens), Object.keys(b.tokens));
+  assert.equal((sdk as unknown as { cache: { store: Map<string, unknown> } }).cache.store.size, 0);
+  assert.equal(restore(b.redactedText, b.tokens), "mail: jan@example.com");
+});
+
 test("tokens are per call, not per instance", () => {
   const sdk = new EuRedact();
   sdk.redact("mail: jan@example.com", { countries: ["NL"], tokenize: true });
