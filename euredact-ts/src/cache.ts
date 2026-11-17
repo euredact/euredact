@@ -1,4 +1,35 @@
 import { sha256Hex } from "./platform.js";
+
+const NEEDS_ESCAPE = /[\uFFFF\uD800-\uDFFF]/;
+
+/**
+ * `text`, with lone surrogates spelled out so that the cache key tells them
+ * apart. `sha256Hex` hashes UTF-8, which writes every lone surrogate as U+FFFD:
+ * "…\ud800" was answered with the cached result of "…\ufffd", so the caller
+ * got back a text that was not theirs (rules-engine#175). A lone surrogate
+ * becomes U+FFFF and its four hex digits, and U+FFFF itself, a noncharacter,
+ * is doubled, which keeps the mapping one-to-one. Text with neither is
+ * returned as it is.
+ */
+function injective(text: string): string {
+  if (!NEEDS_ESCAPE.test(text)) return text;
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff && i + 1 < text.length) {
+      const next = text.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += text[i] + text[i + 1];
+        i++;
+        continue;
+      }
+    }
+    if (unit >= 0xd800 && unit <= 0xdfff) out += "\uFFFF" + unit.toString(16);
+    else if (unit === 0xffff) out += "\uFFFF\uFFFF";
+    else out += text[i];
+  }
+  return out;
+}
 import type { RedactResult } from "./types.js";
 
 // Default ceiling on retained characters, not entries. A count-only cap of
@@ -53,7 +84,7 @@ export class ResultCache {
     // deployment an attacker who can guess a victim's document could submit a
     // same-length colliding one and be served the victim's cached result,
     // detections and raw matched PII included.
-    return sha256Hex([text, "|", sorted.join("|"), "|", mode]);
+    return sha256Hex([injective(text), "|", sorted.join("|"), "|", mode]);
   }
 
   get(key: string): RedactResult | null {
