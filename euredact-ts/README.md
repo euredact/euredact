@@ -148,7 +148,7 @@ interface RedactOptions {
 | `idempotencyKey` | generated | `mode: "cloud"` only (through `redactAsync`): sent as the request's `Idempotency-Key`, so the same key returns the same job instead of running and billing the document again. Throws in rules mode. See [What the service said](#what-the-service-said-resultcloud). |
 | `context` | `null` | Share country evidence across the chunks of one document. Pass the same `DocumentContext` to every chunk. Disables the cache. See [Chunked documents](#chunked-documents). |
 | `chunkOffset` | `0` | Where this chunk starts in the whole document. Only rebases spans recorded in `context`; returned detections stay relative to `text`. |
-| `cache` | `true` | Reuse the result for an identical input and configuration. |
+| `cache` | `true` | Reuse the result for an identical input and configuration. Ignored with `tokenize: true`, which mints fresh tokens and keeps no mapping, and with a `context`. |
 
 #### `redactAsync(text, options?)`
 

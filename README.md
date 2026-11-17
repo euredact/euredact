@@ -324,7 +324,7 @@ its reference with a **Which option do I need?** table:
 | `allowlist` | Values never redacted, per call or per instance. Applies to cloud types too. |
 | `detect_dates` / `detectDates` | Include dates of birth and death. |
 | `context` + `chunk_offset` / `chunkOffset` | Share country evidence across the chunks of one document. |
-| `cache` | Reuse results for identical input. |
+| `cache` | Reuse results for identical input. Never used with `tokenize` or a `context`. |
 | `max_input_length` / `maxInputLength` | Constructor ceiling on document size. |
 
 ## Performance

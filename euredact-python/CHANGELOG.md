@@ -11,6 +11,21 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **`tokenize` with the default cache reused tokens** *(rules-engine#177)*.
+  With `cache` on, the default, a second `tokenize` call on the same text
+  was answered from the result cache: the same tokens as the first call,
+  which links two prompts the documentation says are tokenized
+  independently, and the token-to-value mapping kept on the instance until
+  eviction or `clear()`, where the documentation says nothing is retained.
+  A tokenized call now neither reads nor fills the cache, as with a
+  `context`; every call mints fresh tokens, and `result.tokens` is the only
+  copy of the mapping. The tests that checked fresh tokens had passed
+  `cache=False`.
+
 ## 1.0.0 (2026-11-14)
 
 ### Added

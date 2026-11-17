@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- `tokenize` with the default cache answered a repeated text with the same tokens and kept the token-to-value mapping in the result cache. A tokenized call no longer uses the cache. *(rules-engine#177)*
+
 ## [1.0.0] - 2026-11-14
 
 ### Added

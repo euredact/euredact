@@ -870,6 +870,12 @@ class EuRedact:
         # than keyed on the context, whose contents change as chunks arrive.
         if context is not None:
             cache = False
+        # Tokens are minted per call and the mapping is the caller's only copy.
+        # A cached tokenized result gave a second call on the same text the
+        # same tokens, linking the two, and kept the mapping on the instance
+        # (rules-engine#177). Neither looked up nor stored.
+        if tokenize:
+            cache = False
         if cache:
             # The text as given, not as normalised: the result is built from
             # it, so an NFD and an NFC spelling of one document are two entries.
