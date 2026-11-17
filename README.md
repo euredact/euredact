@@ -342,6 +342,26 @@ documents (~3,450 chars), each document distinct.
 | Real document (~3,450 chars) | 18.9 ms <br><sub>15.3 – 25.5</sub> | **9.4 ms** <br><sub>6.2 – 15.8</sub> | **1.43 ms** <br><sub>1.04 – 1.96</sub> |
 | Memory per country | ~50 KB | ~50 KB | ~50 KB |
 
+**These tables were measured at 0.4.0** and have not been re-measured on that
+machine since. On one Linux machine (4 cores, CPython 3.14 with `[fast]`,
+Node.js 24), with the same inputs for every version (3,000 corpus records and
+200 identifier-dense documents of 3,450 characters, all countries, dates on,
+cache off), the median CPU time per document moved like this:
+
+| | 0.4.0 | 0.8.0 | 1.0.0 | this version |
+|---|---:|---:|---:|---:|
+| Python `[fast]`, short record | 1.00 ms | 1.03 ms | 1.55 ms | 0.93 ms |
+| Python `[fast]`, dense document | 24.1 ms | 24.8 ms | 33.0 ms | 23.4 ms |
+| Node.js, short record | 0.32 ms | 0.46 ms | 0.57 ms | 0.53 ms |
+| Node.js, dense document | 5.1 ms | 7.5 ms | 11.2 ms | 9.2 ms |
+
+1.0.0 was slower on identifier-dense text (rules-engine#176). In Python the RE2
+prefilter had lost its digit boundaries and ran out of its default 8 MB of DFA
+memory; both are fixed, and `[fast]` may now use up to 64 MB for it. In Node.js,
+the context windows and one currency check that #151 and #152 made dearer are
+fixed; the rest is the cost of the checks #152 added so that real values are no
+longer dropped.
+
 A spread is quoted because a single number misleads here: **cost tracks
 identifier density, not length.** The real documents are all about the same
 length, and on `[fast]` their 10th–90th percentile still spans 6.2–15.8 ms.
@@ -359,8 +379,9 @@ runs every available scan path against the plain-Python one and requires them to
 agree.
 
 The TypeScript SDK needs no such extra and offers none: V8's regex engine has
-literal prefilters CPython lacks, so on the same documents it runs about 6–7×
-faster than the accelerated Python path. Adding a native addon there would cost
+literal prefilters CPython lacks, so on the same documents it runs about 2–3×
+faster than the accelerated Python path (1.8× on short records, 2.5× on dense
+documents, in the table above; 6–7× in the 0.4.0 tables). Adding a native addon there would cost
 bundler, edge-runtime and Deno compatibility for nothing.
 
 ### Accuracy
@@ -486,7 +507,9 @@ Releases follow a quarterly rhythm:
 
 - **`1.x.0`**, at the start of February, May, August and November: new
   identifiers, countries, options and cloud features, with the accuracy figures
-  measured again on the release commit.
+  measured again on the code being released. `docs/corpus-results.md` names
+  the commit they were measured on: the one the release commit is built on,
+  since a commit cannot name itself.
 - **`1.x.y`**, whenever needed: fixes for values left unredacted (a leak) or a
   broken release, outside the quarterly cycle and as soon as they are verified.
 

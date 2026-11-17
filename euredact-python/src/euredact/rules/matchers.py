@@ -66,6 +66,14 @@ _AC_WINDOW = 200
 _RE2_WINDOW = 1024
 _RE2_OVERLAP = 256
 
+# The memory RE2 may give the prefilter's DFA. At the default 8 MB the union of
+# ~345 patterns ran out of DFA states and RE2 fell back to its slower matcher:
+# the per-window pass cost 0.5 ms on a short record and 8 ms on a 3,450-character
+# document, and made [fast] slower than no accelerator at all. At 64 MB it costs
+# 0.01 and 0.2 ms (rules-engine#176). It is a ceiling, not an allocation: RE2
+# builds states as the texts need them.
+_RE2_MAX_MEM = 64 << 20
+
 
 @contextlib.contextmanager
 def _silence_stderr() -> Iterator[None]:
@@ -157,8 +165,12 @@ def _preceding_element_is_digits(source: str, i: int) -> bool:
     return j >= 1 and source[j - 1] == "\\" and source[j] == "d"
 
 
-def _ascii_word_boundaries(pattern: str) -> str:
+def _ascii_word_boundaries(pattern: str, before: str = f"(?<![{_ASCII_WORD}])",
+                           after: str = f"(?![{_ASCII_WORD}])") -> str:
     """Rewrite each ``\b`` in *pattern* per the reasoning above.
+
+    *before* and *after* are what a boundary next to digits becomes; the RE2
+    prefilter passes forms without lookaround (:data:`_RE2_DIGITS_START`).
 
     Skips escaped backslashes and character classes, where ``\b`` means a
     backspace rather than a boundary. Neither occurs in the shipped patterns
@@ -172,9 +184,9 @@ def _ascii_word_boundaries(pattern: str) -> str:
         if ch == "\\" and i + 1 < len(pattern):
             if pattern[i + 1] == "b" and not in_class:
                 if _digit_only_element(pattern, i + 2):
-                    out.append(f"(?<![{_ASCII_WORD}])")
+                    out.append(before)
                 elif _preceding_element_is_digits(pattern, i):
-                    out.append(f"(?![{_ASCII_WORD}])")
+                    out.append(after)
                 else:
                     out.append(r"\b")
             else:
@@ -390,6 +402,111 @@ def _fold_for_re2(text: str) -> str:
     return text.translate(_FOLD)
 
 
+_CLASS_ESCAPES = frozenset("dDwWsSbB")
+
+
+def _class_ranges(body: str) -> list[tuple[int, int]]:
+    """The literal members of a character class *body*, as code-point ranges.
+
+    Class escapes (``\\d``, ``\\w``, ``\\s`` and their negations) are left out:
+    their folded forms are ASCII classes RE2 reads as Python does.
+    """
+    chars: list[int | None] = []
+    i = 0
+    while i < len(body):
+        ch = body[i]
+        if ch == "\\" and i + 1 < len(body):
+            esc = body[i + 1]
+            if esc in "ux":
+                width = 4 if esc == "u" else 2
+                try:
+                    chars.append(int(body[i + 2:i + 2 + width], 16))
+                except ValueError:
+                    chars.append(None)
+                i += 2 + width
+                continue
+            chars.append(None if esc in _CLASS_ESCAPES else ord(
+                {"t": "\t", "n": "\n", "r": "\r", "f": "\f", "v": "\v"}.get(esc, esc)))
+            i += 2
+            continue
+        chars.append(-1 if ch == "-" else ord(ch))
+        i += 1
+    ranges: list[tuple[int, int]] = []
+    j = 0
+    while j < len(chars):
+        lo = chars[j]
+        if (lo is not None and lo >= 0 and j + 2 < len(chars) and chars[j + 1] == -1
+                and chars[j + 2] is not None and chars[j + 2] >= 0):
+            ranges.append((lo, chars[j + 2]))
+            j += 3
+            continue
+        if lo is not None:
+            ranges.append((ord("-"), ord("-")) if lo == -1 else (lo, lo))
+        j += 1
+    return ranges
+
+
+def _stand_ins(body: str) -> str:
+    """The folded characters a class's members become, escaped for a class.
+
+    Every character the class accepts in Python must be accepted, folded, by
+    RE2; ASCII members fold to themselves except the odd spaces.
+    """
+    found: set[str] = set()
+    for lo, hi in _class_ranges(body):
+        for cp in range(max(lo, 0), hi + 1):
+            ch = chr(cp)
+            if ch.isascii() and ch not in _ODD_ASCII_SPACE:
+                continue
+            folded = _fold_char(ch)
+            if folded != ch:
+                found.add(folded)
+    return "".join(re.escape(c) for c in sorted(found))
+
+
+#: The ASCII word characters :func:`_fold_char` makes of non-ASCII ones that
+#: are not decimal digits: "a" for most, and the three letters case folding
+#: reaches (ı -> I, ſ -> S, K -> k). A test recomputes it over all of Unicode.
+_FOLDED_WORD_STAND_INS = "ISak"
+
+#: A digit boundary for the RE2 prefilter, without lookaround. The engine reads
+#: ``\b`` next to a digit as "no ASCII word character there", so "é123456789"
+#: matches ``\b\d{9}\b``. On folded text the "é" is an "a", so the class also
+#: accepts every stand-in a non-ASCII letter becomes. Stripping the lookaround
+#: instead left a bare ``\d{9}``, which passed the prefilter on any longer
+#: number: 2.5 times the candidates (rules-engine#176). The start or end of a
+#: window counts as a boundary; these are RE2 syntax, where ``\z`` is the end.
+_RE2_DIGITS_START = f"(?:^|[^{_ASCII_WORD}]|[{_FOLDED_WORD_STAND_INS}])"
+_RE2_DIGITS_END = f"(?:\\z|[^{_ASCII_WORD}]|[{_FOLDED_WORD_STAND_INS}])"
+
+#: Placeholders for the two, put in before :func:`_for_re2` and replaced after
+#: it. _for_re2 refuses a negated class it does not know (a custom "[^ ]" can
+#: reject a stand-in, rules-engine#159); this one is safe only together with
+#: its stand-in alternative, so it must not be judged on its own.
+_DIGITS_START_MARK, _DIGITS_END_MARK = "\x01", "\x02"
+
+def _digit_boundaries(source: str | None) -> str | None:
+    """*source* from :func:`_for_re2` with the boundary placeholders filled in.
+
+    The forms consume the character they look at, so they stand only at the
+    very start or end of the pattern. A boundary inside it would take the
+    character the next element needs; there it is dropped, which only widens
+    the match.
+    """
+    if source is None:
+        return None
+    head = tail = ""
+    if source.startswith(_DIGITS_START_MARK):
+        head, source = _RE2_DIGITS_START, source[len(_DIGITS_START_MARK):]
+    if source.endswith(_DIGITS_END_MARK):
+        tail, source = _RE2_DIGITS_END, source[:-len(_DIGITS_END_MARK)]
+    return head + source.replace(_DIGITS_START_MARK, "").replace(_DIGITS_END_MARK, "") + tail
+
+
+#: A decimal digit other than 0-9; Python's ``\d`` is Unicode.
+_NON_ASCII_DIGIT = re.compile(r"(?![0-9])\d")
+
+
 def _for_re2(pattern: str) -> str | None:
     """*pattern* for the RE2 prefilter, which reads folded text.
 
@@ -403,8 +520,8 @@ def _for_re2(pattern: str) -> str | None:
 
     So the prefilter reads folded text (:func:`_fold_for_re2`), on which RE2's
     ASCII classes are Python's, and the pattern is folded the same way: a
-    non-ASCII literal becomes its stand-in, and a character class with a
-    non-ASCII member also accepts the stand-ins. Both only widen the match,
+    non-ASCII literal becomes its stand-in, and a character class also accepts
+    the stand-ins its members fold to. Both only widen the match,
     which is the safe direction for a prefilter. ``\\uXXXX`` and ``\\xXX`` escapes
     are read as the character they name. Returns None for an escape it cannot
     read, and that pattern always runs.
@@ -413,7 +530,6 @@ def _for_re2(pattern: str) -> str | None:
     i, n = 0, len(pattern)
     in_class = False
     class_start = 0
-    class_wide = False
     while i < n:
         ch = pattern[i]
         if ch == "\\" and i + 1 < n:
@@ -435,7 +551,7 @@ def _for_re2(pattern: str) -> str | None:
                 out.append(re.escape(ch))
                 continue
         elif ch == "[" and not in_class:
-            in_class, class_start, class_wide = True, len(out), False
+            in_class, class_start = True, len(out)
             class_src = i + 1
             out.append(ch)
             i += 1
@@ -456,8 +572,13 @@ def _for_re2(pattern: str) -> str | None:
             # makes the pattern run without a prefilter (rules-engine#159).
             if negated and pattern[class_src:i] not in _NEGATED_CLASSES_RE2_SAFE:
                 return None
-            if class_wide and not negated:
-                out.append("a0 ")
+            if not negated:
+                # Only the stand-ins this class's own members fold to: a letter
+                # range gains "a", not also "0" and " ", which let a letter
+                # class accept digits and spaces (rules-engine#176). An ASCII
+                # class can need one too: "[\x00-\x1f]" accepts a vertical tab,
+                # which folds to " ".
+                out.append(_stand_ins(pattern[class_src:i]))
             out.append(ch)
             i += 1
             continue
@@ -466,7 +587,6 @@ def _for_re2(pattern: str) -> str | None:
         if ch.isascii():
             out.append(ch)
         elif in_class:
-            class_wide = True
             out.append(ch)
         else:
             folded = _fold_char(ch)
@@ -537,7 +657,9 @@ class MultiPatternMatcher:
         # the rewrite "ЕГН7523169263" (a letter glued to a number, which the
         # rewrite treats as a boundary) was skipped. The rewrite's lookbehinds
         # take the lookaround-stripping path below (rules-engine#150).
-        automaton = _re2.Set.SearchSet()
+        options = _re2.Options()
+        options.max_mem = _RE2_MAX_MEM
+        automaton = _re2.Set.SearchSet(options)
         slots: list[int | None] = []
         added = 0
         # One build at a time in the process: _silence_stderr swaps file
@@ -549,16 +671,16 @@ class MultiPatternMatcher:
                 if _max_match_width(pdef.pattern) > _RE2_OVERLAP:
                     slots.append(None)
                     continue
-                source = _ascii_word_boundaries(pdef.pattern)
-                # A lookaround is the one thing RE2 always rejects, and the
-                # rewrite gives most digit patterns one. Strip it before the
-                # first try instead of after a rejection RE2 prints: the same
-                # superset, without the error (rules-engine#157).
+                source = _ascii_word_boundaries(
+                    pdef.pattern, _DIGITS_START_MARK, _DIGITS_END_MARK)
+                # A lookaround is the one thing RE2 always rejects. Strip it
+                # before the first try instead of after a rejection RE2 prints:
+                # the same superset, without the error (rules-engine#157).
                 if _HAS_LOOKAROUND.search(source):
                     stripped = _strip_lookarounds(source)
                     if stripped is not None:
                         source = stripped
-                exact = _for_re2(source)
+                exact = _digit_boundaries(_for_re2(source))
                 if exact is None:
                     slots.append(None)
                     continue
@@ -573,7 +695,8 @@ class MultiPatternMatcher:
                     # needlessly, never skip a window where the exact pattern
                     # matches (rules-engine#72).
                     stripped = _strip_lookarounds(source)
-                    superset = _for_re2(stripped) if stripped is not None else None
+                    superset = (_digit_boundaries(_for_re2(stripped))
+                                if stripped is not None else None)
                     try:
                         if superset is None:
                             raise ValueError
@@ -660,6 +783,15 @@ class MultiPatternMatcher:
         result, so this is a pure speed-up rather than a second set of
         semantics.
         """
+        # The digit boundaries the prefilter reads hold for every fold but a
+        # non-ASCII decimal digit's "0": "１２３" folds to "000", which an
+        # ASCII-word boundary no longer separates from the digits beside it.
+        # A text holding one is scanned without the prefilter. In the engine
+        # that is rare: normalize() folds the BMP digits first.
+        if not text.isascii() and _NON_ASCII_DIGIT.search(text):
+            if plan.ac_automaton is not None:
+                return self._scan_ac(text, plan, country_codes)
+            return self._scan_sequential(text, plan, country_codes)
         candidates: set[int] = set()
         folded = _fold_for_re2(text)
         length = len(text)

@@ -11,6 +11,35 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **`[fast]` was slower than no accelerator** *(rules-engine#176)*. Measured
+  as CPU time per document on one Linux machine, same inputs, `[fast]`
+  went from 1.03 ms per short record and 24.8 ms per identifier-dense
+  document (0.8.0) to 1.55 and 33.0 ms (1.0.0); it is now 0.93 and 23.4 ms.
+  Two causes:
+  - The RE2 prefilter received the engine's digit boundaries as lookarounds,
+    which RE2 cannot read, and dropped them: `\b\d{9}\b` became `\d{9}`
+    and let its pattern run on any longer number, 101 candidates per short
+    record instead of 40. They are now written as classes RE2 can read,
+    accepting every letter a non-ASCII one folds to; a text holding a
+    non-ASCII decimal digit skips the prefilter.
+  - The prefilter's DFA had run out of RE2's default 8 MB of memory since
+    before 1.0.0 and fell back to a slower matcher. It may now use 64 MB:
+    peak memory is about 100 MB per process after 3,250 documents, against
+    43 MB. The pass costs 0.011 ms per short record, against 0.48.
+
+  Results are unchanged: `make eval` is identical, and the scan-parity
+  tests gain five spellings with non-ASCII letters and digits glued to
+  numbers.
+- **Performance figures** *(rules-engine#176)*. The README's tables were
+  measured at 0.4.0 and carried forward unchanged; they now say so, beside
+  a table of the same inputs measured for 0.4.0, 0.8.0, 1.0.0 and this
+  version. The TypeScript SDK is about 2–3× faster than `[fast]` on those
+  inputs, not 6–7×.
+
 ## 1.0.0 (2026-11-14)
 
 ### Added

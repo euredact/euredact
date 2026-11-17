@@ -27,6 +27,12 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Fixed
+
+- Python `[fast]` was slower than no accelerator in 1.0.0: the RE2 prefilter lost its digit boundaries and ran out of DFA memory. Both are fixed (the prefilter may use up to 64 MB); `[fast]` is back to 0.93 ms per short record and 23.4 ms per dense document, from 1.55 and 33.0. *(Python only)* *(rules-engine#176)*
+- 1.0.0 was slower on identifier-dense text: a currency check and the context windows are cheaper again, 9.2 ms per dense document from 11.2 (0.8.0: 7.5). *(TypeScript only)* *(rules-engine#176)*
+- The README's performance tables say they were measured at 0.4.0, with the change since on the same inputs; the TypeScript SDK is about 2–3× faster than Python `[fast]`, not 6–7×. *(rules-engine#176)*
+
 ## [1.0.0] - 2026-11-14
 
 ### Added

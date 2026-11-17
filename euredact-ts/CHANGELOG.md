@@ -11,6 +11,32 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
+## Unreleased
+
+### Fixed
+
+- **Slower on identifier-dense text in 1.0.0** *(rules-engine#176)*.
+  Measured as CPU time per document on one Linux machine, same inputs:
+  0.46 ms per short record and 7.5 ms per dense document at 0.8.0, 0.57 and
+  11.2 ms at 1.0.0, now 0.53 and 9.2 ms.
+  - **Currency check.** The check for a currency before a value ends in
+    `$`, but V8 tried it from every position of the window, and #152's
+    Unicode lookbehinds made that a tenth of all the time. It now reads
+    the window's end only: its trailing spaces and 12 code units, the most
+    the regex can depend on. 200,000 generated windows give the same
+    answer either way.
+  - **Context windows.** The code-point windows around a candidate (#151)
+    were walked again by every suppressor; the last one is kept on the
+    call's scratch.
+
+  The remaining difference is the cost of the checks #152 added so that
+  real values are no longer dropped. Results are unchanged: conformance,
+  parity and `make eval` are identical, and three vectors pin the currency
+  check's edges.
+- **Performance figures** *(rules-engine#176)*. The README's table was
+  measured at 0.4.0; it now says so and gives the change since on the same
+  inputs. This SDK is about 2–3× faster than Python with `[fast]`, not 6–7×.
+
 ## 1.0.0 (2026-11-14)
 
 ### Added

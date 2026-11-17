@@ -14,8 +14,19 @@ export interface RawMatch {
   countryCode: string;
 }
 
+/**
+ * The text around a candidate, in code points. Each suppressor asks for it, so
+ * during a detection call the last one is kept on the call's scratch: walking
+ * the two windows code point by code point (#151) once per suppressor was a
+ * fifth of the time spent on identifier-dense text (rules-engine#176).
+ */
 function getContext(text: string, start: number, end: number): [string, string] {
-  return [cpBefore(text, start, CONTEXT_CHARS), cpAfter(text, end, CONTEXT_CHARS)];
+  const sc = activeScratch !== null && activeScratch.text === text ? activeScratch : null;
+  const last = sc?.context;
+  if (last !== undefined && last.start === start && last.end === end) return last.pair;
+  const pair: [string, string] = [cpBefore(text, start, CONTEXT_CHARS), cpAfter(text, end, CONTEXT_CHARS)];
+  if (sc !== null) sc.context = { start, end, pair };
+  return pair;
 }
 
 // Unicode-safe word boundary: negative lookahead for any letter (including accented)
@@ -38,6 +49,27 @@ const CURRENCY_WORD =
 const CURRENCY_AFTER = new RegExp(`^[^\\S\\r\\n]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
 const CURRENCY_COMMA_AFTER = new RegExp(`^[.,]\\d{1,2}[^\\S\\r\\n]*(?:(?:${CURRENCY_SYMBOL})|(?:${CURRENCY_WORD})${_UWB})`, "iu");
 const CURRENCY_BEFORE = new RegExp(`(?:(?:${CURRENCY_SYMBOL})|\\b(?:${CURRENCY_WORD}))[^\\S\\r\\n]*$`, "iu");
+
+/** Whitespace other than a line break, as `[^\S\r\n]` reads it under `u`. */
+function isHorizontalSpace(unit: number): boolean {
+  return unit === 0x20 || unit === 0x09 || unit === 0x0b || unit === 0x0c || unit === 0xa0
+    || unit === 0x1680 || (unit >= 0x2000 && unit <= 0x200a) || unit === 0x2028 || unit === 0x2029
+    || unit === 0x202f || unit === 0x205f || unit === 0x3000 || unit === 0xfeff;
+}
+
+/**
+ * The end of `before` that `CURRENCY_BEFORE` can depend on: its trailing
+ * horizontal whitespace and the 12 code units before it, enough for the
+ * longest word (7 letters), its boundary and a lookbehind letter outside the
+ * BMP. The regex ends in `$`, but V8 tried it from every position of the
+ * window; with the `iu` flags and lookbehinds of #152 that was a tenth of all
+ * the time spent on identifier-dense text (rules-engine#176).
+ */
+function currencyTail(before: string): string {
+  let i = before.length;
+  while (i > 0 && isHorizontalSpace(before.charCodeAt(i - 1))) i--;
+  return before.slice(Math.max(0, i - 12));
+}
 const AMOUNT_LABEL_BEFORE =
   /\b(?:Montant|Beløb|Summa|Summe|Bedrag|Amount|Total|TTC|inkl|Upphæð|Importe|Importo|Valore|Wartość|Kwota|Částka|Összeg|Sum|Beloop|Prix|Preis|Price|Loyer|Miete|Huur|Rent|Betrag)(?:\s+\w+)?\s*:?\s*$/i; // second word separate: not "Rent"+"enversicherungsnummer" (rules-engine#111)
 
@@ -363,7 +395,7 @@ function suppressPhoneAsNumberRange(text: string, match: RawMatch): boolean {
 function suppressCurrency(text: string, match: RawMatch): boolean {
   if (!NUMERIC_TYPES.has(match.patternDef.entityType)) return false;
   const [before, after] = getContext(text, match.start, match.end);
-  if (CURRENCY_AFTER.test(after) || CURRENCY_BEFORE.test(before)) return true;
+  if (CURRENCY_AFTER.test(after) || CURRENCY_BEFORE.test(currencyTail(before))) return true;
   if (CURRENCY_COMMA_AFTER.test(after)) return true;
   if (AMOUNT_LABEL_BEFORE.test(before)) return true;
   return false;
@@ -1166,6 +1198,8 @@ export class SuppressionScratch {
   newlineAt?: number[];
   accountRuns?: { lineStart: number; lineEnd: number; starts: number[]; ends: number[] };
   column?: { lineStart: number; found: [number[], string[]] | null };
+  /** The last candidate's context windows (see `getContext`). */
+  context?: { start: number; end: number; pair: [string, string] };
 
   constructor(readonly text: string) {}
 

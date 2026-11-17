@@ -1620,6 +1620,15 @@ document, 10th–90th percentile in brackets:
 | Short record (~190 chars) | 154 µs <br><sub>89 – 237</sub> | 6,494 docs/s |
 | Real document (~3,450 chars) | 1.43 ms <br><sub>1.04 – 1.96</sub> | 699 docs/s |
 
+These figures were measured at 0.4.0. On one Linux machine (4 cores,
+Node.js 24) with the same inputs for every version (3,000 corpus records and
+200 identifier-dense documents of 3,450 characters), the median CPU time per
+document moved from 0.32 ms and 5.1 ms (0.4.0) to 0.46 and 7.5 (0.8.0), 0.57
+and 11.2 (1.0.0) and 0.53 and 9.2 (this version). Of 1.0.0's extra cost on
+dense text, the repeated context windows and one currency check are fixed; the
+rest is the cost of the checks #152 added so that real values are no longer
+dropped (rules-engine#176).
+
 Cost tracks identifier density rather than length: the per-candidate cue and
 suppressor checks dominate, so a form-like document dense in national IDs costs
 several times an ordinary chat log of the same size.
@@ -1627,8 +1636,9 @@ several times an ordinary chat log of the same size.
 No optional accelerator is needed or offered. The Python SDK ships an
 `[fast]` extra (RE2 / Aho-Corasick) because CPython's regex engine is the
 bottleneck there; V8's has literal prefilters that make it unnecessary here.
-Measured on the same 611 documents, this SDK runs about 6–7× faster than the
-accelerated Python path, so adding a native addon — and with it the loss of
+On the same inputs this SDK runs about 2–3× faster than the accelerated Python
+path (1.8× on short records, 2.5× on dense documents; 6–7× in the 0.4.0
+measurements), so adding a native addon — and with it the loss of
 bundler, edge-runtime and Deno compatibility — would buy nothing.
 
 | Package | |
