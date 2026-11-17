@@ -19,9 +19,9 @@
  * `cipher` encrypts the file at rest with a key the caller holds.
  */
 
-import type { Detection, RedactResult } from "../types.js";
+import type { Detection, RedactResult, Review } from "../types.js";
 import { DetectionSource } from "../types.js";
-import { EuRedact, applyReplacements, maskForCloud, ontoOriginal } from "../sdk.js";
+import { EuRedact, applyReplacements, maskForCloud, ontoOriginal, reviewOntoOriginal } from "../sdk.js";
 import { defaultBatchStore, gzip, sha256Hex } from "../platform.js";
 import { cloudErrorFor, codePointOffsets, isInteger, toCloudInfo, toResult } from "./client.js";
 import { getConfig, requireSecureBaseUrl, type CloudConfig } from "./config.js";
@@ -574,10 +574,12 @@ export class Batches {
     }
     // The gateway's offsets count code points of the masked text; toResult
     // converts them to UTF-16 units, as the cloud client does for redactAsync.
-    const remote = toResult({ entities: result.entities as never }, masked);
+    const remote = toResult({ entities: result.entities as never, review: result.review }, masked);
     let placed: Detection[];
+    let review: Review | null;
     try {
       placed = ontoOriginal(remote.detections, masked, text, labels, CloudError);
+      review = reviewOntoOriginal(remote.review, masked, text, labels, CloudError);
     } catch (err) {
       return fail("local_mismatch", (err as Error).message);
     }
@@ -597,6 +599,7 @@ export class Batches {
         // A batch line carries the model and anything unplaced; it has no job
         // id and no usage of its own (the batch carries those).
         cloud: toCloudInfo({ model_version: result.model_version, unlocated: result.unlocated }),
+        review,
       },
     };
   }

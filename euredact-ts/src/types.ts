@@ -143,9 +143,11 @@ export interface Detection {
   country: string | null;
   /**
    * How the type was arrived at: "high", "medium" or "low" for a rules
-   * detection. `null` for a span the cloud model found and reported no
-   * confidence for: the model emits none today, and "high" would claim the
-   * checksum-backed evidence a rules detection has (rules-engine#108).
+   * detection. For a span the cloud model found, the service's label for its
+   * calibrated {@link Detection.score}: "high" (0.95 and above), "medium" (0.80
+   * and above) or "low"; `null` when the service sends none (a model without
+   * calibration, an older service). Never invented: "high" would claim the
+   * checksum-backed evidence a rules detection has (rules-engine#108, #178).
    */
   confidence: string | null;
   /**
@@ -163,6 +165,15 @@ export interface Detection {
    * they do not suppress evidence.
    */
   outOfScope?: boolean;
+  /**
+   * For a span the cloud model found: the service's calibrated estimate, in
+   * [0, 1], that the redaction is warranted. Absent for a rules detection;
+   * `null` for a cloud span the service did not score (rules-engine#178).
+   *
+   * A review aid only. It covers what the model found, never what it missed,
+   * so it must not be used to drop a redaction.
+   */
+  score?: number | null;
 }
 
 /**
@@ -222,6 +233,28 @@ export interface Unlocated {
   entityType: EntityType | string;
 }
 
+/**
+ * The service's review recommendation for a cloud document (rules-engine#178).
+ * {@link RedactResult.review} is `null` or absent when the service sends none:
+ * a rules-only result, a model without calibration, an older service.
+ */
+export interface Review {
+  /** The calibrated probability that the document still contains a value the
+   *  model did not redact, in [0, 1]. */
+  score: number | null;
+  /** Whether the Workspace's review setting marks this document. False unless
+   *  the Workspace turned review on (it is off by default). */
+  recommended: boolean;
+  /** Which rule decided `recommended`: "off", "threshold", "budget" or "warming_up". */
+  basis: string | null;
+  /** The kinds of data redacted in the document: "health", "special_category",
+   *  "biometric", "identifiers", "financial". A missing flag means nothing of
+   *  that kind was redacted, not that none is there. */
+  flags: string[];
+  /** The cloud spans the service labelled "low", in this result's offsets. */
+  uncertain: Detection[];
+}
+
 /** What the cloud service said about a request, beside its spans (rules-engine#89). */
 export interface CloudInfo {
   /** The service's job id: for support, for `Jobs.retrieve`, and to recognise an
@@ -277,6 +310,10 @@ export interface RedactResult {
   /** What the cloud service reported beside the spans: job id, model, cost and
    *  anything it could not place. Absent on a rules-only result. */
   cloud?: CloudInfo;
+  /** The service's review recommendation for the document, with its score; see
+   *  {@link Review}. Absent for a rules-only result, `null` when the service
+   *  sends none. */
+  review?: Review | null;
 }
 
 export interface PatternDef {

@@ -20,7 +20,7 @@ from euredact.rules.bic_registry import registry_generation
 from euredact.rules.context import DocumentContext
 from euredact.rules.engine import RuleEngine, check_country_arg
 from euredact.rules.evidence import weights_to_ranking
-from euredact.types import Detection, EntityType, Exemption, RedactResult
+from euredact.types import Detection, EntityType, Exemption, RedactResult, Review
 
 # Date entity types — opt-in via detect_dates=True
 _DATE_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
@@ -192,6 +192,17 @@ def _onto_original(
 
         placed.append(replace(span, start=start, end=end, text=text[start:end]))
     return placed
+
+
+def _review_onto_original(
+    review: Review | None, masked: str, text: str, labels: list[_WireLabel]
+) -> Review | None:
+    """The service's review block with its uncertain spans in the original's
+    offsets, placed as every other cloud span is (rules-engine#178)."""
+    if review is None or not review.uncertain:
+        return review
+    return replace(review, uncertain=tuple(
+        _onto_original(list(review.uncertain), masked, text, labels)))
 
 
 class ReferentialMapper:
@@ -1039,6 +1050,7 @@ class EuRedact:
             detections=detections,
             source="cloud",
             cloud=remote.cloud,
+            review=_review_onto_original(remote.review, masked, text, labels),
             tokens=token_mapper.tokens if token_mapper is not None else {},
             exempted=exempted,
         )

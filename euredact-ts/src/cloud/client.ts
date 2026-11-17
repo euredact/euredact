@@ -47,6 +47,7 @@ import {
   type CloudInfo,
   type Detection,
   type RedactResult,
+  type Review,
   type Unlocated,
   type Usage,
   type UsageFactor,
@@ -65,6 +66,7 @@ interface WireSpan {
   source: string;
   match?: string;
   confidence?: string;
+  score?: unknown;
 }
 
 interface WireResult {
@@ -76,6 +78,7 @@ interface WireResult {
   model_version?: string | null;
   stats?: Record<string, unknown>;
   usage?: unknown;
+  review?: unknown;
   error?: string;
   detail?: Record<string, unknown>;
   location?: string;
@@ -260,6 +263,44 @@ export function cloudErrorFor(status: number, payload: Record<string, unknown>):
 }
 
 /** @internal Shared with cloud/batches.ts. */
+/** A score in [0, 1], or null for anything else. @internal */
+export function toScore(value: unknown): number | null {
+  return typeof value === "number" && value >= 0 && value <= 1 ? value : null;
+}
+
+/**
+ * The service's review block (rules-engine#178), read as the Python SDK reads
+ * it (`conformance/cloud_result.json`). A malformed field is absent, an
+ * uncertain span that does not fit `text` is skipped: the review never fails a
+ * redaction. Offsets arrive in code points, like the entities'.
+ * @internal
+ */
+export function toReview(raw: unknown, text: string): Review | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const offset = codePointOffsets(text);
+  const length = [...text].length;
+  const uncertain: Detection[] = [];
+  for (const item of Array.isArray(r.uncertain) ? r.uncertain : []) {
+    if (!item || typeof item !== "object") continue;
+    const { start, end, type, score } = item as Record<string, unknown>;
+    if (!isInteger(start) || !isInteger(end) || !(0 <= start && start < end && end <= length)) continue;
+    const s = offset(start), e = offset(end);
+    uncertain.push({
+      entityType: toEntityType(typeof type === "string" ? type : "OTHER"),
+      start: s, end: e, text: text.slice(s, e),
+      source: DetectionSource.CLOUD, country: null, confidence: "low", score: toScore(score),
+    });
+  }
+  return {
+    score: toScore(r.score),
+    recommended: r.recommended === true,
+    basis: str(r.basis),
+    flags: Array.isArray(r.flags) ? r.flags.filter((f): f is string => typeof f === "string") : [],
+    uncertain,
+  };
+}
+
 export function toResult(payload: WireResult, text: string): RedactResult {
   const offset = codePointOffsets(text);
   const detections: Detection[] = (payload.entities ?? []).map(span => ({
@@ -269,9 +310,13 @@ export function toResult(payload: WireResult, text: string): RedactResult {
     text: span.text,
     source: span.source === "model" ? DetectionSource.CLOUD : DetectionSource.RULES,
     country: null,
-    // A model span carries no evidence of its own: the service's confidence
-    // when it sends one, never an invented "high" (rules-engine#108).
-    confidence: span.source === "model" ? (span.confidence ?? null) : (span.confidence ?? "high"),
+    // A model span carries no evidence of its own: the service's label when it
+    // sends one, never an invented "high" (rules-engine#108); with a
+    // calibrated model it sends one, and the score behind it (rules-engine#178).
+    ...(span.source === "model"
+      ? { confidence: typeof span.confidence === "string" && span.confidence ? span.confidence : null,
+          score: toScore(span.score) }
+      : { confidence: span.confidence ?? "high" }),
   }));
   detections.sort((a, b) => a.start - b.start || b.end - a.end);
   return {
@@ -285,6 +330,7 @@ export function toResult(payload: WireResult, text: string): RedactResult {
     tokens: {},
     exempted: [],
     cloud: toCloudInfo(payload as Record<string, unknown>),
+    review: toReview(payload.review, text),
   };
 }
 

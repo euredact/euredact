@@ -163,9 +163,11 @@ class Detection:
     country: str | None
     confidence: str | None = "high"
     """How the type was arrived at: "high", "medium" or "low" for a rules
-    detection. ``None`` for a span the cloud model found and reported no
-    confidence for: the model emits none today, and "high" would claim the
-    checksum-backed evidence a rules detection has (rules-engine#108)."""
+    detection. For a span the cloud model found, the service's label for its
+    calibrated :attr:`score`: "high" (0.95 and above), "medium" (0.80 and
+    above) or "low"; ``None`` when the service sends none (a model without
+    calibration, an older service). Never invented: "high" would claim the
+    checksum-backed evidence a rules detection has (rules-engine#108, #178)."""
     country_confidence: float = 0.0
     """How strongly the document supports :attr:`country`, in [0, 1].
 
@@ -178,6 +180,14 @@ class Detection:
     ``countries=`` narrows *scoring*, never detection. An entity from outside
     the declared set is emitted and flagged, not dropped: callers assert
     context, they do not suppress evidence.
+    """
+    score: float | None = None
+    """For a span the cloud model found: the service's calibrated estimate, in
+    [0, 1], that the redaction is warranted. ``None`` for a rules detection,
+    and for a cloud span the service did not score (rules-engine#178).
+
+    A review aid only. It covers what the model found, never what it missed,
+    so it must not be used to drop a redaction.
     """
 
 
@@ -248,6 +258,34 @@ class Unlocated:
 
 
 @dataclass(frozen=True)
+class Review:
+    """The service's review recommendation for a cloud document
+    (rules-engine#178). ``RedactResult.review`` is ``None`` when the service
+    sends none: a rules-only result, a model without calibration, an older
+    service."""
+
+    score: float | None = None
+    """The calibrated probability that the document still contains a value the
+    model did not redact, in [0, 1]."""
+
+    recommended: bool = False
+    """Whether the Workspace's review setting marks this document. False unless
+    the Workspace turned review on (it is off by default)."""
+
+    basis: str | None = None
+    """Which rule decided :attr:`recommended`: "off", "threshold", "budget" or
+    "warming_up"."""
+
+    flags: tuple[str, ...] = ()
+    """The kinds of data redacted in the document: "health",
+    "special_category", "biometric", "identifiers", "financial". A missing
+    flag means nothing of that kind was redacted, not that none is there."""
+
+    uncertain: tuple[Detection, ...] = ()
+    """The cloud spans the service labelled "low", in this result's offsets."""
+
+
+@dataclass(frozen=True)
 class CloudInfo:
     """What the cloud service said about a request, beside its spans
     (rules-engine#89)."""
@@ -310,6 +348,11 @@ class RedactResult:
     cloud: CloudInfo | None = None
     """What the cloud service reported beside the spans: job id, model, cost
     and anything it could not place. ``None`` for a rules-only result."""
+
+    review: Review | None = None
+    """The service's review recommendation for the document, with its score;
+    see :class:`Review`. ``None`` for a rules-only result and when the service
+    sends none."""
 
     tokens: dict[str, str] = field(default_factory=dict)
     """Token -> original text, populated by ``redact(tokenize=True)``.

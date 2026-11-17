@@ -470,7 +470,9 @@ country) is not breaking. Both SDKs always carry the same version number.
   and option names in each SDK's spelling (`exclude_types` / `excludeTypes`).
   New options are always optional.
 - **Result fields** of `RedactResult`, `Detection`, `Exemption` and the cloud
-  results, with their types.
+  results, with their types, including the cloud model's `Detection.score`,
+  its `confidence` labels and `RedactResult.review`. What a score *means* is
+  calibrated per model and may move between models; the fields do not.
 - **Entity type names**: the `EntityType` values. `IBAN` and `CREDENTIAL` remain
   aliases of `BANK_ACCOUNT` and `SECRET` throughout 1.x.
 - **Error classes** and their hierarchy: every cloud error is a `CloudError`.

@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Added
+
+- Cloud confidence: `Detection.score` and a `confidence` label (high, medium, low) on each cloud span, and `RedactResult.review` (score, recommended, basis, flags, uncertain spans), from a model that ships a calibration; `None` from older services. *(rules-engine#178)*
+
 ### Fixed
 
 - Python `[fast]` was slower than no accelerator in 1.0.0: the RE2 prefilter lost its digit boundaries and ran out of DFA memory. Both are fixed (the prefilter may use up to 64 MB); `[fast]` is back to 0.93 ms per short record and 23.4 ms per dense document, from 1.55 and 33.0. *(Python only)* *(rules-engine#176)*

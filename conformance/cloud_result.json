@@ -696,5 +696,293 @@
         "message": "Budget and extra volume are spent"
       }
     }
+  ],
+  "confidence": [
+    {
+      "id": "scored-and-reviewed",
+      "text": "Patiënt Bas Verhoeven, tel +32 475 12 34 56, diabetes",
+      "wire": {
+        "job_id": "job-1",
+        "status": "succeeded",
+        "redacted_text": "x",
+        "entities": [
+          {
+            "start": 8,
+            "end": 21,
+            "text": "Bas Verhoeven",
+            "type": "PERSON_NAME",
+            "source": "model",
+            "score": 0.97,
+            "confidence": "high"
+          },
+          {
+            "start": 27,
+            "end": 43,
+            "text": "+32 475 12 34 56",
+            "type": "PHONE",
+            "source": "rules",
+            "confidence": "high",
+            "score": 0.5
+          },
+          {
+            "start": 45,
+            "end": 53,
+            "text": "diabetes",
+            "type": "MEDICAL_CONDITION",
+            "source": "model",
+            "score": 0.62,
+            "confidence": "low"
+          }
+        ],
+        "review": {
+          "score": 0.31,
+          "recommended": true,
+          "basis": "threshold",
+          "flags": [
+            "health",
+            "identifiers"
+          ],
+          "uncertain": [
+            {
+              "start": 45,
+              "end": 53,
+              "type": "MEDICAL_CONDITION",
+              "score": 0.62
+            }
+          ]
+        }
+      },
+      "expect": {
+        "spans": [
+          {
+            "type": "PERSON_NAME",
+            "score": 0.97,
+            "confidence": "high"
+          },
+          {
+            "type": "PHONE",
+            "score": null,
+            "confidence": "high"
+          },
+          {
+            "type": "MEDICAL_CONDITION",
+            "score": 0.62,
+            "confidence": "low"
+          }
+        ],
+        "review": {
+          "score": 0.31,
+          "recommended": true,
+          "basis": "threshold",
+          "flags": [
+            "health",
+            "identifiers"
+          ],
+          "uncertain": [
+            {
+              "start": 45,
+              "end": 53,
+              "text": "diabetes",
+              "type": "MEDICAL_CONDITION",
+              "score": 0.62
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "older-service-without-scores",
+      "text": "Patiënt Bas Verhoeven, tel +32 475 12 34 56, diabetes",
+      "wire": {
+        "job_id": "job-2",
+        "status": "succeeded",
+        "redacted_text": "x",
+        "entities": [
+          {
+            "start": 8,
+            "end": 21,
+            "text": "Bas Verhoeven",
+            "type": "PERSON_NAME",
+            "source": "model"
+          }
+        ]
+      },
+      "expect": {
+        "spans": [
+          {
+            "type": "PERSON_NAME",
+            "score": null,
+            "confidence": null
+          }
+        ],
+        "review": null
+      }
+    },
+    {
+      "id": "partly-malformed",
+      "text": "Patiënt Bas Verhoeven, tel +32 475 12 34 56, diabetes",
+      "wire": {
+        "job_id": "job-3",
+        "status": "succeeded",
+        "redacted_text": "x",
+        "entities": [
+          {
+            "start": 8,
+            "end": 21,
+            "text": "Bas Verhoeven",
+            "type": "PERSON_NAME",
+            "source": "model",
+            "score": "0.9",
+            "confidence": 7
+          },
+          {
+            "start": 45,
+            "end": 53,
+            "text": "diabetes",
+            "type": "MEDICAL_CONDITION",
+            "source": "model",
+            "score": 1.5,
+            "confidence": ""
+          },
+          {
+            "start": 0,
+            "end": 7,
+            "text": "Patiënt",
+            "type": "PERSON_NAME",
+            "source": "model",
+            "score": true
+          }
+        ],
+        "review": {
+          "score": "high",
+          "recommended": "yes",
+          "basis": 3,
+          "flags": "health",
+          "uncertain": [
+            {
+              "start": 8
+            },
+            {
+              "start": 8,
+              "end": 999,
+              "type": "X"
+            },
+            {
+              "start": 21,
+              "end": 8,
+              "type": "X"
+            },
+            {
+              "start": true,
+              "end": 12,
+              "type": "X"
+            },
+            "junk",
+            {
+              "start": 8,
+              "end": 21,
+              "type": 7,
+              "score": -0.1
+            }
+          ]
+        }
+      },
+      "expect": {
+        "spans": [
+          {
+            "type": "PERSON_NAME",
+            "score": null,
+            "confidence": null
+          },
+          {
+            "type": "PERSON_NAME",
+            "score": null,
+            "confidence": null
+          },
+          {
+            "type": "MEDICAL_CONDITION",
+            "score": null,
+            "confidence": null
+          }
+        ],
+        "review": {
+          "score": null,
+          "recommended": false,
+          "basis": null,
+          "flags": [],
+          "uncertain": [
+            {
+              "start": 8,
+              "end": 21,
+              "text": "Bas Verhoeven",
+              "type": "OTHER",
+              "score": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "offsets-in-code-points-after-an-emoji",
+      "text": "😀 Bas Verhoeven heeft diabetes",
+      "wire": {
+        "job_id": "job-4",
+        "status": "succeeded",
+        "redacted_text": "x",
+        "entities": [
+          {
+            "start": 2,
+            "end": 15,
+            "text": "Bas Verhoeven",
+            "type": "PERSON_NAME",
+            "source": "model",
+            "score": 0.99,
+            "confidence": "high"
+          }
+        ],
+        "review": {
+          "score": 0.05,
+          "recommended": false,
+          "basis": "off",
+          "flags": [
+            "health"
+          ],
+          "uncertain": [
+            {
+              "start": 22,
+              "end": 30,
+              "type": "MEDICAL_CONDITION",
+              "score": 0.7
+            }
+          ]
+        }
+      },
+      "expect": {
+        "spans": [
+          {
+            "type": "PERSON_NAME",
+            "score": 0.99,
+            "confidence": "high"
+          }
+        ],
+        "review": {
+          "score": 0.05,
+          "recommended": false,
+          "basis": "off",
+          "flags": [
+            "health"
+          ],
+          "uncertain": [
+            {
+              "start": 22,
+              "end": 30,
+              "text": "diabetes",
+              "type": "MEDICAL_CONDITION",
+              "score": 0.7
+            }
+          ]
+        }
+      }
+    }
   ]
 }

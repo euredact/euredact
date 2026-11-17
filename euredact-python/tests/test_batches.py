@@ -174,6 +174,29 @@ def test_ended_batch_is_mapped_onto_the_originals(batches, gateway):
     assert result.source == "cloud"
 
 
+def test_a_batch_line_carries_its_scores_and_review_onto_the_original(batches, gateway):
+    """rules-engine#178: a batch result line has the same score, label and
+    review block as /v1/redact, and its uncertain spans are placed like its
+    entities."""
+    batch = batches.create(_docs(1))
+    gateway.status = "ended"
+    masked = gateway.uploaded[0]["text"]
+    line = FakeGateway._succeeded(masked)
+    line["entities"][0].update(score=0.7, confidence="low")
+    start = masked.find(NAME)
+    line["review"] = {"score": 0.2, "recommended": False, "basis": "off", "flags": [],
+                      "uncertain": [{"start": start, "end": start + len(NAME),
+                                     "type": "PERSON_NAME", "score": 0.7}]}
+    gateway.override["doc-0"] = line
+    result = batches.results(batch.id).documents["doc-0"].result
+    assert masked.find(NAME) != TEXT.find(NAME)
+    name = next(d for d in result.detections if d.text == NAME)
+    assert (name.score, name.confidence) == (0.7, "low")
+    [uncertain] = result.review.uncertain
+    assert (uncertain.start, uncertain.text, uncertain.score) == (TEXT.find(NAME), NAME, 0.7)
+    assert (result.review.score, result.review.basis) == (0.2, "off")
+
+
 def test_resolved_once_then_a_text_free_receipt(batches, gateway, tmp_path):
     batch = batches.create(_docs())
     gateway.status = "ended"

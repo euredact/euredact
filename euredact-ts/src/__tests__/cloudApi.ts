@@ -31,6 +31,7 @@ const CASES = JSON.parse(
 ) as {
   results: Array<{ id: string; wire: Json; expect: Json }>;
   throttling: Array<{ id: string; status: number; json?: Json; text?: string; expect: string }>;
+  confidence: Array<{ id: string; text: string; wire: Json; expect: Json }>;
   insufficient_credits: Array<{ id: string; status: number; json?: Json; text?: string; expect: Json;
                                  expect_detail?: Json }>;
   batches: Array<{ id: string; wire: Json; expect: Json }>;
@@ -85,6 +86,28 @@ for (const c of CASES.results) {
     assert.deepEqual({
       job_id: cloud.jobId, model_version: cloud.modelVersion, has_usage: cloud.usage !== undefined,
       unlocated: cloud.unlocated.map(u => ({ text: u.text, entity_type: String(u.entityType) })),
+    }, c.expect);
+  });
+}
+
+// ── confidence: span scores, labels and the review block (rules-engine#178) ──
+
+for (const c of CASES.confidence) {
+  test(`scores and the review block are read as both SDKs read them: ${c.id}`, async () => {
+    config();
+    const { fetchImpl } = service({ status: 200, json: c.wire });
+    const result = await new CloudClient().redact(c.text, { country: "BE", fetchImpl });
+    // The expectations count code points, as the service and Python do.
+    const cp = (unit: number) => [...c.text.slice(0, unit)].length;
+    const review = result.review ? {
+      score: result.review.score, recommended: result.review.recommended, basis: result.review.basis,
+      flags: result.review.flags,
+      uncertain: result.review.uncertain.map(d => ({
+        start: cp(d.start), end: cp(d.end), text: d.text, type: String(d.entityType), score: d.score ?? null })),
+    } : null;
+    assert.deepEqual({
+      spans: result.detections.map(d => ({ type: String(d.entityType), score: d.score ?? null, confidence: d.confidence })),
+      review,
     }, c.expect);
   });
 }

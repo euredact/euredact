@@ -272,6 +272,8 @@ interface RedactResult {
   exempted: Exemption[];          // spans the allowlist or excludeTypes kept, with the rule
   cloud?: CloudInfo;              // mode: "cloud" only: job id, model, cost, unplaced
                                   // findings — see "What the service said"
+  review?: Review | null;         // mode: "cloud" only: the review recommendation
+                                  // — see "Confidence and review"
 }
 ```
 
@@ -285,12 +287,13 @@ interface Detection {
   text: string;                    // The matched substring
   source: DetectionSource;         // "rules" or "cloud"
   country: string | null;          // ISO code or null for shared/custom patterns
-  confidence: string | null;       // "high" | "medium" | "low"; null for a cloud-model span — see below
+  confidence: string | null;       // "high" | "medium" | "low" — see below; null for an unscored cloud span
   countryConfidence?: number;      // How strongly the document supports `country`,
                                    // in [0, 1]. 0 means the attribution rests on
                                    // a checksum alone.
   outOfScope?: boolean;            // Attributed outside the declared `countries`.
                                    // Flagged, never dropped.
+  score?: number | null;           // Cloud spans: the calibrated score in [0, 1]
 }
 ```
 
@@ -302,12 +305,15 @@ about whether the span is masked — every detection is, at every level.
 | `"high"` | a pattern matched and, where one exists, its checksum passed |
 | `"medium"` | the type comes from a label touching the span, because no pattern of that type claimed it — `Αρ. Ταυτότητας: 00892341` is a `NATIONAL_ID` although nothing can checksum it |
 | `"low"` | a pattern matched, its checksum *failed*, and the document labels the span as that very type — `Rijksregisternummer: 85.03.19-284.73` is a national number with a bad check digit |
-| `null` | a span the cloud model found (`source` is `cloud`). The model reports no confidence, so none is invented: a model span is not checksum-backed, and filtering on `"high"` keeps rules detections only *(rules-engine#108)* |
+| `null` | a span the cloud model found that the service did not score (a model without calibration, an older service). None is invented: a model span is not checksum-backed *(rules-engine#108)* |
 
-Filter on it when you need only checksum-backed detections:
+For a span the cloud model found (`source` is `cloud`), the same three labels
+come from its calibrated `score` instead — see [Confidence and
+review](#confidence-and-review). Filter on the source too when you need only
+checksum-backed detections:
 
 ```ts
-const strict = result.detections.filter(d => d.confidence === "high");
+const strict = result.detections.filter(d => d.source === "rules" && d.confidence === "high");
 ```
 
 A `"low"` detection is the honest description of a mistyped, OCR'd or invented
@@ -315,6 +321,38 @@ identifier: the shape and the label agree, the check digit does not. Earlier
 versions dropped these, which meant a redaction library printed in full an
 identifier it had recognised and rejected.
 
+#### Confidence and review
+
+With `mode: "cloud"`, a model that ships a calibration (gen 15 onward) scores
+what it finds *(rules-engine#178)*:
+
+- **`Detection.score`**, for each cloud span: a calibrated estimate, in [0, 1],
+  that the redaction is warranted. `confidence` is its label: `"high"` at
+  0.95 and above, `"medium"` at 0.80 and above, `"low"` below. Rules spans
+  keep the labels above and have no score.
+- **`RedactResult.review`**, for the document:
+
+  ```ts
+  interface Review {
+    score: number | null;   // P(the document still holds a value the model missed)
+    recommended: boolean;   // the Workspace's review setting marks it (off by default)
+    basis: string | null;   // "off", "threshold", "budget" or "warming_up"
+    flags: string[];        // "health", "special_category", "biometric",
+                            // "identifiers", "financial": kinds of data redacted
+    uncertain: Detection[]; // the cloud spans labelled "low"
+  }
+  ```
+
+`review` is `null` (and spans have no `score`) for a model without
+calibration or an older service, and absent for a rules-only result. The same
+fields come back from `Jobs` and `Batches`; spans in `review.uncertain` are in
+the same offsets as `detections`.
+
+**A score is a review aid, never a reason to unmask.** It covers what the
+model found, not what it missed, and it is calibrated on euRedact's synthetic
+corpus, which is denser in hard personal data than most real text. Use
+`review` to route documents to a person; do not drop a redaction because its
+score is low.
 #### `EntityType`
 
 String enum with all supported PII categories:

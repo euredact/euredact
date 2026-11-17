@@ -414,7 +414,12 @@ interface Wire {
  * relying on it.
  */
 async function withWire(
-  script: { found?: Record<string, string>; entities?: unknown[]; usage?: unknown },
+  script: {
+    found?: Record<string, string>; entities?: unknown[]; usage?: unknown;
+    /** rules-engine#178: a score and label on each found span, and a review
+     *  block built from the text received. */
+    score?: [number, string]; review?: (sent: string) => unknown;
+  },
   fn: (wire: Wire) => Promise<void>,
 ): Promise<void> {
   const realFetch = globalThis.fetch;
@@ -433,6 +438,7 @@ async function withWire(
           entities.push({
             start: codePoints(at), end: codePoints(at + needle.length), text: needle,
             type, source: "model", match: "exact_body",
+            ...(script.score ? { score: script.score[0], confidence: script.score[1] } : {}),
           });
         }
       }
@@ -441,6 +447,7 @@ async function withWire(
       JSON.stringify({
         job_id: "job-1", status: "succeeded", redacted_text: text, entities, unlocated: [],
         ...(script.usage !== undefined ? { usage: script.usage } : {}),
+        ...(script.review ? { review: script.review(text) } : {}),
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );
@@ -498,6 +505,33 @@ testAsync("service spans are mapped back onto the original", () =>
     ]);
     for (const d of r.detections) assert.equal(LEDGER.slice(d.start, d.end), d.text);
   }));
+
+// The service scores spans in the masked text; its uncertain spans, like its
+// entities, must land on the caller's characters (rules-engine#178).
+testAsync("scores and the review land on the original", () =>
+  withWire({
+    found: { "Nick Bols": "PERSON_NAME" }, score: [0.62, "low"],
+    review: sent => ({
+      score: 0.4, recommended: true, basis: "threshold", flags: ["financial"],
+      uncertain: [{ start: sent.indexOf("Nick Bols"), end: sent.indexOf("Nick Bols") + 9, type: "PERSON_NAME", score: 0.62 }],
+    }),
+  }, async wire => {
+    const r = await new EuRedact().redactAsync(LEDGER, cloudNL);
+    assert.notEqual(wire.text().indexOf("Nick Bols"), LEDGER.indexOf("Nick Bols"));
+    const name = r.detections.find(d => d.source === DetectionSource.CLOUD)!;
+    assert.deepEqual([name.text, name.score, name.confidence], ["Nick Bols", 0.62, "low"]);
+    for (const d of r.detections.filter(d => d.source === DetectionSource.RULES)) assert.equal(d.score ?? null, null);
+    assert.deepEqual([r.review!.score, r.review!.recommended, r.review!.basis, r.review!.flags],
+      [0.4, true, "threshold", ["financial"]]);
+    assert.equal(r.review!.uncertain.length, 1);
+    const u = r.review!.uncertain[0];
+    assert.deepEqual([u.start, u.end, u.text, u.score],
+      [LEDGER.indexOf("Nick Bols"), LEDGER.indexOf("Nick Bols") + 9, "Nick Bols", 0.62]);
+  }));
+
+testAsync("a rules result has no review", async () => {
+  assert.equal(new EuRedact().redact(LEDGER, { countries: ["NL"] }).review ?? null, null);
+});
 
 // The model was trained on `[TYPE]`; a token on the wire would be read as
 // ordinary text. Tokens are minted locally, after the response.

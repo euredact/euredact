@@ -13,6 +13,27 @@ narrative lives. Sections here use that vocabulary
 
 ## Unreleased
 
+### Added
+
+- **Confidence scores and the review recommendation** *(rules-engine#178)*.
+  With a cloud model that ships a calibration (gen 15 onward):
+  - `Detection.score` on each cloud span, the service's calibrated estimate
+    in [0, 1] that the redaction is warranted, and `confidence` its label:
+    `"high"` (0.95 and above), `"medium"` (0.80 and above), `"low"`.
+    It used to be `null` for every cloud span (#108). Rules spans keep their
+    labels and have no score.
+  - `RedactResult.review`: a new `Review` (`review: null` when the service sends none) with the probability that the
+    document still holds a value the model missed (`score`), whether the
+    Workspace's review setting marks it (`recommended`, off by default,
+    and `basis`), the kinds of data redacted (`flags`) and the spans
+    labelled `"low"` (`uncertain`), in the result's own offsets.
+
+  Read the same way from `redact`, `Jobs` and `Batches`. A missing or
+  malformed field is `null`: an older service, or a model without a
+  calibration, changes nothing. Four cases in
+  `conformance/cloud_result.json` run in both SDKs, including offsets after
+  an emoji. A score is a review aid; it never removes a redaction.
+
 ### Fixed
 
 - **Slower on identifier-dense text in 1.0.0** *(rules-engine#176)*.
