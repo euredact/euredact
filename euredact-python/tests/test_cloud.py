@@ -413,6 +413,10 @@ class _Wire:
         self.sent: list[dict] = []
         self.found: dict[str, str] = {}
         self.entities: list[dict] | None = None
+        # rules-engine#178: a score and label on each found span, and a review
+        # block built from the text received.
+        self.score: tuple[float, str] | None = None
+        self.review = None
 
     def handler(self, request):
         body = json.loads(request.content)
@@ -426,11 +430,15 @@ class _Wire:
                 while start != -1:
                     entities.append({
                         "start": start, "end": start + len(needle), "text": needle,
-                        "type": type_, "source": "model", "match": "exact_body"})
+                        "type": type_, "source": "model", "match": "exact_body",
+                        **({"score": self.score[0], "confidence": self.score[1]}
+                           if self.score else {})})
                     start = text.find(needle, start + 1)
-        return _response(200, {"job_id": "job-1", "status": "succeeded",
-                               "redacted_text": text, "entities": entities,
-                               "unlocated": []})
+        payload = {"job_id": "job-1", "status": "succeeded",
+                   "redacted_text": text, "entities": entities, "unlocated": []}
+        if self.review is not None:
+            payload["review"] = self.review(text)
+        return _response(200, payload)
 
     @property
     def text(self) -> str:
@@ -743,3 +751,31 @@ def test_the_models_credential_is_reported_as_secret():
         det = client.redact(DOC, country="BE").detections[0]
     assert det.entity_type is EntityType.SECRET
     assert EntityType.CREDENTIAL is EntityType.SECRET
+
+
+def test_scores_and_the_review_land_on_the_original(wire):
+    """The service scores spans in the masked text; its uncertain spans, like
+    its entities, must land on the caller's characters (rules-engine#178)."""
+    wire.found = {"Nick Bols": "PERSON_NAME"}
+    wire.score = (0.62, "low")
+    wire.review = lambda sent: {
+        "score": 0.4, "recommended": True, "basis": "threshold", "flags": ["financial"],
+        "uncertain": [{"start": sent.index("Nick Bols"), "end": sent.index("Nick Bols") + 9,
+                       "type": "PERSON_NAME", "score": 0.62}]}
+    result = euredact.EuRedact().redact(LEDGER, countries=["NL"], mode="cloud")
+
+    assert wire.text.index("Nick Bols") != LEDGER.index("Nick Bols")
+    name = next(d for d in result.detections if d.source is DetectionSource.CLOUD)
+    assert (name.text, name.score, name.confidence) == ("Nick Bols", 0.62, "low")
+    rules = [d for d in result.detections if d.source is DetectionSource.RULES]
+    assert rules and all(d.score is None for d in rules)
+    review = result.review
+    assert (review.score, review.recommended, review.basis, review.flags) == (
+        0.4, True, "threshold", ("financial",))
+    [uncertain] = review.uncertain
+    assert (uncertain.start, uncertain.end, uncertain.text, uncertain.score) == (
+        LEDGER.index("Nick Bols"), LEDGER.index("Nick Bols") + 9, "Nick Bols", 0.62)
+
+
+def test_a_rules_result_has_no_review(wire):
+    assert euredact.EuRedact().redact(LEDGER, countries=["NL"]).review is None

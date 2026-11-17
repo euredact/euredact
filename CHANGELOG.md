@@ -27,6 +27,10 @@ which both test suites run.
 
 ## [Unreleased]
 
+### Added
+
+- Cloud confidence: `Detection.score` and a `confidence` label (high, medium, low) on each cloud span, and `RedactResult.review` (score, recommended, basis, flags, uncertain spans), from a model that ships a calibration; `None` from older services. *(rules-engine#178)*
+
 ### Fixed
 
 - A lone surrogate in the text (from `json.loads` of a `"\ud800"` escape) raised `UnicodeEncodeError` with the default cache in Python, and in TypeScript was answered with the cached result of the same text with U+FFFD. *(rules-engine#175)*

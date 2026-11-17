@@ -6,7 +6,7 @@ import { RuleEngine } from "./rules/engine.js";
 import { DocumentContext } from "./rules/context.js";
 import { weightsToRanking } from "./rules/evidence.js";
 import { registryGeneration } from "./rules/bicRegistry.js";
-import { EntityType, canonicalType, type Detection, type Exemption, type RedactResult } from "./types.js";
+import { EntityType, canonicalType, type Detection, type Exemption, type RedactResult, type Review } from "./types.js";
 
 const DATE_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
 
@@ -204,6 +204,23 @@ export function ontoOriginal(
     placed.push({ ...span, start, end, text: text.slice(start, end) });
   }
   return placed;
+}
+
+/**
+ * The service's review block with its uncertain spans in the original's
+ * offsets, placed as every other cloud span is (rules-engine#178).
+ * @internal Shared with cloud/batches.ts.
+ */
+export function reviewOntoOriginal(
+  review: Review | null | undefined,
+  masked: string,
+  text: string,
+  labels: WireLabel[],
+  Unplaceable: new (message: string) => Error,
+): Review | null {
+  if (!review) return null;
+  if (review.uncertain.length === 0) return review;
+  return { ...review, uncertain: ontoOriginal(review.uncertain, masked, text, labels, Unplaceable) };
 }
 
 /**
@@ -890,6 +907,7 @@ export class EuRedact {
       tokens: tokenMapper ? tokenMapper.tokens : {},
       exempted,
       ...(remote.cloud ? { cloud: remote.cloud } : {}),
+      review: reviewOntoOriginal(remote.review, masked, text, labels, CloudError),
     };
   }
 

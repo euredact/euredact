@@ -167,6 +167,29 @@ test("an ended batch is mapped onto the originals", async () => {
     "Beste, gelieve [BANK_ACCOUNT] te crediteren voor [PERSON_NAME]. Groeten.");
 });
 
+test("a batch line carries its scores and review onto the original", async () => {
+  // rules-engine#178: the same fields as /v1/redact, uncertain spans placed
+  // like the entities.
+  const { gateway, batches } = setup();
+  const batch = await batches.create(docs(1));
+  gateway.status = "ended";
+  const masked = gateway.uploaded[0].text as string;
+  const line = FakeGateway.succeeded(masked) as Record<string, unknown> & { entities: Array<Record<string, unknown>> };
+  Object.assign(line.entities[0], { score: 0.7, confidence: "low" });
+  const start = cpIndex(masked, NAME);
+  line.review = { score: 0.2, recommended: false, basis: "off", flags: [],
+    uncertain: [{ start, end: start + NAME.length, type: "PERSON_NAME", score: 0.7 }] };
+  gateway.override["doc-0"] = line;
+  const result = (await batches.results(batch.id)).documents["doc-0"].result!;
+  assert.notEqual(masked.indexOf(NAME), TEXT.indexOf(NAME));
+  const name = result.detections.find(d => d.text === NAME)!;
+  assert.deepEqual([name.score, name.confidence], [0.7, "low"]);
+  assert.equal(result.review!.uncertain.length, 1);
+  const u = result.review!.uncertain[0];
+  assert.deepEqual([u.start, u.text, u.score], [TEXT.indexOf(NAME), NAME, 0.7]);
+  assert.deepEqual([result.review!.score, result.review!.basis], [0.2, "off"]);
+});
+
 test("resolved once, then a text-free receipt", async () => {
   const { gateway, batches, dir } = setup();
   const batch = await batches.create(docs());

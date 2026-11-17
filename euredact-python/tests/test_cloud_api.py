@@ -103,6 +103,30 @@ def test_the_cloud_block_is_read_as_both_sdks_read_it(case):
     } == case["expect"]
 
 
+# -- confidence: span scores, labels and the review block (rules-engine#178) ---
+
+
+def _as_wire(d):
+    return {"start": d.start, "end": d.end, "text": d.text,
+            "type": str(getattr(d.entity_type, "value", d.entity_type)), "score": d.score}
+
+
+@pytest.mark.parametrize("case", CASES["confidence"], ids=lambda c: c["id"])
+def test_scores_and_the_review_block_are_read_as_both_sdks_read_them(case):
+    _configure()
+    service = _Service((200, case["wire"]))
+    with CloudClient(client=service.client()) as client:
+        result = client.redact(case["text"], country="BE")
+    spans = [{"type": str(getattr(d.entity_type, "value", d.entity_type)),
+              "score": d.score, "confidence": d.confidence} for d in result.detections]
+    review = None if result.review is None else {
+        "score": result.review.score, "recommended": result.review.recommended,
+        "basis": result.review.basis, "flags": list(result.review.flags),
+        "uncertain": [{k: v for k, v in _as_wire(d).items()} for d in result.review.uncertain],
+    }
+    assert {"spans": spans, "review": review} == case["expect"]
+
+
 # -- which 429 is final --------------------------------------------------------
 
 

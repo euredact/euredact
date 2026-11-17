@@ -38,6 +38,7 @@ from euredact.types import (
     DetectionSource,
     EntityType,
     RedactResult,
+    Review,
     Unlocated,
     Usage,
     UsageFactor,
@@ -236,6 +237,50 @@ def _string(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _score(value: object) -> float | None:
+    """A score in [0, 1], or None for anything else (a bool, NaN, out of range)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    score = float(value)
+    return score if 0.0 <= score <= 1.0 else None
+
+
+def _review(payload: dict, text: str) -> Review | None:
+    """The service's review block (rules-engine#178), read as the TypeScript SDK
+    reads it (``conformance/cloud_result.json``). A malformed field is absent,
+    an uncertain span that does not fit *text* is skipped: the review never
+    fails a redaction."""
+    raw = payload.get("review")
+    if not isinstance(raw, dict):
+        return None
+    flags = raw.get("flags")
+    uncertain = []
+    spans = raw.get("uncertain")
+    for item in spans if isinstance(spans, list) else []:
+        if not isinstance(item, dict):
+            continue
+        start, end = item.get("start"), item.get("end")
+        if (isinstance(start, bool) or isinstance(end, bool)
+                or not isinstance(start, int) or not isinstance(end, int)
+                or not 0 <= start < end <= len(text)):
+            continue
+        kind = item.get("type")
+        uncertain.append(Detection(
+            entity_type=_entity_type(kind if isinstance(kind, str) else "OTHER"),
+            start=start, end=end, text=text[start:end],
+            source=DetectionSource.CLOUD, country=None, confidence="low",
+            score=_score(item.get("score")),
+        ))
+    return Review(
+        score=_score(raw.get("score")),
+        recommended=raw.get("recommended") is True,
+        basis=_string(raw.get("basis")),
+        flags=(tuple(f for f in flags if isinstance(f, str))
+               if isinstance(flags, list) else ()),
+        uncertain=tuple(uncertain),
+    )
+
+
 def _cloud_info(payload: dict) -> CloudInfo:
     """The service's account of a request beside its spans.
 
@@ -283,10 +328,14 @@ def _to_result(payload: dict, *, text: str) -> RedactResult:
             source=source,
             country=None,
             # A model span carries no evidence of its own: report the service's
-            # confidence when it sends one, never invent "high" (rules-engine#108).
-            confidence=(span.get("confidence") or None)
+            # label when it sends one, never invent "high" (rules-engine#108);
+            # with a calibrated model it sends one, and the score behind it
+            # (rules-engine#178).
+            confidence=(_string(span.get("confidence")) or None)
             if source is DetectionSource.CLOUD
             else (span.get("confidence") or "high"),
+            score=(_score(span.get("score"))
+                   if source is DetectionSource.CLOUD else None),
         ))
     detections.sort(key=lambda d: (d.start, -d.end))
     return RedactResult(
@@ -294,6 +343,7 @@ def _to_result(payload: dict, *, text: str) -> RedactResult:
         detections=detections,
         source="cloud",
         cloud=_cloud_info(payload),
+        review=_review(payload, text),
     )
 
 

@@ -1,5 +1,5 @@
 export { EntityType, DetectionSource, LEGACY_TYPE_ALIASES, canonicalType } from "./types.js";
-export type { CloudInfo, Detection, Exemption, RedactResult, Unlocated, Usage, UsageFactor, CountryEvidence } from "./types.js";
+export type { CloudInfo, Detection, Exemption, RedactResult, Review, Unlocated, Usage, UsageFactor, CountryEvidence } from "./types.js";
 export { DocumentContext } from "./rules/context.js";
 export { EuRedact, restore, type RedactOptions } from "./sdk.js";
 // Not COUNTRY_CONFIGS, getBicRegistry or SEED_BIC6_PREFIXES: engine internals, and

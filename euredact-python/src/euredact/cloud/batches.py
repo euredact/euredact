@@ -682,6 +682,7 @@ class Batches(_BaseClient):
             _apply_replacements,
             _mask_for_cloud,
             _onto_original,
+            _review_onto_original,
             _type_label,
         )
 
@@ -719,9 +720,11 @@ class Batches(_BaseClient):
                 error="local_mismatch",
                 message="the local batch file does not match what was sent",
             )
-        remote = _to_result({"entities": result.get("entities", [])}, text=masked)
+        remote = _to_result({"entities": result.get("entities", []),
+                             "review": result.get("review")}, text=masked)
         try:
             placed = _onto_original(remote.detections, masked, text, labels)
+            review = _review_onto_original(remote.review, masked, text, labels)
         except CloudError as exc:
             return DocumentOutcome(custom_id, error="local_mismatch", message=str(exc))
         detections = sorted(local + placed, key=lambda d: (d.start, -d.end))
@@ -742,6 +745,7 @@ class Batches(_BaseClient):
                 # no job id and no usage of its own (the batch carries those).
                 cloud=_cloud_info({"model_version": result.get("model_version"),
                                    "unlocated": result.get("unlocated")}),
+                review=review,
             ),
         )
 
