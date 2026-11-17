@@ -160,7 +160,7 @@ The three output styles are mutually exclusive in practice — pick at most one.
 | `idempotency_key` | `None` | `mode="cloud"` only: sent as the request's `Idempotency-Key`, so the same key returns the same job instead of running and billing the document again. Generated per call when omitted. Raises `ValueError` in rules mode. See [What the service said](#what-the-service-said-resultcloud). |
 | `context` | `None` | Share country evidence across the chunks of one document, so a chunk with no country signal of its own is still scored against the rest. Pass the same [`DocumentContext`](#documentcontext) to every chunk. Disables the cache. See [Chunked documents](#chunked-documents). |
 | `chunk_offset` | `0` | Where this chunk starts in the whole document. Used only to rebase spans recorded in `context`; returned detections are always relative to `text`. |
-| `cache` | `True` | Reuse the result for an identical input and configuration. Set `False` for one-off calls on sensitive text, or when timing the engine. |
+| `cache` | `True` | Reuse the result for an identical input and configuration. Set `False` for one-off calls on sensitive text, or when timing the engine. Ignored with `tokenize=True`, which mints fresh tokens and keeps no mapping, and with a `context`. |
 
 #### `euredact.redact_batch()`
 
