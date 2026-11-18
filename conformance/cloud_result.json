@@ -984,5 +984,51 @@
         }
       }
     }
+  ],
+  "job_failed": [
+    {
+      "id": "gateway-reports-the-job-failed",
+      "status": 502,
+      "json": {
+        "error": "inference failed",
+        "detail": {
+          "reason": "worker crashed"
+        }
+      },
+      "expect": {
+        "failed": true,
+        "reason": "worker crashed"
+      }
+    },
+    {
+      "id": "failed-without-a-reason",
+      "status": 502,
+      "json": {
+        "error": "inference failed",
+        "detail": {}
+      },
+      "expect": {
+        "failed": true,
+        "reason": null
+      }
+    },
+    {
+      "id": "edge-502-is-transient",
+      "status": 502,
+      "text": "<html><body>502 Bad Gateway</body></html>",
+      "expect": {
+        "failed": false
+      }
+    },
+    {
+      "id": "other-json-502-is-transient",
+      "status": 502,
+      "json": {
+        "error": "upstream unavailable"
+      },
+      "expect": {
+        "failed": false
+      }
+    }
   ]
 }

@@ -116,6 +116,24 @@ class InsufficientCreditsError(CloudError):
         self.max_response_tokens: int | None = _integer(d.get("max_response_tokens"))
 
 
+class InferenceFailedError(CloudError):
+    """502 with the gateway's "inference failed": the job ran and failed.
+
+    Raised at once and never retried or polled again: the service has
+    answered, and asking again returns the same failed job. A 502 without that
+    body (the edge, a restarting gateway) is still transient and retried
+    (rules-engine#184).
+    """
+
+    def __init__(self, message: str, *, status: int | None = 502,
+                 detail: dict | None = None, job_id: str | None = None) -> None:
+        super().__init__(message, status=status, detail=detail)
+        #: The failed job's id, for support and for the gateway's logs.
+        self.job_id: str | None = job_id or _string(self.detail.get("job_id"))
+        #: Why it failed, as the service put it, or ``None``.
+        self.reason: str | None = _string(self.detail.get("reason"))
+
+
 class NotFoundError(CloudError):
     """404: no such job, batch or key -- or one belonging to another account,
     which the service deliberately does not distinguish."""
@@ -133,9 +151,9 @@ class ResultExpiredError(CloudError):
 class TooLargeError(CloudError):
     """413. The document is over the service's input cap.
 
-    Permanent and not retryable. The model has never seen a chunk boundary, so
-    the service refuses oversized input rather than splitting it and changing
-    the accuracy story silently.
+    Permanent and not retryable: the service refuses oversized input rather than
+    splitting it. ``redact(mode="cloud")`` splits such a document itself unless
+    ``chunking="off"`` (rules-engine#183); the client never does.
     """
 
 
@@ -306,6 +324,21 @@ def _cloud_info(payload: dict) -> CloudInfo:
     )
 
 
+def _failure_message(job_id: object, reason: object) -> str:
+    message = "inference failed"
+    if isinstance(job_id, str) and job_id:
+        message += f" for job {job_id}"
+    if isinstance(reason, str) and reason:
+        message += f": {reason}"
+    return message
+
+
+def _job_failed(status: int | None, payload: dict) -> bool:
+    """The gateway's answer for a job that ran and failed (rules-engine#184):
+    502 with ``{"error": "inference failed"}``. The edge's 502 is HTML."""
+    return status == 502 and payload.get("error") == "inference failed"
+
+
 def _is_quota(payload: dict) -> bool:
     """A 429 from the gateway's daily quota, as opposed to the edge's rate
     limit: the gateway answers in JSON with ``detail.used`` and
@@ -368,6 +401,16 @@ class _BaseClient:
         return {"text": text, "country": country, "language": language,
                 "priority": priority}
 
+    def _raise_failed(self, url: str, payload: dict) -> None:
+        """A polled job that failed, with the id its URL names."""
+        detail = payload.get("detail")
+        detail = detail if isinstance(detail, dict) else {}
+        job_id = (_string(detail.get("job_id"))
+                  or url.rstrip("/").rsplit("/", 1)[-1] or None)
+        raise InferenceFailedError(
+            _failure_message(job_id, detail.get("reason")),
+            status=502, detail=detail, job_id=job_id)
+
     def _raise_for(self, status: int, payload: dict) -> None:
         error = payload.get("error", f"HTTP {status}")
         detail = payload.get("detail") or {}
@@ -385,6 +428,10 @@ class _BaseClient:
             raise ResultExpiredError(error, status=status, detail=detail)
         if status == 413:
             raise TooLargeError(error, status=status, detail=detail)
+        if _job_failed(status, payload):
+            raise InferenceFailedError(
+                _failure_message(detail.get("job_id"), detail.get("reason")),
+                status=status, detail=detail)
         if status == 429:
             if _is_quota(payload):
                 raise QuotaExceededError(error, status=status, detail=detail)
@@ -456,7 +503,8 @@ class CloudClient(_BaseClient):
                 if status == 200:
                     return data
                 if (status not in _RETRY_STATUS or not attempt.should_retry(status)
-                        or (status == 429 and _is_quota(data))):
+                        or (status == 429 and _is_quota(data))
+                        or _job_failed(status, data)):
                     self._raise_for(status, data)
 
             attempt.attempt += 1
@@ -474,6 +522,10 @@ class CloudClient(_BaseClient):
                 return data
             if resp.status_code == 200:
                 pass                                  # still queued or running
+            elif _job_failed(resp.status_code, data):
+                # The job failed: polling on until the deadline told the
+                # caller, 15 minutes later, that it timed out (rules-engine#184).
+                self._raise_failed(url, data)
             elif resp.status_code in _RETRY_STATUS:
                 pass                                  # transient; keep polling
             else:
@@ -547,7 +599,8 @@ class AsyncCloudClient(_BaseClient):
                     payload = data
                     break
                 if (status not in _RETRY_STATUS or not attempt.should_retry(status)
-                        or (status == 429 and _is_quota(data))):
+                        or (status == 429 and _is_quota(data))
+                        or _job_failed(status, data)):
                     self._raise_for(status, data)
 
             attempt.attempt += 1
@@ -567,6 +620,8 @@ class AsyncCloudClient(_BaseClient):
             data = _json_or_empty(resp)
             if resp.status_code == 200 and "redacted_text" in data:
                 return data
+            if _job_failed(resp.status_code, data):
+                self._raise_failed(url, data)
             if resp.status_code not in (200, *_RETRY_STATUS):
                 self._raise_for(resp.status_code, data)
             if time.monotonic() >= loop_deadline:

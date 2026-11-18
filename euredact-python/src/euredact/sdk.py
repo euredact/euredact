@@ -20,7 +20,14 @@ from euredact.rules.bic_registry import registry_generation
 from euredact.rules.context import DocumentContext
 from euredact.rules.engine import RuleEngine, check_country_arg
 from euredact.rules.evidence import weights_to_ranking
-from euredact.types import Detection, EntityType, Exemption, RedactResult, Review
+from euredact.types import (
+    Detection,
+    DetectionSource,
+    EntityType,
+    Exemption,
+    RedactResult,
+    Review,
+)
 
 # Date entity types — opt-in via detect_dates=True
 _DATE_TYPES = frozenset({EntityType.DOB, EntityType.DATE_OF_DEATH})
@@ -192,6 +199,16 @@ def _onto_original(
 
         placed.append(replace(span, start=start, end=end, text=text[start:end]))
     return placed
+
+
+def _span_onto_original(
+    start: int, end: int, masked: str, text: str, labels: list[_WireLabel]
+) -> tuple[int, int]:
+    """A range of the masked text, as the range of the original it covers."""
+    probe = Detection(entity_type="CHUNK", start=start, end=end, text=masked[start:end],
+                      source=DetectionSource.CLOUD, country=None)
+    placed = _onto_original([probe], masked, text, labels)
+    return (placed[0].start, placed[0].end) if placed else (start, end)
 
 
 def _review_onto_original(
@@ -748,6 +765,7 @@ class EuRedact:
         detect_dates: bool = False,
         cache: bool = True,
         idempotency_key: str | None = None,
+        chunking: object = "auto",
     ) -> RedactResult:
         """Redact PII from text. Main entry point.
 
@@ -792,6 +810,13 @@ class EuRedact:
                 of running (and billing) the document again, which is what a
                 caller retrying after its own timeout needs. One is generated
                 per call when omitted.
+            chunking: ``mode="cloud"`` only. A document over the service's
+                input cap is split, sent in parts and merged into one result
+                (``"auto"``, the default; ``cloud.chunks`` lists the parts).
+                ``"off"`` sends it whole, so an oversized one raises
+                ``TooLargeError``. A :class:`~euredact.cloud.chunking.Chunking`
+                sets the part size, overlap, splitter, concurrency and limits
+                (rules-engine#183).
         """
         # Step 0: argument and input-size guards. The country check runs here
         # as well as in the engine so that a bare string is rejected before any
@@ -813,8 +838,12 @@ class EuRedact:
                 context=context, chunk_offset=chunk_offset,
                 referential_integrity=referential_integrity, tokenize=tokenize,
                 allowed=allowed, domains=domains, excluded=excluded,
-                cache=cache, idempotency_key=idempotency_key,
+                cache=cache, idempotency_key=idempotency_key, chunking=chunking,
             )
+        if chunking != "auto":
+            raise ValueError(
+                "chunking applies to mode='cloud' only: a rules-only redaction "
+                "sends nothing to split")
         if idempotency_key is not None:
             raise ValueError(
                 "idempotency_key applies to mode='cloud' only: a rules-only "
@@ -978,6 +1007,7 @@ class EuRedact:
         domains: dict[str, str],
         cache: bool,
         idempotency_key: str | None = None,
+        chunking: object = "auto",
         excluded: frozenset[str] = frozenset(),
     ) -> RedactResult:
         """Run the rules here, then send what they left to the cloud tier.
@@ -996,7 +1026,9 @@ class EuRedact:
         what was asked for -- which, for anything that changes which spans come
         back, is under-redaction wearing a plausible face.
         """
-        from euredact.cloud.client import CloudClient
+        from euredact.cloud.chunking import resolve as resolve_chunking
+        from euredact.cloud.chunking import run as run_chunked
+        from euredact.cloud.client import CloudClient, TooLargeError
 
         if not countries or len(countries) != 1:
             raise ValueError(
@@ -1007,12 +1039,13 @@ class EuRedact:
             raise ValueError("country_hint is not supported in cloud mode")
         if context is not None or chunk_offset:
             raise ValueError(
-                "context/chunk_offset are not supported in cloud mode: the "
-                "model has never seen a chunk boundary, so the service rejects "
-                "oversized input rather than splitting it")
+                "context/chunk_offset are not supported in cloud mode: pass the "
+                "whole document, and cloud mode splits it itself when it is over "
+                "the input cap (see chunking)")
         if referential_integrity:
             raise ValueError(
                 "referential_integrity is not supported in cloud mode")
+        split = resolve_chunking(chunking)
 
         with CloudClient() as client:
             # Dates are always on, whatever detect_dates says: that is the
@@ -1031,8 +1064,20 @@ class EuRedact:
                 allowed={}, domains={}, detect_dates=True, cache=cache,
             )
             masked, labels = _mask_for_cloud(text, local.detections)
-            remote = client.redact(masked, country=countries[0].upper(),
-                                   idempotency_key=idempotency_key)
+            country = countries[0].upper()
+            if split is None:
+                remote = client.redact(masked, country=country,
+                                       idempotency_key=idempotency_key)
+            else:
+                # Over the input cap, the document is sent in parts and the
+                # answers merged, all in the masked text (rules-engine#183).
+                remote = run_chunked(
+                    lambda part, key: client.redact(part, country=country,
+                                                    idempotency_key=key),
+                    masked, [(label[0], label[1]) for label in labels], split,
+                    key=idempotency_key,
+                    to_original=lambda s, e: _span_onto_original(s, e, masked, text, labels),
+                    too_large=TooLargeError)
 
         # A new list throughout: `local` may be the cached rules result.
         remote_detections, cut = _cut_allowlisted(
@@ -1072,6 +1117,7 @@ class EuRedact:
         detect_dates: bool = False,
         cache: bool = True,
         idempotency_key: str | None = None,
+        chunking: object = "auto",
     ) -> RedactResult:
         """Async version of redact().
 
@@ -1097,6 +1143,7 @@ class EuRedact:
                 detect_dates=detect_dates,
                 cache=cache,
                 idempotency_key=idempotency_key,
+                chunking=chunking,
             ),
         )
 

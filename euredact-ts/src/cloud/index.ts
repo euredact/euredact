@@ -60,6 +60,7 @@ export {
   CloudError,
   NotConfiguredError,
   NotFoundError,
+  InferenceFailedError,
   InsufficientCreditsError,
   QuotaExceededError,
   RateLimitedError,

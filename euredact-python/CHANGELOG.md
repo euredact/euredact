@@ -15,6 +15,23 @@ narrative lives. Sections here use that vocabulary
 
 ### Added
 
+- **Long documents in cloud mode** *(rules-engine#183)*. A document over the
+  service's 5,000-token input cap used to raise `TooLargeError`, leaving the
+  caller to split it with no guidance and no way to merge the answers. Cloud
+  mode now splits the masked text itself (parts of at most 12,000 characters,
+  cut at a blank line, line break, sentence end or space, never inside a
+  placeholder, 300 characters of overlap), sends the parts and returns one
+  result over the original. New `chunking` option (`"auto"` by default,
+  `"off"`, or a `Chunking`), `CloudInfo.chunks` (a `ChunkInfo` per part) and
+  summed usage. Fail closed: if any part fails the call raises, with
+  `chunks_completed` on the error. Part keys derive from the caller's
+  `idempotency_key`, so a retried document bills no part twice. A value the
+  model found in one part is masked wherever the same text occurs in the
+  others. The overlap and the per-part instructions are billed; the effect of
+  splitting on recall has not been measured yet, and the defaults may change
+  when it is. Both SDKs cut at the same places
+  (`conformance/cloud_chunking.json`).
+
 - **Confidence scores and the review recommendation** *(rules-engine#178)*.
   With a cloud model that ships a calibration (gen 15 onward):
   - `Detection.score` on each cloud span, the service's calibrated estimate
@@ -35,6 +52,19 @@ narrative lives. Sections here use that vocabulary
   an emoji. A score is a review aid; it never removes a redaction.
 
 ### Fixed
+
+- **A failed cloud job was reported as a 15-minute timeout**
+  *(rules-engine#184)*. A job that fails after the synchronous window
+  answers the poll with 502 and `"inference failed"`. The SDK treated
+  every 502 while polling as transient and polled on until `poll_timeout_s`
+  (900 s), then reported that the document did not complete; reproduced
+  with a 2 s deadline: 28,820 polls, then a timeout. It now raises the new
+  `InferenceFailedError` (a `CloudError`) after the first such answer, with
+  `job_id` and `reason`; the request that fails inside the window, and
+  `Jobs().retrieve`, raise it at once instead of retrying. A 502 without that
+  body (the edge, a restarting gateway) is still retried. Four shared
+  cases in `conformance/cloud_result.json` hold the distinction in both
+  SDKs.
 
 - **`[fast]` was slower than no accelerator** *(rules-engine#176)*. Measured
   as CPU time per document on one Linux machine, same inputs, `[fast]`

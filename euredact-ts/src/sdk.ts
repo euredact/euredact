@@ -6,7 +6,8 @@ import { RuleEngine } from "./rules/engine.js";
 import { DocumentContext } from "./rules/context.js";
 import { weightsToRanking } from "./rules/evidence.js";
 import { registryGeneration } from "./rules/bicRegistry.js";
-import { EntityType, canonicalType, type Detection, type Exemption, type RedactResult, type Review } from "./types.js";
+import { DetectionSource, EntityType, canonicalType, type Detection, type Exemption, type RedactResult, type Review } from "./types.js";
+import type { ChunkingOptions } from "./cloud/chunking.js";
 
 const DATE_TYPES = new Set<EntityType | string>([EntityType.DOB, EntityType.DATE_OF_DEATH]);
 
@@ -206,6 +207,19 @@ export function ontoOriginal(
   return placed;
 }
 
+
+/** A range of the masked text, as the range of the original it covers. */
+function spanOntoOriginal(
+  start: number, end: number, masked: string, text: string, labels: WireLabel[],
+  Unplaceable: new (message: string) => Error,
+): [number, number] {
+  const probe: Detection = {
+    entityType: "CHUNK", start, end, text: masked.slice(start, end),
+    source: DetectionSource.CLOUD, country: null, confidence: null,
+  };
+  const placed = ontoOriginal([probe], masked, text, labels, Unplaceable);
+  return placed.length ? [placed[0].start, placed[0].end] : [start, end];
+}
 /**
  * The service's review block with its uncertain spans in the original's
  * offsets, placed as every other cloud span is (rules-engine#178).
@@ -714,6 +728,14 @@ export interface RedactOptions {
    * generated per call when omitted.
    */
   idempotencyKey?: string;
+  /**
+   * `mode: "cloud"` only. A document over the service's input cap is split,
+   * sent in parts and merged into one result (`"auto"`, the default;
+   * `cloud.chunks` lists the parts). `"off"` sends it whole, so an oversized
+   * one throws `TooLargeError`. A {@link ChunkingOptions} sets the part size,
+   * overlap, splitter, concurrency and limits (rules-engine#183).
+   */
+  chunking?: "auto" | "off" | ChunkingOptions;
 }
 
 const DEFAULT_MAX_INPUT_LENGTH = 10_485_760;  // ~10 MB of text
@@ -843,7 +865,8 @@ export class EuRedact {
    */
   private async redactViaCloud(text: string, options: RedactOptions): Promise<RedactResult> {
     const { CloudClient } = await import("./cloud/client.js");
-    const { CloudError } = await import("./cloud/errors.js");
+    const { CloudError, TooLargeError } = await import("./cloud/errors.js");
+    const { resolveChunking, runChunked } = await import("./cloud/chunking.js");
     const countries = options.countries ?? null;
 
     if (!countries || countries.length !== 1) {
@@ -858,14 +881,15 @@ export class EuRedact {
     }
     if (options.context || options.chunkOffset) {
       throw new Error(
-        "context/chunkOffset are not supported in cloud mode: the model has never " +
-        "seen a chunk boundary, so the service rejects oversized input rather " +
-        "than splitting it",
+        "context/chunkOffset are not supported in cloud mode: pass the whole " +
+        "document, and cloud mode splits it itself when it is over the input cap " +
+        "(see chunking)",
       );
     }
     if (options.referentialIntegrity) {
       throw new Error("referentialIntegrity is not supported in cloud mode");
     }
+    const split = resolveChunking(options.chunking ?? "auto");
 
     const allowed = this.allowedFor(options);
     const domains = this.domainsFor(options);
@@ -887,9 +911,17 @@ export class EuRedact {
     const [masked, labels] = maskForCloud(text, local.detections);
     // The client converts the service's code-point offsets to UTF-16 units of
     // the text it sent, so everything from here on is in one unit.
-    const remote = await client.redact(masked, {
-      country: countries[0], idempotencyKey: options.idempotencyKey,
-    });
+    const country = countries[0];
+    const remote = split === null
+      ? await client.redact(masked, { country, idempotencyKey: options.idempotencyKey })
+      // Over the input cap, the document is sent in parts and the answers
+      // merged, all in the masked text (rules-engine#183).
+      : await runChunked(
+        (part, key) => client.redact(part, { country, idempotencyKey: key }),
+        masked, labels.map(l => [l[0], l[1]] as [number, number]), split, options.idempotencyKey,
+        (s, e) => spanOntoOriginal(s, e, masked, text, labels, CloudError),
+        TooLargeError,
+      );
 
     // A new array throughout: `local` may be the cached rules result.
     const [remoteDetections, cut] = cutAllowlisted(
@@ -940,6 +972,9 @@ export class EuRedact {
       throw new Error(
         'idempotencyKey applies to mode: "cloud" only: a rules-only redaction makes no request to deduplicate',
       );
+    }
+    if (options.chunking !== undefined && options.chunking !== "auto") {
+      throw new Error('chunking applies to mode: "cloud" only: a rules-only redaction sends nothing to split');
     }
 
     return this.redactRules(text, options, allowed, domains, excluded);

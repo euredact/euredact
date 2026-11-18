@@ -19,6 +19,7 @@ import {
   cloudErrorFor,
   isInteger,
   isQuota,
+  jobFailed,
   readJson,
   requireFetch,
   retryAfterMs,
@@ -224,7 +225,7 @@ class ApiClient {
       if (response) {
         if (response.status === 200) return payload;
         if (!RETRY_STATUS.has(response.status) || attempt >= maxRetries
-            || (response.status === 429 && isQuota(payload))) {
+            || (response.status === 429 && isQuota(payload)) || jobFailed(response.status, payload)) {
           throw cloudErrorFor(response.status, payload);
         }
       }

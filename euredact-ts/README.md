@@ -117,6 +117,7 @@ interface RedactOptions {
   detectDates?: boolean;            // include DOB / date of death
   cache?: boolean;                  // reuse results for identical input
   idempotencyKey?: string;          // mode: "cloud" only; see the table below
+  chunking?: "auto" | "off" | ChunkingOptions; // mode: "cloud" only
 }
 ```
 
@@ -145,6 +146,7 @@ interface RedactOptions {
 | Parameter | Default | Description |
 |---|---|---|
 | `mode` | `"rules"` | `"rules"` runs locally and synchronously. `"cloud"` must go through [`redactAsync()`](#redactasynctext-options) — `redact()` is synchronous and a network call cannot be. See [Cloud tier](#cloud-tier). |
+| `chunking` | `"auto"` | `mode: "cloud"` only: a document over the service's input cap is split, sent in parts and merged into one result. `"off"` sends it whole (an oversized one rejects with `TooLargeError`); a `ChunkingOptions` sets the part size, overlap and more. Throws in rules mode. See [Long documents in cloud mode](#long-documents-in-cloud-mode). |
 | `idempotencyKey` | generated | `mode: "cloud"` only (through `redactAsync`): sent as the request's `Idempotency-Key`, so the same key returns the same job instead of running and billing the document again. Throws in rules mode. See [What the service said](#what-the-service-said-resultcloud). |
 | `context` | `null` | Share country evidence across the chunks of one document. Pass the same `DocumentContext` to every chunk. Disables the cache. See [Chunked documents](#chunked-documents). |
 | `chunkOffset` | `0` | Where this chunk starts in the whole document. Only rebases spans recorded in `context`; returned detections stay relative to `text`. |
@@ -545,9 +547,60 @@ one code path.
 
 Retries carry an `Idempotency-Key`, so a retry after a timeout cannot bill
 twice. `Retry-After` is obeyed. A document that outlives the service's sync
-window is polled transparently. Oversized input rejects with `TooLargeError`
-(413): the service refuses it rather than chunking, because the model has never
-seen a chunk boundary.
+window is polled transparently. A document over the input cap is split and
+sent in parts by `redactAsync()` ([below](#long-documents-in-cloud-mode)); the
+client itself never splits, and rejects oversized input with `TooLargeError`
+(413).
+
+### Long documents in cloud mode
+
+The service refuses a request over 5,000 tokens. In `mode: "cloud"` the SDK
+splits a longer document itself (`chunking: "auto"`, the default), sends the
+parts and returns one result over the whole text, so a 40-page document takes
+the same single call as a one-page letter.
+
+- **What is split is the masked text.** The local rules pass runs over the
+  whole document first; a cut never falls inside a placeholder, and only masked
+  text is sent, as for a short document.
+- **Where it cuts.** Parts of at most 12,000 characters, cut at a blank line,
+  else a line break, a sentence end or a space. Each part repeats the last 300
+  characters of the one before, so a name near a cut is read whole by one of
+  them; a span found twice in the overlap is reported once. Both SDKs cut at the
+  same places (`conformance/cloud_chunking.json`).
+- **Cost.** Each part is a request: the overlap is billed in both parts, and
+  each part carries the per-request instructions. `result.cloud.usage` is the
+  sum, and `result.cloud.chunks` lists the parts (original offsets, job id,
+  tokens); `result.cloud.jobId` is `null` when the document was split.
+- **Fail closed.** If any part fails, the call rejects and returns nothing. The
+  error's `chunksCompleted` says how many parts were answered (and billed)
+  before it. A part the service still refuses with 413 is halved and resent.
+- **Retries.** With an `idempotencyKey`, each part's key is derived from it
+  (`key:index:hash`), so retrying the whole call bills no completed part twice.
+- **A value found in one part is masked in all of them**: the same text
+  elsewhere in the document is masked too (`propagate`, on by default). A
+  surname alone, where another part had the full name, is not.
+- **Review.** `result.review` covers the document: `recommended` if any part
+  was, the flags combined, and the score the chance that some part still holds
+  a miss, `1 - prod(1 - score)`.
+
+```ts
+const result = await redactAsync(text, { countries: ["NL"], mode: "cloud", chunking: {
+  maxChars: 12_000,          // longest part, in characters (code points)
+  overlapChars: 300,         // repeated from the part before; 0 for none
+  splitter: undefined,       // (text) => cut positions: pages, sections, messages
+  concurrency: 1,            // parts in flight; a free plan queues further requests
+  maxChunks: undefined,      // refuse a longer document before anything is sent
+  propagate: true,
+  onChunk: undefined,        // called with a ChunkInfo after each part, for progress
+} });
+```
+
+`chunking: "off"` sends every document whole, as before: an oversized one rejects with
+`TooLargeError` and nothing is billed. Splitting has a cost in quality as well
+as money. The model reads each part without the others, so a part that only
+says "she" or a surname has less to go on than the whole letter; how much that
+costs has not been measured yet. Cut at your document's real boundaries with
+`splitter` where it has them.
 
 Options the service cannot honour reject rather than being ignored: multiple
 `countries`, `countryHint`, `context`/`chunkOffset` and `referentialIntegrity`.
@@ -560,9 +613,9 @@ given and returns spans relative to it: the local masking happens in
 already masked.
 
 The package stays **zero-dependency** — the client uses the platform's own
-`fetch`. Node 18+ provides one; on Node 16 the rules engine is unaffected, and
-`redactAsync` in cloud mode needs a global `fetch` polyfill. `Account`, `Jobs`
-and `Batches` also take a `fetchImpl` of their own.
+`fetch`, which every supported Node.js line (22, 24 and 26; `engines` is
+`>=22.0.0`) provides. `Account`, `Jobs` and `Batches` also take a `fetchImpl`
+of their own.
 
 ### What leaves your machine
 
@@ -784,7 +837,7 @@ for a second key or another endpoint: a plain object with `apiKey`, `baseUrl`,
 `https://` base URL like `configure()` does; `fetchImpl` replaces the platform `fetch`,
 for a proxy or a mock in your tests. (`Batches` takes the same two inside its
 options object: `new Batches({ config, fetchImpl })`.) There is nothing to close.
-They need a global `fetch`: Node 18+, or a browser, or pass `fetchImpl`.
+They need a global `fetch`: Node.js 22+, or a browser, or pass `fetchImpl`.
 
 #### What each call resolves to
 
@@ -901,7 +954,7 @@ try {
     // Budget and extra volume spent: err.balance left, err.required needed,
     // err.shortfall to top up. Wait for the next period, or top up
   } else if (err instanceof TooLargeError) {
-    // over the input cap: split the document and send the parts
+    // over the input cap with chunking: "off", or a part that cannot be split further
   } else if (err instanceof CloudError) {
     // anything else; err.status says what
   } else {
@@ -920,9 +973,10 @@ try {
 | `NotFoundError` | 404 | no such job, batch or key — or another account's; also every batch call, `list()` included, while batches are not enabled on the service (`batches_not_enabled`) | no |
 | `CloudError` | 409 | `revokeKey` on a key already revoked | no |
 | `ResultExpiredError` | 410 | the job's result is past retention | no |
-| `TooLargeError` | 413 | the document is over the input cap; also a rejected job | no |
+| `TooLargeError` | 413 | the document is over the input cap and `chunking: "off"` (with chunking on, a refused part is halved and resent); also a rejected job | no |
 | `QuotaExceededError` | 429 | the daily document quota is used up | **no**: it will not clear before the day does |
 | `RateLimitedError` | 429 | the edge's rate limit, still hit after every retry | yes, `maxRetries` times with backoff |
+| `InferenceFailedError` | 502 | the job ran and failed (the service answers `"inference failed"`), whether on the request or while the SDK polls; `jobId` and `reason` say which and why | **no**: asking again returns the same failed job, so it is thrown at once instead of after `pollTimeoutMs` |
 | `CloudError` | 5xx, `undefined` | the service or the network failed | yes for reads and `redactAsync`; never for `revokeKey` |
 
 `NotFoundError`, `ResultExpiredError` and `RateLimitedError` are exported from

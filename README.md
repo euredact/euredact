@@ -172,10 +172,9 @@ const result = await redactAsync(text, { countries: ["BE"], mode: "cloud" });
 ```
 
 The TypeScript client uses the platform's own `fetch`, so the package stays
-zero-dependency. Node 18+ provides one; on Node 16 the rules engine is
-unaffected, and cloud mode needs a global `fetch` polyfill (`Account`, `Jobs`
-and `Batches` also take a `fetchImpl`). `engines` is unchanged at
-`>=16.0.0`.
+zero-dependency. It supports the Node.js lines still maintained, 22, 24 and 26
+(`engines` is `>=22.0.0`), all of which provide one. `Account`, `Jobs` and
+`Batches` also take a `fetchImpl`, for a proxy or a mock.
 
 ### It never falls back
 
@@ -190,9 +189,10 @@ to its own spans and the service's.
 
 Retries carry an `Idempotency-Key`, so a retry after a timeout cannot bill
 twice; `Retry-After` is obeyed; a document that outlives the service's sync
-window is polled transparently. Oversized input raises `TooLargeError` (413) —
-the service refuses it rather than chunking, because the model has never seen a
-chunk boundary. `QuotaExceededError` (429) and `CloudError` cover the rest.
+window is polled transparently. A document over the input cap (5,000 tokens) is
+split at paragraph and sentence boundaries, sent in overlapping parts and merged
+into one result; `chunking="off"` sends it whole, so it raises `TooLargeError`
+(413). `QuotaExceededError` (429) and `CloudError` cover the rest.
 
 **The local rules engine never touches the network.** `mode="rules"` is the
 default and makes no request; both packages keep zero required

@@ -32,6 +32,7 @@ import {
 } from "./config.js";
 import {
   CloudError,
+  InferenceFailedError,
   NotConfiguredError,
   NotFoundError,
   InsufficientCreditsError,
@@ -242,6 +243,31 @@ export function isQuota(payload: Record<string, unknown>): boolean {
 }
 
 /** The error for a non-success answer. @internal Shared with batches and account. */
+/**
+ * The gateway's answer for a job that ran and failed (rules-engine#184): 502
+ * with `{"error": "inference failed"}`. The edge's 502 is HTML.
+ * @internal Shared with cloud/account.ts.
+ */
+export function jobFailed(status: number, payload: Record<string, unknown>): boolean {
+  return status === 502 && payload.error === "inference failed";
+}
+
+/** "inference failed for job <id>: <reason>", with what the service gave. */
+function failureMessage(jobId: unknown, reason: unknown): string {
+  let message = "inference failed";
+  if (typeof jobId === "string" && jobId) message += ` for job ${jobId}`;
+  if (typeof reason === "string" && reason) message += `: ${reason}`;
+  return message;
+}
+
+/** @internal */
+export function failedJobError(payload: Record<string, unknown>, jobId?: string | null): InferenceFailedError {
+  const detail = (payload.detail && typeof payload.detail === "object" && !Array.isArray(payload.detail)
+    ? payload.detail : {}) as Record<string, unknown>;
+  const id = (typeof detail.job_id === "string" && detail.job_id) || jobId || null;
+  return new InferenceFailedError(failureMessage(id, detail.reason), 502, detail, id);
+}
+
 export function cloudErrorFor(status: number, payload: Record<string, unknown>): CloudError {
   const message = typeof payload.error === "string" ? payload.error : `HTTP ${status}`;
   // A detail that is a sentence ("Budget spent") is kept under a key, as in
@@ -249,6 +275,7 @@ export function cloudErrorFor(status: number, payload: Record<string, unknown>):
   const detail = (typeof payload.detail === "string" ? { message: payload.detail }
     : payload.detail && typeof payload.detail === "object"
     ? payload.detail : {}) as Record<string, unknown>;
+  if (jobFailed(status, payload)) return failedJobError(payload);
   if (status === 401) return new CloudError(`authentication failed: ${message}`, status);
   if (status === 402) return new InsufficientCreditsError(message, status, detail);
   if (status === 404) return new NotFoundError(message, status, detail);
@@ -401,7 +428,8 @@ export class CloudClient {
         }
         if (response.status === 200) return toResult(payload, text);
         if (!RETRY_STATUS.has(response.status) || attempt >= this.config.maxRetries
-            || (response.status === 429 && isQuota(payload as Record<string, unknown>))) {
+            || (response.status === 429 && isQuota(payload as Record<string, unknown>))
+            || jobFailed(response.status, payload as Record<string, unknown>)) {
           this.raiseFor(response.status, payload);
         }
       }
@@ -429,6 +457,11 @@ export class CloudClient {
       const payload = await readJson(response);
       if (response.status === 200 && payload.redacted_text !== undefined) {
         return payload;
+      }
+      // The job failed: polling on until the deadline told the caller, 15
+      // minutes later, that it timed out (rules-engine#184).
+      if (jobFailed(response.status, payload as Record<string, unknown>)) {
+        throw failedJobError(payload as Record<string, unknown>, url.replace(/\/+$/, "").split("/").pop() || null);
       }
       if (response.status !== 200 && !RETRY_STATUS.has(response.status)) {
         this.raiseFor(response.status, payload);

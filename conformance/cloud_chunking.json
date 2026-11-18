@@ -1,0 +1,384 @@
+{
+  "version": 1,
+  "description": "Where cloud mode cuts a document over the input cap (rules-engine#183): plan(text, protected, max_chars, overlap) -> parts. Offsets and lengths in code points; both SDKs must cut at the same places.",
+  "cases": [
+    {
+      "id": "paragraph-line-sentence-space",
+      "text": "Eerste alinea over Jan Peeters en zijn dossier.\n\nTweede alinea met [BANK_ACCOUNT] erin. Nog een zin hier! En nog een zin met veel woorden erachter? Ja.\nLaatste regel zonder punt maar met woorden erachter",
+      "protected": [
+        [
+          67,
+          81
+        ]
+      ],
+      "max_chars": 60,
+      "overlap": 10,
+      "expect": [
+        [
+          0,
+          49
+        ],
+        [
+          48,
+          88
+        ],
+        [
+          82,
+          138
+        ],
+        [
+          130,
+          187
+        ],
+        [
+          178,
+          203
+        ]
+      ]
+    },
+    {
+      "id": "no-overlap",
+      "text": "Eerste alinea over Jan Peeters en zijn dossier.\n\nTweede alinea met [BANK_ACCOUNT] erin. Nog een zin hier! En nog een zin met veel woorden erachter? Ja.\nLaatste regel zonder punt maar met woorden erachter",
+      "protected": [
+        [
+          67,
+          81
+        ]
+      ],
+      "max_chars": 80,
+      "overlap": 0,
+      "expect": [
+        [
+          0,
+          49
+        ],
+        [
+          49,
+          106
+        ],
+        [
+          106,
+          152
+        ],
+        [
+          152,
+          203
+        ]
+      ]
+    },
+    {
+      "id": "small-parts",
+      "text": "Eerste alinea over Jan Peeters en zijn dossier.\n\nTweede alinea met [BANK_ACCOUNT] erin. Nog een zin hier! En nog een zin met veel woorden erachter? Ja.\nLaatste regel zonder punt maar met woorden erachter",
+      "protected": [
+        [
+          67,
+          81
+        ]
+      ],
+      "max_chars": 40,
+      "overlap": 8,
+      "expect": [
+        [
+          0,
+          31
+        ],
+        [
+          31,
+          49
+        ],
+        [
+          48,
+          67
+        ],
+        [
+          63,
+          88
+        ],
+        [
+          82,
+          106
+        ],
+        [
+          100,
+          138
+        ],
+        [
+          138,
+          166
+        ],
+        [
+          160,
+          195
+        ],
+        [
+          195,
+          203
+        ]
+      ]
+    },
+    {
+      "id": "whole-when-short",
+      "text": "Een korte tekst.",
+      "protected": [],
+      "max_chars": 100,
+      "overlap": 10,
+      "expect": [
+        [
+          0,
+          16
+        ]
+      ]
+    },
+    {
+      "id": "cut-never-inside-a-placeholder",
+      "text": "woord woord woord woord woord woord woord woord woord [NATIONAL_ID] woord woord woord woord woord woord woord woord woord [NATIONAL_ID] woord woord woord woord woord woord woord woord woord [NATIONAL_ID] woord woord woord woord woord woord woord woord woord [NATIONAL_ID] woord woord woord woord woord woord woord woord woord [NATIONAL_ID] woord woord woord woord woord woord woord woord woord [NATIONAL_ID] ",
+      "protected": [
+        [
+          54,
+          67
+        ],
+        [
+          122,
+          135
+        ],
+        [
+          190,
+          203
+        ],
+        [
+          258,
+          271
+        ],
+        [
+          326,
+          339
+        ],
+        [
+          394,
+          407
+        ]
+      ],
+      "max_chars": 70,
+      "overlap": 5,
+      "expect": [
+        [
+          0,
+          54
+        ],
+        [
+          54,
+          116
+        ],
+        [
+          116,
+          178
+        ],
+        [
+          178,
+          240
+        ],
+        [
+          240,
+          302
+        ],
+        [
+          302,
+          364
+        ],
+        [
+          364,
+          408
+        ]
+      ]
+    },
+    {
+      "id": "no-boundary-at-all",
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "protected": [],
+      "max_chars": 100,
+      "overlap": 10,
+      "expect": [
+        [
+          0,
+          90
+        ],
+        [
+          80,
+          180
+        ],
+        [
+          170,
+          250
+        ]
+      ]
+    },
+    {
+      "id": "astral-characters-count-as-one",
+      "text": "Hallo 😀 wereld 👋🏽 met emoji 🧪 Hallo 😀 wereld 👋🏽 met emoji 🧪 Hallo 😀 wereld 👋🏽 met emoji 🧪 Hallo 😀 wereld 👋🏽 met emoji 🧪 Hallo 😀 wereld 👋🏽 met emoji 🧪 Hallo 😀 wereld 👋🏽 met emoji 🧪 Hallo 😀 wereld 👋🏽 met emoji 🧪 Hallo 😀 wereld 👋🏽 met emoji 🧪",
+      "protected": [],
+      "max_chars": 60,
+      "overlap": 10,
+      "expect": [
+        [
+          0,
+          48
+        ],
+        [
+          45,
+          98
+        ],
+        [
+          90,
+          148
+        ],
+        [
+          142,
+          198
+        ],
+        [
+          195,
+          239
+        ]
+      ]
+    },
+    {
+      "id": "crlf-and-tabs",
+      "text": "Regel een\r\nRegel twee\tmet tab. Zin drie.\r\n\r\nRegel een\r\nRegel twee\tmet tab. Zin drie.\r\n\r\nRegel een\r\nRegel twee\tmet tab. Zin drie.\r\n\r\nRegel een\r\nRegel twee\tmet tab. Zin drie.\r\n\r\nRegel een\r\nRegel twee\tmet tab. Zin drie.\r\n\r\nRegel een\r\nRegel twee\tmet tab. Zin drie.\r\n\r\n",
+      "protected": [],
+      "max_chars": 50,
+      "overlap": 6,
+      "expect": [
+        [
+          0,
+          44
+        ],
+        [
+          42,
+          88
+        ],
+        [
+          86,
+          132
+        ],
+        [
+          130,
+          176
+        ],
+        [
+          174,
+          220
+        ],
+        [
+          218,
+          264
+        ]
+      ]
+    },
+    {
+      "id": "placeholder-in-text-without-spaces",
+      "text": "abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]abcdefghijabcdefghijabcdefghij[BANK_ACCOUNT]",
+      "protected": [
+        [
+          30,
+          44
+        ],
+        [
+          74,
+          88
+        ],
+        [
+          118,
+          132
+        ],
+        [
+          162,
+          176
+        ],
+        [
+          206,
+          220
+        ],
+        [
+          250,
+          264
+        ],
+        [
+          294,
+          308
+        ],
+        [
+          338,
+          352
+        ],
+        [
+          382,
+          396
+        ],
+        [
+          426,
+          440
+        ],
+        [
+          470,
+          484
+        ],
+        [
+          514,
+          528
+        ]
+      ],
+      "max_chars": 60,
+      "overlap": 6,
+      "expect": [
+        [
+          0,
+          54
+        ],
+        [
+          48,
+          108
+        ],
+        [
+          102,
+          162
+        ],
+        [
+          156,
+          206
+        ],
+        [
+          200,
+          250
+        ],
+        [
+          244,
+          294
+        ],
+        [
+          288,
+          338
+        ],
+        [
+          332,
+          382
+        ],
+        [
+          376,
+          426
+        ],
+        [
+          420,
+          470
+        ],
+        [
+          464,
+          514
+        ],
+        [
+          508,
+          528
+        ]
+      ]
+    }
+  ]
+}
