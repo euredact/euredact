@@ -32,6 +32,10 @@ which both test suites run.
 - Cloud mode splits a document over the input cap into overlapping parts at paragraph and sentence boundaries, sends them and merges the answers into one result; `chunking="off"` keeps the old `TooLargeError`. New `CloudInfo.chunks`; usage summed over the parts; a failed part fails the call. *(rules-engine#183)*
 - Cloud confidence: `Detection.score` and a `confidence` label (high, medium, low) on each cloud span, and `RedactResult.review` (score, recommended, basis, flags, uncertain spans), from a model that ships a calibration; `None` from older services. *(rules-engine#178)*
 
+### Changed
+
+- Supported Node.js is the maintained LTS lines, 22, 24 and 26: `engines` is `>=22.0.0` (was `>=16.0.0`, with 18 failing in CI since October), CI tests all three, and the package is published from 26, the Active LTS. *(TypeScript only)* *(rules-engine#172)*
+
 ### Fixed
 
 - Python `[fast]` was slower than no accelerator in 1.0.0: the RE2 prefilter lost its digit boundaries and ran out of DFA memory. Both are fixed (the prefilter may use up to 64 MB); `[fast]` is back to 0.93 ms per short record and 23.4 ms per dense document, from 1.55 and 33.0. *(Python only)* *(rules-engine#176)*

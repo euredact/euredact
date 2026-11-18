@@ -172,10 +172,9 @@ const result = await redactAsync(text, { countries: ["BE"], mode: "cloud" });
 ```
 
 The TypeScript client uses the platform's own `fetch`, so the package stays
-zero-dependency. Node 18+ provides one; on Node 16 the rules engine is
-unaffected, and cloud mode needs a global `fetch` polyfill (`Account`, `Jobs`
-and `Batches` also take a `fetchImpl`). `engines` is unchanged at
-`>=16.0.0`.
+zero-dependency. It supports the Node.js lines still maintained, 22, 24 and 26
+(`engines` is `>=22.0.0`), all of which provide one. `Account`, `Jobs` and
+`Batches` also take a `fetchImpl`, for a proxy or a mock.
 
 ### It never falls back
 

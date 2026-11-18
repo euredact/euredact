@@ -335,8 +335,9 @@ diagnostic on its own. Check in this order:
 
 Publishing uses **OIDC trusted publishing**, not `NPM_TOKEN`. It requires a
 trusted publisher on npmjs.com (org `euredact`, repo `euredact`, workflow
-`publish.yml`, environment `release`) and npm 11+, which is why the job
-installs a pinned npm over the Node 20 default.
+`publish.yml`, environment `release`) and npm 11+. The job runs on the Node.js
+Active LTS and installs a pinned npm over the one it ships, so the version
+that holds the publishing credential is chosen, not inherited.
 
 ### Both publish jobs run in the `release` environment
 

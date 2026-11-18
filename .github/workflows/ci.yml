@@ -56,7 +56,10 @@ jobs:
       contents: read
     strategy:
       matrix:
-        node-version: [18, 20, 22]
+        # The Node lines still supported: Active LTS 26 and Maintenance LTS 24
+        # and 22, matching `engines` (rules-engine#172). Drop a line when it
+        # reaches end of life (22: 2027-04-30).
+        node-version: [22, 24, 26]
     defaults:
       run:
         working-directory: euredact-ts

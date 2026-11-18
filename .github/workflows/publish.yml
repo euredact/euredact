@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444  # v5
         with:
-          node-version: 20
+          node-version: 26  # Active LTS (rules-engine#172)
       - run: npm ci
       - run: npm run build
       - run: npm test
@@ -100,10 +100,10 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444  # v5
         with:
-          node-version: 20
+          node-version: 26  # Active LTS (rules-engine#172)
           registry-url: https://registry.npmjs.org
-      # Node 20 ships npm 10, which predates OIDC trusted publishing. Pinned to
-      # an exact version rather than a range: this job holds the npm OIDC
+      # OIDC trusted publishing needs npm 11+. Pinned to an exact version
+      # rather than taken from the Node release: this job holds the npm OIDC
       # identity, so a compromised release anywhere in "^11" would run with the
       # credential that publishes the package. Bump deliberately.
       - run: npm install -g npm@11.6.2

@@ -613,9 +613,9 @@ given and returns spans relative to it: the local masking happens in
 already masked.
 
 The package stays **zero-dependency** — the client uses the platform's own
-`fetch`. Node 18+ provides one; on Node 16 the rules engine is unaffected, and
-`redactAsync` in cloud mode needs a global `fetch` polyfill. `Account`, `Jobs`
-and `Batches` also take a `fetchImpl` of their own.
+`fetch`, which every supported Node.js line (22, 24 and 26; `engines` is
+`>=22.0.0`) provides. `Account`, `Jobs` and `Batches` also take a `fetchImpl`
+of their own.
 
 ### What leaves your machine
 
@@ -837,7 +837,7 @@ for a second key or another endpoint: a plain object with `apiKey`, `baseUrl`,
 `https://` base URL like `configure()` does; `fetchImpl` replaces the platform `fetch`,
 for a proxy or a mock in your tests. (`Batches` takes the same two inside its
 options object: `new Batches({ config, fetchImpl })`.) There is nothing to close.
-They need a global `fetch`: Node 18+, or a browser, or pass `fetchImpl`.
+They need a global `fetch`: Node.js 22+, or a browser, or pass `fetchImpl`.
 
 #### What each call resolves to
 

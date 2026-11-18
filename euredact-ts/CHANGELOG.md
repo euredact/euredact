@@ -51,6 +51,17 @@ narrative lives. Sections here use that vocabulary
   `conformance/cloud_result.json` run in both SDKs, including offsets after
   an emoji. A score is a review aid; it never removes a redaction.
 
+### Changed
+
+- **Supported Node.js: the maintained LTS lines, 22, 24 and 26**
+  *(rules-engine#172)*. `engines` was `>=16.0.0`, but CI tested 18, 20 and
+  22, and the Node 18 job had failed on every run since October. Node 16, 18
+  and 20 are past end of life. `engines` is now `>=22.0.0`, CI tests 22, 24
+  and 26, and the package is built and published on 26, the Active LTS
+  (it was 20). Every supported line has a global `fetch`, so the notes about
+  a polyfill on older Node are gone. On an older runtime npm warns at
+  install; the code is unchanged.
+
 ### Fixed
 
 - **Slower on identifier-dense text in 1.0.0** *(rules-engine#176)*.
