@@ -133,9 +133,9 @@ class ResultExpiredError(CloudError):
 class TooLargeError(CloudError):
     """413. The document is over the service's input cap.
 
-    Permanent and not retryable. The model has never seen a chunk boundary, so
-    the service refuses oversized input rather than splitting it and changing
-    the accuracy story silently.
+    Permanent and not retryable: the service refuses oversized input rather than
+    splitting it. ``redact(mode="cloud")`` splits such a document itself unless
+    ``chunking="off"`` (rules-engine#183); the client never does.
     """
 
 

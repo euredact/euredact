@@ -286,6 +286,22 @@ class Review:
 
 
 @dataclass(frozen=True)
+class ChunkInfo:
+    """One part of a document that was split (``CloudInfo.chunks``)."""
+
+    index: int
+    """0-based."""
+    total: int
+    start: int
+    """Where the part starts in the original text."""
+    end: int
+    """Where it ends (exclusive), in the original text. Parts overlap."""
+    job_id: str | None = None
+    tokens: int | None = None
+    """What the part cost, from the service's usage; ``None`` if it sent none."""
+
+
+@dataclass(frozen=True)
 class CloudInfo:
     """What the cloud service said about a request, beside its spans
     (rules-engine#89)."""
@@ -305,6 +321,12 @@ class CloudInfo:
 
     unlocated: tuple[Unlocated, ...] = ()
     """What the model found but could not place in the text it was sent."""
+
+    chunks: tuple[ChunkInfo, ...] = ()
+    """The parts a document over the service's input cap was split into and
+    sent as, in order (rules-engine#183). Empty when it was sent whole; then
+    :attr:`job_id` is its job. A split document has no single job, so
+    :attr:`job_id` is ``None`` and :attr:`usage` is the sum over the parts."""
 
 
 @dataclass

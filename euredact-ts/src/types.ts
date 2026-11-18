@@ -255,6 +255,20 @@ export interface Review {
   uncertain: Detection[];
 }
 
+/** One part of a document that was split ({@link CloudInfo.chunks}, rules-engine#183). */
+export interface ChunkInfo {
+  /** 0-based. */
+  index: number;
+  total: number;
+  /** Where the part starts in the original text. */
+  start: number;
+  /** Where it ends (exclusive), in the original text. Parts overlap. */
+  end: number;
+  jobId: string | null;
+  /** What the part cost, from the service's usage; `null` if it sent none. */
+  tokens: number | null;
+}
+
 /** What the cloud service said about a request, beside its spans (rules-engine#89). */
 export interface CloudInfo {
   /** The service's job id: for support, for `Jobs.retrieve`, and to recognise an
@@ -267,6 +281,10 @@ export interface CloudInfo {
   usage?: Usage;
   /** What the model found but could not place in the text it was sent. */
   unlocated: Unlocated[];
+  /** The parts a document over the input cap was sent in, in order; absent when
+   *  it went whole. `jobId` is then `null`: each part has its own
+   *  (rules-engine#183). */
+  chunks?: ChunkInfo[];
 }
 
 export interface RedactResult {

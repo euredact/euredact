@@ -15,6 +15,23 @@ narrative lives. Sections here use that vocabulary
 
 ### Added
 
+- **Long documents in cloud mode** *(rules-engine#183)*. A document over the
+  service's 5,000-token input cap used to raise `TooLargeError`, leaving the
+  caller to split it with no guidance and no way to merge the answers. Cloud
+  mode now splits the masked text itself (parts of at most 12,000 characters,
+  cut at a blank line, line break, sentence end or space, never inside a
+  placeholder, 300 characters of overlap), sends the parts and returns one
+  result over the original. New `chunking` option (`"auto"` by default,
+  `"off"`, or a `Chunking`), `CloudInfo.chunks` (a `ChunkInfo` per part) and
+  summed usage. Fail closed: if any part fails the call raises, with
+  `chunks_completed` on the error. Part keys derive from the caller's
+  `idempotency_key`, so a retried document bills no part twice. A value the
+  model found in one part is masked wherever the same text occurs in the
+  others. The overlap and the per-part instructions are billed; the effect of
+  splitting on recall has not been measured yet, and the defaults may change
+  when it is. Both SDKs cut at the same places
+  (`conformance/cloud_chunking.json`).
+
 - **Confidence scores and the review recommendation** *(rules-engine#178)*.
   With a cloud model that ships a calibration (gen 15 onward):
   - `Detection.score` on each cloud span, the service's calibrated estimate

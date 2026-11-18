@@ -25,12 +25,14 @@ from typing import Iterator
 
 __version__ = "1.0.0"
 
+from euredact.cloud.chunking import Chunking
 from euredact.cloud.config import configure
 from euredact.rules.bic_registry import set_bic_registry
 from euredact.rules.context import DocumentContext
 from euredact.sdk import EuRedact, restore
 from euredact.types import (
     LEGACY_TYPE_ALIASES,
+    ChunkInfo,
     CloudInfo,
     CountryEvidence,
     Detection,
@@ -58,6 +60,8 @@ __all__ = [
     "Detection",
     "DetectionSource",
     "EntityType",
+    "Chunking",
+    "ChunkInfo",
     "CountryEvidence",
     "LEGACY_TYPE_ALIASES",
     "canonical_type",
@@ -135,6 +139,7 @@ def redact(
     detect_dates: bool = False,
     cache: bool = True,
     idempotency_key: str | None = None,
+    chunking: object = "auto",
 ) -> RedactResult:
     """Redact PII from text. Main entry point.
 
@@ -159,6 +164,7 @@ def redact(
         detect_dates=detect_dates,
         cache=cache,
         idempotency_key=idempotency_key,
+        chunking=chunking,
     )
 
 
@@ -178,6 +184,7 @@ async def aredact(
     detect_dates: bool = False,
     cache: bool = True,
     idempotency_key: str | None = None,
+    chunking: object = "auto",
 ) -> RedactResult:
     """Async version of redact().
 
@@ -199,6 +206,7 @@ async def aredact(
         detect_dates=detect_dates,
         cache=cache,
         idempotency_key=idempotency_key,
+        chunking=chunking,
     )
 
 

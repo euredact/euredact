@@ -124,6 +124,7 @@ euredact.redact(
     detect_dates: bool = False,
     cache: bool = True,
     idempotency_key: str | None = None,
+    chunking: str | Chunking = "auto",
 ) -> RedactResult
 ```
 
@@ -157,6 +158,7 @@ The three output styles are mutually exclusive in practice — pick at most one.
 | Parameter | Default | Description |
 |---|---|---|
 | `mode` | `"rules"` | `"rules"` runs locally. `"cloud"` masks locally first, then sends the masked text to the euRedact service, which adds the model-only types (person names, organisations, job titles, diagnoses). See [Cloud tier](#cloud-tier). |
+| `chunking` | `"auto"` | `mode="cloud"` only: a document over the service's input cap is split, sent in parts and merged into one result. `"off"` sends it whole (an oversized one raises `TooLargeError`); a `Chunking` sets the part size, overlap and more. Raises `ValueError` in rules mode. See [Long documents in cloud mode](#long-documents-in-cloud-mode). |
 | `idempotency_key` | `None` | `mode="cloud"` only: sent as the request's `Idempotency-Key`, so the same key returns the same job instead of running and billing the document again. Generated per call when omitted. Raises `ValueError` in rules mode. See [What the service said](#what-the-service-said-resultcloud). |
 | `context` | `None` | Share country evidence across the chunks of one document, so a chunk with no country signal of its own is still scored against the rest. Pass the same [`DocumentContext`](#documentcontext) to every chunk. Disables the cache. See [Chunked documents](#chunked-documents). |
 | `chunk_offset` | `0` | Where this chunk starts in the whole document. Used only to rebase spans recorded in `context`; returned detections are always relative to `text`. |
@@ -320,8 +322,9 @@ alone.
 | `add(evidence, chunk_offset=0)` | Record a chunk's evidence. `redact()` calls this for you. |
 | `evidence()` | Every signal gathered so far, spans rebased onto the whole document. |
 
-Not supported in cloud mode: the model has never seen a chunk boundary, so the
-service rejects oversized input rather than splitting it.
+Not supported in cloud mode: pass the whole document, and cloud mode splits it
+itself when it is over the input cap (see
+[Long documents in cloud mode](#long-documents-in-cloud-mode)).
 
 #### `RedactResult`
 
@@ -609,9 +612,62 @@ directly only with text you have already masked.
 
 Retries carry an `Idempotency-Key`, so a retry after a timeout cannot bill
 twice. `Retry-After` is obeyed. A document that outlives the service's sync
-window is polled transparently — callers never write that branch. Oversized
-input raises `TooLargeError` (413): the service refuses it rather than
-chunking, because the model has never seen a chunk boundary.
+window is polled transparently — callers never write that branch. A document
+over the input cap is split and sent in parts by `redact()`
+([below](#long-documents-in-cloud-mode)); the client itself never splits, and
+raises `TooLargeError` (413) for oversized input.
+
+### Long documents in cloud mode
+
+The service refuses a request over 5,000 tokens. In `mode="cloud"` the SDK
+splits a longer document itself (`chunking="auto"`, the default), sends the
+parts and returns one result over the whole text, so a 40-page document takes
+the same single call as a one-page letter.
+
+- **What is split is the masked text.** The local rules pass runs over the
+  whole document first; a cut never falls inside a placeholder, and only masked
+  text is sent, as for a short document.
+- **Where it cuts.** Parts of at most 12,000 characters, cut at a blank line,
+  else a line break, a sentence end or a space. Each part repeats the last 300
+  characters of the one before, so a name near a cut is read whole by one of
+  them; a span found twice in the overlap is reported once. Both SDKs cut at the
+  same places (`conformance/cloud_chunking.json`).
+- **Cost.** Each part is a request: the overlap is billed in both parts, and
+  each part carries the per-request instructions. `result.cloud.usage` is the
+  sum, and `result.cloud.chunks` lists the parts (original offsets, job id,
+  tokens); `result.cloud.job_id` is `None` when the document was split.
+- **Fail closed.** If any part fails, the call raises and returns nothing. The
+  error's `chunks_completed` says how many parts were answered (and billed)
+  before it. A part the service still refuses with 413 is halved and resent.
+- **Retries.** With an `idempotency_key`, each part's key is derived from it
+  (`key:index:hash`), so retrying the whole call bills no completed part twice.
+- **A value found in one part is masked in all of them**: the same text
+  elsewhere in the document is masked too (`propagate`, on by default). A
+  surname alone, where another part had the full name, is not.
+- **Review.** `result.review` covers the document: `recommended` if any part
+  was, the flags combined, and the score the chance that some part still holds
+  a miss, `1 - prod(1 - score)`.
+
+```python
+from euredact import Chunking
+
+result = euredact.redact(text, countries=["NL"], mode="cloud", chunking=Chunking(
+    max_chars=12_000,          # longest part, in characters
+    overlap_chars=300,         # repeated from the part before; 0 for none
+    splitter=None,             # your own cut points: pages, sections, messages
+    concurrency=1,             # parts in flight; a free plan queues further requests
+    max_chunks=None,           # refuse a longer document before anything is sent
+    propagate=True,
+    on_chunk=None,             # called with a ChunkInfo after each part, for progress
+))
+```
+
+`chunking="off"` sends every document whole, as before: an oversized one raises
+`TooLargeError` and nothing is billed. Splitting has a cost in quality as well
+as money. The model reads each part without the others, so a part that only
+says "she" or a surname has less to go on than the whole letter; how much that
+costs has not been measured yet. Cut at your document's real boundaries with
+`splitter` where it has them.
 
 ### What leaves your machine
 
@@ -968,7 +1024,7 @@ except InsufficientCreditsError as exc:
     ...  # Budget and extra volume spent: exc.balance left, exc.required needed,
          # exc.shortfall to top up. Wait for the next period, or top up
 except TooLargeError:
-    ...  # over the input cap: split the document and send the parts
+    ...  # over the input cap with chunking="off", or a part that cannot be split further
 except CloudError as exc:
     ...  # anything else; exc.status says what
 ```
@@ -983,7 +1039,7 @@ except CloudError as exc:
 | `NotFoundError` | 404 | no such job, batch or key — or another account's; also every batch call, `list()` included, while batches are not enabled on the service (`batches_not_enabled`) | no |
 | `CloudError` | 409 | `revoke_key` on a key already revoked | no |
 | `ResultExpiredError` | 410 | the job's result is past retention | no |
-| `TooLargeError` | 413 | the document is over the input cap; also a rejected job | no |
+| `TooLargeError` | 413 | the document is over the input cap and `chunking="off"` (with chunking on, a refused part is halved and resent); also a rejected job | no |
 | `QuotaExceededError` | 429 | the daily document quota is used up | **no**: it will not clear before the day does |
 | `RateLimitedError` | 429 | the edge's rate limit, still hit after every retry | yes, `max_retries` times with backoff |
 | `CloudError` | 5xx, `None` | the service or the network failed | yes for reads and `redact`; never for `revoke_key` |
@@ -1022,8 +1078,7 @@ called — but with no arguments if the environment is set. Errors are
 `NotConfiguredError`; `InsufficientCreditsError` (402, the Budget and extra
 volume spent); `QuotaExceededError` (429, the daily quota) and its
 subclass `RateLimitedError` (429 from the rate limit, after retries);
-`TooLargeError` (413, the service refuses oversized input rather than chunking
-it); `NotFoundError` (404); `ResultExpiredError` (410); and `CloudError` for
+`TooLargeError` (413, oversized input with `chunking="off"`); `NotFoundError` (404); `ResultExpiredError` (410); and `CloudError` for
 the rest, with `status` and `detail`.
 
 Options the service cannot honour raise rather than being ignored: multiple

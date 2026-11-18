@@ -29,6 +29,7 @@ which both test suites run.
 
 ### Added
 
+- Cloud mode splits a document over the input cap into overlapping parts at paragraph and sentence boundaries, sends them and merges the answers into one result; `chunking="off"` keeps the old `TooLargeError`. New `CloudInfo.chunks`; usage summed over the parts; a failed part fails the call. *(rules-engine#183)*
 - Cloud confidence: `Detection.score` and a `confidence` label (high, medium, low) on each cloud span, and `RedactResult.review` (score, recommended, basis, flags, uncertain spans), from a model that ships a calibration; `None` from older services. *(rules-engine#178)*
 
 ### Fixed

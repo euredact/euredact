@@ -190,9 +190,10 @@ to its own spans and the service's.
 
 Retries carry an `Idempotency-Key`, so a retry after a timeout cannot bill
 twice; `Retry-After` is obeyed; a document that outlives the service's sync
-window is polled transparently. Oversized input raises `TooLargeError` (413) —
-the service refuses it rather than chunking, because the model has never seen a
-chunk boundary. `QuotaExceededError` (429) and `CloudError` cover the rest.
+window is polled transparently. A document over the input cap (5,000 tokens) is
+split at paragraph and sentence boundaries, sent in overlapping parts and merged
+into one result; `chunking="off"` sends it whole, so it raises `TooLargeError`
+(413). `QuotaExceededError` (429) and `CloudError` cover the rest.
 
 **The local rules engine never touches the network.** `mode="rules"` is the
 default and makes no request; both packages keep zero required
