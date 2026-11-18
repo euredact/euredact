@@ -16,6 +16,7 @@ import { CloudClient } from "../cloud/client.js";
 import { configure, reset, type CloudConfig } from "../cloud/config.js";
 import {
   CloudError,
+  InferenceFailedError,
   InsufficientCreditsError,
   NotFoundError,
   QuotaExceededError,
@@ -32,6 +33,8 @@ const CASES = JSON.parse(
   results: Array<{ id: string; wire: Json; expect: Json }>;
   throttling: Array<{ id: string; status: number; json?: Json; text?: string; expect: string }>;
   confidence: Array<{ id: string; text: string; wire: Json; expect: Json }>;
+  job_failed: Array<{ id: string; status: number; json?: Json; text?: string;
+                      expect: { failed: boolean; reason?: string | null } }>;
   insufficient_credits: Array<{ id: string; status: number; json?: Json; text?: string; expect: Json;
                                  expect_detail?: Json }>;
   batches: Array<{ id: string; wire: Json; expect: Json }>;
@@ -131,6 +134,49 @@ for (const c of CASES.insufficient_credits) {
 }
 
 // ── which 429 is final ──────────────────────────────────────────────────────
+
+// ── a job that failed: thrown at once, never polled to the deadline (rules-engine#184)
+
+const ACCEPTED = { status: 202, json: { job_id: "job-9", status: "queued", location: "/v1/jobs/job-9" } };
+
+for (const c of CASES.job_failed) {
+  test(`a failed job is thrown while polling and an edge 502 is not: ${c.id}`, async () => {
+    config({ pollTimeoutMs: 900_000 } as Partial<CloudConfig>);
+    const done = { status: 200, json: { job_id: "job-9", status: "succeeded", redacted_text: "x", entities: [] } };
+    const { fetchImpl, requests } = service(ACCEPTED, { status: c.status, json: c.json, text: c.text }, done);
+    const outcome = await new CloudClient().redact(DOC, { country: "BE", fetchImpl }).then(r => r, e => e);
+    if (c.expect.failed) {
+      assert.ok(outcome instanceof InferenceFailedError);
+      assert.ok(outcome instanceof CloudError);
+      assert.equal(outcome.jobId, "job-9");
+      assert.equal(outcome.reason, c.expect.reason ?? null);
+      assert.equal(outcome.status, 502);
+      assert.equal(requests.length, 2);
+    } else {
+      assert.equal(outcome.cloud?.jobId, "job-9");
+      assert.equal(requests.length, 3);
+    }
+  });
+}
+
+test("a job that fails inside the sync window is not retried", async () => {
+  config({ maxRetries: 3 } as Partial<CloudConfig>);
+  const { fetchImpl, requests } = service({ status: 502, json: {
+    error: "inference failed", detail: { job_id: "job-3", reason: "oom" } } });
+  const err = await new CloudClient().redact(DOC, { country: "BE", fetchImpl }).then(() => null, e => e);
+  assert.ok(err instanceof InferenceFailedError);
+  assert.deepEqual([err.jobId, err.reason], ["job-3", "oom"]);
+  assert.ok(err.message.includes("job-3") && err.message.includes("oom"));
+  assert.equal(requests.length, 1);
+});
+
+test("Jobs.retrieve throws a failed job at once", async () => {
+  const { jobs: j, requests } = jobs({ status: 502, json: { error: "inference failed", detail: { reason: "oom" } } });
+  const err = await j.retrieve("job-5").then(() => null, e => e);
+  assert.ok(err instanceof InferenceFailedError);
+  assert.equal(err.reason, "oom");
+  assert.equal(requests.length, 1);
+});
 
 for (const c of CASES.throttling) {
   test(`a quota 429 is final and an edge 429 is retried: ${c.id}`, async () => {

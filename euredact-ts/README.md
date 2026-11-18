@@ -976,6 +976,7 @@ try {
 | `TooLargeError` | 413 | the document is over the input cap and `chunking: "off"` (with chunking on, a refused part is halved and resent); also a rejected job | no |
 | `QuotaExceededError` | 429 | the daily document quota is used up | **no**: it will not clear before the day does |
 | `RateLimitedError` | 429 | the edge's rate limit, still hit after every retry | yes, `maxRetries` times with backoff |
+| `InferenceFailedError` | 502 | the job ran and failed (the service answers `"inference failed"`), whether on the request or while the SDK polls; `jobId` and `reason` say which and why | **no**: asking again returns the same failed job, so it is thrown at once instead of after `pollTimeoutMs` |
 | `CloudError` | 5xx, `undefined` | the service or the network failed | yes for reads and `redactAsync`; never for `revokeKey` |
 
 `NotFoundError`, `ResultExpiredError` and `RateLimitedError` are exported from

@@ -19,6 +19,7 @@ from euredact.cloud import (
     Batches,
     CloudClient,
     CloudError,
+    InferenceFailedError,
     InsufficientCreditsError,
     Jobs,
     NotFoundError,
@@ -150,6 +151,68 @@ def test_a_quota_429_is_final_and_an_edge_429_is_retried(case):
     else:
         assert isinstance(exc.value, RateLimitedError)
         assert len(service.requests) == 3
+
+
+# -- a job that failed: raised at once, never polled to the deadline (rules-engine#184)
+
+
+_ACCEPTED = (202, {"job_id": "job-9", "status": "queued", "location": "/v1/jobs/job-9"})
+
+
+@pytest.mark.parametrize("case", CASES["job_failed"], ids=lambda c: c["id"])
+def test_a_failed_job_is_raised_while_polling_and_an_edge_502_is_not(case):
+    _configure(poll_timeout_s=900)
+    done = (200, {"job_id": "job-9", "status": "succeeded", "redacted_text": "x",
+                  "entities": []})
+    service = _Service(_ACCEPTED, _answer(case), done)
+    with CloudClient(client=service.client()) as client:
+        if case["expect"]["failed"]:
+            with pytest.raises(InferenceFailedError) as exc:
+                client.redact(DOC, country="BE")
+            assert exc.value.job_id == "job-9"
+            assert exc.value.reason == case["expect"]["reason"]
+            assert exc.value.status == 502 and isinstance(exc.value, CloudError)
+            assert len(service.requests) == 2           # the submit and one poll
+        else:
+            assert client.redact(DOC, country="BE").cloud.job_id == "job-9"
+            assert len(service.requests) == 3           # it kept polling
+
+
+def test_a_job_that_fails_inside_the_sync_window_is_not_retried():
+    _configure(max_retries=3)
+    service = _Service((502, {"error": "inference failed",
+                              "detail": {"job_id": "job-3", "reason": "oom"}}))
+    with CloudClient(client=service.client()) as client:
+        with pytest.raises(InferenceFailedError) as exc:
+            client.redact(DOC, country="BE")
+    assert (exc.value.job_id, exc.value.reason) == ("job-3", "oom")
+    assert "job-3" in str(exc.value) and "oom" in str(exc.value)
+    assert len(service.requests) == 1
+
+
+def test_jobs_retrieve_raises_a_failed_job_at_once():
+    service, jobs = _jobs((502, {"error": "inference failed", "detail": {"reason": "oom"}}))
+    with pytest.raises(InferenceFailedError) as exc:
+        jobs.retrieve("job-5")
+    assert exc.value.reason == "oom"
+    assert len(service.requests) == 1
+
+
+async def test_the_async_client_raises_a_failed_job_while_polling(monkeypatch):
+    from euredact.cloud import AsyncCloudClient
+
+    async def no_sleep(_s):
+        return None
+    monkeypatch.setattr("asyncio.sleep", no_sleep)
+    _configure()
+    service = _Service(_ACCEPTED, (502, {"error": "inference failed",
+                                         "detail": {"reason": "oom"}}))
+    async with AsyncCloudClient(
+            client=httpx.AsyncClient(transport=httpx.MockTransport(service.handler))) as client:
+        with pytest.raises(InferenceFailedError) as exc:
+            await client.redact(DOC, country="BE")
+    assert (exc.value.job_id, exc.value.reason) == ("job-9", "oom")
+    assert len(service.requests) == 2
 
 
 # -- 402: the Budget and extra volume are spent -------------------------------

@@ -1042,6 +1042,7 @@ except CloudError as exc:
 | `TooLargeError` | 413 | the document is over the input cap and `chunking="off"` (with chunking on, a refused part is halved and resent); also a rejected job | no |
 | `QuotaExceededError` | 429 | the daily document quota is used up | **no**: it will not clear before the day does |
 | `RateLimitedError` | 429 | the edge's rate limit, still hit after every retry | yes, `max_retries` times with backoff |
+| `InferenceFailedError` | 502 | the job ran and failed (the service answers `"inference failed"`), whether on the request or while the SDK polls; `job_id` and `reason` say which and why | **no**: asking again returns the same failed job, so it is raised at once instead of after `poll_timeout_s` |
 | `CloudError` | 5xx, `None` | the service or the network failed | yes for reads and `redact`; never for `revoke_key` |
 
 **Availability:** like the rest of the cloud tier, these calls are in public
@@ -1076,7 +1077,8 @@ euredact.configure(
 `configure()` reads the two environment variables itself, so it must still be
 called — but with no arguments if the environment is set. Errors are
 `NotConfiguredError`; `InsufficientCreditsError` (402, the Budget and extra
-volume spent); `QuotaExceededError` (429, the daily quota) and its
+volume spent); `InferenceFailedError` (502, the job ran and failed, raised at
+once with its `job_id`); `QuotaExceededError` (429, the daily quota) and its
 subclass `RateLimitedError` (429 from the rate limit, after retries);
 `TooLargeError` (413, oversized input with `chunking="off"`); `NotFoundError` (404); `ResultExpiredError` (410); and `CloudError` for
 the rest, with `status` and `detail`.

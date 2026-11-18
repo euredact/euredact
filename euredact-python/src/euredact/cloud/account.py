@@ -32,6 +32,7 @@ from euredact.cloud.client import (
     _BaseClient,
     _integer,
     _is_quota,
+    _job_failed,
     _json_or_empty,
     _require_httpx,
     _retry_after_seconds,
@@ -384,6 +385,7 @@ class _ApiClient(_BaseClient):
                     status not in _RETRY_STATUS
                     or not attempt.should_retry(status)
                     or (status == 429 and _is_quota(data))
+                    or _job_failed(status, data)
                 ):
                     self._raise_for(status, data)
             attempt.attempt += 1

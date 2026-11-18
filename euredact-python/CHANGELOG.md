@@ -53,6 +53,19 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **A failed cloud job was reported as a 15-minute timeout**
+  *(rules-engine#184)*. A job that fails after the synchronous window
+  answers the poll with 502 and `"inference failed"`. The SDK treated
+  every 502 while polling as transient and polled on until `poll_timeout_s`
+  (900 s), then reported that the document did not complete; reproduced
+  with a 2 s deadline: 28,820 polls, then a timeout. It now raises the new
+  `InferenceFailedError` (a `CloudError`) after the first such answer, with
+  `job_id` and `reason`; the request that fails inside the window, and
+  `Jobs().retrieve`, raise it at once instead of retrying. A 502 without that
+  body (the edge, a restarting gateway) is still retried. Four shared
+  cases in `conformance/cloud_result.json` hold the distinction in both
+  SDKs.
+
 - **`[fast]` was slower than no accelerator** *(rules-engine#176)*. Measured
   as CPU time per document on one Linux machine, same inputs, `[fast]`
   went from 1.03 ms per short record and 24.8 ms per identifier-dense

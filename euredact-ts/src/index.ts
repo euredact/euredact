@@ -19,6 +19,7 @@ export {
   Jobs,
   NotConfiguredError,
   NotFoundError,
+  InferenceFailedError,
   InsufficientCreditsError,
   QuotaExceededError,
   RateLimitedError,

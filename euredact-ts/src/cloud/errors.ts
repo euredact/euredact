@@ -88,6 +88,27 @@ export class InsufficientCreditsError extends CloudError {
   }
 }
 
+/**
+ * 502 with the gateway's "inference failed": the job ran and failed. Thrown at
+ * once and never retried or polled again: the service has answered, and asking
+ * again returns the same failed job. A 502 without that body (the edge, a
+ * restarting gateway) is still transient and retried (rules-engine#184).
+ */
+export class InferenceFailedError extends CloudError {
+  /** The failed job's id, for support and for the gateway's logs. */
+  readonly jobId: string | null;
+  /** Why it failed, as the service put it, or null. */
+  readonly reason: string | null;
+
+  constructor(message: string, status = 502, detail?: Record<string, unknown>, jobId?: string | null) {
+    super(message, status, detail);
+    this.name = "InferenceFailedError";
+    const fromDetail = typeof this.detail.job_id === "string" ? this.detail.job_id : null;
+    this.jobId = jobId ?? fromDetail;
+    this.reason = typeof this.detail.reason === "string" ? this.detail.reason : null;
+  }
+}
+
 /** 404: no such job, batch or key -- or another account's, which the service
  *  deliberately does not distinguish. */
 export class NotFoundError extends CloudError {
