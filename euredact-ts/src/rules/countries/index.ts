@@ -491,7 +491,10 @@ const DK: CountryConfig = {
     p(EntityType.DRIVERS_LICENSE, String.raw`\b\d{8}\b`, null, "", ["kørekort", "kørekortnummer", "kørekort nr"], true),
     p(EntityType.PHONE, String.raw`\b[2-9]\d\s?\d{2}\s?\d{2}\s?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\+45\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{2}`),
-    p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z]{2}\s?\d{2}\s?\d{3}\b`, null, "", ["nummerplade", "registreringsnummer", "reg.nr", "køretøj"], true),
+    // The spaced Danish form needs no label, but never takes the front of a
+    // longer number (rules-engine#192). Other spacings keep a label.
+    p(EntityType.LICENSE_PLATE, String.raw`(?<![\-/])\b[A-Z]{2} \d{2} \d{3}\b(?![ \t]?\d)(?![ \t]?\/)`),
+    p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z]{2}\s?\d{2}\s?\d{3}\b`, null, "", ["nummerplade", "registreringsnummer", "reg.nr", "køretøj", "reg. nr", "reg nr", "regnr", "indregistreret", "firmabil", "leasingbil", "parkeret", "parkering", "kørsel"], true),
     // "DK-2100 København Ø": the prefix belongs to the code (rules-engine#188).
     p(EntityType.POSTAL_CODE, String.raw`\bDK-[1-9]\d{3}\b(?=[ \t]+[A-ZÆØÅ])`),
     p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{3}\b`, null, "", ["postnummer", "postby", "postnr", "adresse", "bopæl", "bopælsadresse", "gade", "vej", "allé", "plads", "torv", "stræde", "boulevard", "Arbejdssted"], true),

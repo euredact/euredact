@@ -8646,6 +8646,81 @@
       ],
       "expectRedactedText": "Emne: Henvendelse vedrørende din sag\n\nKære Mette Hansen,\n\nTak for din henvendelse til Borgerservice. Vi har registreret følgende oplysninger:\n\nCPR-nr.: [NATIONAL_ID]\nPersonnummer: [NATIONAL_ID]\nCPR: [NATIONAL_ID]\nSygesikringsbevis: [NATIONAL_ID]\nIBAN: [BANK_ACCOUNT]\nNemKonto: reg.nr. [BANK_ACCOUNT]\nMomsnummer: [VAT]\nCVR-nr. [CHAMBER_OF_COMMERCE]\nTelefon: [PHONE], mobil [PHONE], tlf. [PHONE]\nNummerplade: [LICENSE_PLATE]\nAdresse: Vestergade 12, [POSTAL_CODE] Aarhus C\nPostadresse for udlandet: Nørrebrogade 4, [POSTAL_CODE] København Ø\nPasnummer: [PASSPORT]\nKørekortnummer: [DRIVERS_LICENSE]\nE-mail: [EMAIL], logget ind fra [IP_ADDRESS]\nFødselsdato: [DOB]\nMitID bruger-id: mette.h82\n\nDin ordre 45893217 er modtaget, og din sag har sagsnummer 2026-014482.\nGebyret på 2.450 kr. for 2026 opkræves den 01.02.2026. Henvis til billet INC0458812.\n\nMed venlig hilsen\nBorgerservice\n",
       "notes": "rules-engine#188: the probe: a synthetic citizen-service e-mail with 20 planted values and 6 number lures."
+    },
+    {
+      "id": "dk-plate-after-parkering",
+      "text": "Parkering: RB 01 440, registreret hos vagten. Bilen tilhører morfar.",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Parkering: [LICENSE_PLATE], registreret hos vagten. Bilen tilhører morfar.",
+      "notes": "rules-engine#192: a plate in ordinary prose, with no plate keyword; 1.1.0 pre-release left it in clear."
+    },
+    {
+      "id": "dk-plate-after-egen-bil",
+      "text": "Udgifterne er afholdt under kørsel i din egen bil, AA 62 745.",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Udgifterne er afholdt under kørsel i din egen bil, [LICENSE_PLATE].",
+      "notes": "rules-engine#192: the same, after 'bil'."
+    },
+    {
+      "id": "dk-plate-between-commas",
+      "text": "Bilen, RB 01 440, holdt på parkeringspladsen.",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Bilen, [LICENSE_PLATE], holdt på parkeringspladsen.",
+      "notes": "rules-engine#192: the same, set off by commas."
+    },
+    {
+      "id": "dk-plate-after-reg-nr-spaced",
+      "text": "Reg. nr.: RB 01 440",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Reg. nr.: [LICENSE_PLATE]",
+      "notes": "rules-engine#192: 'Reg. nr.' with a space; the keyword was 'reg.nr' only."
+    },
+    {
+      "id": "dk-plate-compact-after-reg-nr-spaced",
+      "text": "Reg. nr. AB12345",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Reg. nr. [LICENSE_PLATE]",
+      "notes": "rules-engine#192: the compact form keeps its label requirement, and 'reg. nr' is now one."
+    },
+    {
+      "id": "dk-plate-blind",
+      "text": "Hun kørte i en grå Toyota, PN 70 118, da uheldet skete.",
+      "countries": null,
+      "expectRedactedText": "Hun kørte i en grå Toyota, [LICENSE_PLATE], da uheldet skete.",
+      "notes": "rules-engine#192: the spaced form needs no country either."
+    },
+    {
+      "id": "dk-plate-shape-not-the-front-of-a-french-vat",
+      "text": "N° TVA : FR 47 512 084 937 – facturation mensuelle.",
+      "countries": null,
+      "mustNotDetect": [
+        "LICENSE_PLATE"
+      ],
+      "notes": "rules-engine#192: the spaced plate shape must not take the first nine characters of a longer number. Only the plate is asserted: the VAT number itself, grouped 2-3-3-3, is not detected yet (rules-engine#193)."
+    },
+    {
+      "id": "dk-plate-shape-not-the-front-of-a-steuer-id",
+      "text": "Steuer-ID 87 145 770 961 wurde geprüft.",
+      "countries": null,
+      "expectRedactedText": "Steuer-ID [TAX_ID] wurde geprüft.",
+      "notes": "rules-engine#192: nor of a German tax ID, glued to its label by a hyphen."
+    },
+    {
+      "id": "dk-plate-shape-not-a-lab-value",
+      "text": "Bilan biologique : GB 14 200/µL, CRP 80 mg/L.",
+      "countries": null,
+      "expectRedactedText": "Bilan biologique : GB 14 200/µL, CRP 80 mg/L.",
+      "notes": "rules-engine#192: nor of a count per microlitre."
     }
   ]
 }
