@@ -28,12 +28,49 @@ class DKConfig(CountryConfig):
                 validator="danish_cpr",
                 description="Danish CPR-nummer — 10 digits compact (date-validated)",
             ),
+            # Space-separated form, "CPR: 120385 4417". Written that way on
+            # forms and in letters, and without this the last four digits were
+            # the only thing masked, as a postcode (rules-engine#188). A date
+            # and four digits apart is also a timestamp or a reference, so the
+            # label is required.
+            PatternDef(
+                entity_type=EntityType.NATIONAL_ID,
+                pattern=r"\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2} \d{4}\b",
+                validator="danish_cpr",
+                description="Danish CPR-nummer — DDMMYY XXXX with a space (label required)",
+                context_keywords=[
+                    "CPR", "cpr-nr", "cpr-nummer", "personnummer",
+                    "sygesikring",
+                ],
+                requires_context=True,
+            ),
             # --- IBAN ---
             PatternDef(
                 entity_type=EntityType.IBAN,
                 pattern=r"\bDK\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b",
                 validator="iban",
                 description="Danish IBAN — DK + 16 digits",
+            ),
+            # --- Domestic account: reg.nr. + kontonr. (rules-engine#188) ---
+            # The NemKonto form, "reg.nr. 5301 kontonr. 0012345678": a 4-digit
+            # bank registration number and an account number of up to 10
+            # digits. One span from the first digit to the last, so neither
+            # half is left readable; the account number alone was a PHONE.
+            # No checksum covers every bank, so a label is required.
+            PatternDef(
+                entity_type=EntityType.BANK_ACCOUNT,
+                pattern=(
+                    r"\b\d{4}(?:[ \t]*[,/\-][ \t]*|[ \t]+)"
+                    r"(?:(?:[Kk]onto(?:nummer|nr\.?)?|[Kk]onto[ \t]*nr\.?)[ \t]*:?[ \t]*)?"
+                    r"\d{6,10}\b"
+                ),
+                validator=None,
+                description="Danish domestic account — reg.nr. + kontonr. (label required)",
+                context_keywords=[
+                    "reg.nr", "reg. nr", "regnr", "registreringsnummer",
+                    "kontonr", "konto nr", "kontonummer", "NemKonto",
+                ],
+                requires_context=True,
             ),
             # --- VAT (CVR) ---
             PatternDef(
@@ -52,6 +89,17 @@ class DKConfig(CountryConfig):
                     "CVR", "CVR-nummer", "virksomhedsnummer",
                     "virksomhedsregisteret",
                 ],
+                requires_context=True,
+            ),
+            # --- Driving licence (kørekort, 8 digits; rules-engine#188) ---
+            # The national phone pattern below claims every 8-digit number, so
+            # without this a kørekort number was masked as PHONE.
+            PatternDef(
+                entity_type=EntityType.DRIVERS_LICENSE,
+                pattern=r"\b\d{8}\b",
+                validator=None,
+                description="Danish driving licence — 8 digits (label required)",
+                context_keywords=["kørekort", "kørekortnummer", "kørekort nr"],
                 requires_context=True,
             ),
             # --- Phone (national, 8 digits no area code) ---
@@ -78,6 +126,17 @@ class DKConfig(CountryConfig):
                     "nummerplade", "registreringsnummer", "reg.nr", "køretøj",
                 ],
                 requires_context=True,
+            ),
+            # --- Postal Code with the country prefix (rules-engine#188) ---
+            # "DK-2100 København Ø", the form written for abroad and on
+            # letterheads. The prefix belongs to the code: masking the digits
+            # alone left "DK-[POSTAL_CODE]". The prefix and the town after it
+            # are the evidence, so no street word is required.
+            PatternDef(
+                entity_type=EntityType.POSTAL_CODE,
+                pattern=r"\bDK-[1-9]\d{3}\b(?=[ \t]+[A-ZÆØÅ])",
+                validator=None,
+                description="Danish postal code — DK-NNNN before a town",
             ),
             # --- Postal Code (4 digits) ---
             PatternDef(

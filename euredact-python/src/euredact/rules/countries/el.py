@@ -35,7 +35,10 @@ class ELConfig(CountryConfig):
                        pattern=r"\b69\d{8}\b",
                        validator=None, description="Greek mobile phone — compact"),
             PatternDef(entity_type=EntityType.PHONE,
-                       pattern=r"\b2\d{1,3}[\s\-]?\d{3,4}[\s\-]?\d{3,4}\b",
+                       # 21-28: no Greek area code starts 20 or 29, and
+                       # without this "2026-014482", a year-prefixed case
+                       # number, was a Greek landline (rules-engine#188).
+                       pattern=r"\b2[1-8]\d{0,2}[\s\-]?\d{3,4}[\s\-]?\d{3,4}\b",
                        validator=None, description="Greek landline — 2XX XXX XXXX"),
             PatternDef(entity_type=EntityType.PHONE,
                        pattern=r"\+30\s?\d{2,4}[\s\-]?\d{3,4}[\s\-]?\d{3,4}",

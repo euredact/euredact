@@ -8522,6 +8522,130 @@
         ]
       },
       "notes": "rules-engine#166: Python's $ also matches just before a final newline, so a context pattern tested on the text before a value fired across the line break and the value at the start of the next line was dropped; TypeScript's $ does not. The Python patterns end in \\Z now."
+    },
+    {
+      "id": "dk-cpr-with-a-space",
+      "text": "CPR: 120385 4417",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "CPR: [NATIONAL_ID]",
+      "notes": "rules-engine#188: the spaced CPR form, behind a CPR label; 1.0.0 masked only the last four digits, as a postcode."
+    },
+    {
+      "id": "dk-spaced-date-and-digits-without-a-label",
+      "text": "Tidsstempel 120385 4417 i loggen.",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Tidsstempel 120385 4417 i loggen.",
+      "notes": "rules-engine#188: the spaced CPR pattern needs its label: a date and four digits apart is also a timestamp."
+    },
+    {
+      "id": "dk-nemkonto-reg-and-account-number",
+      "text": "NemKonto: reg.nr. 5301 kontonr. 0012345678",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "NemKonto: reg.nr. [BANK_ACCOUNT]",
+      "notes": "rules-engine#188: the domestic account is one span from the registration number to the account number; 1.0.0 left reg.nr. in clear and typed the account number PHONE."
+    },
+    {
+      "id": "dk-account-number-alone",
+      "text": "Kontonr. 0012345678 hos Danske Bank.",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Kontonr. [BANK_ACCOUNT] hos Danske Bank.",
+      "notes": "rules-engine#188: a kontonr. label retypes the bare account number from PHONE to BANK_ACCOUNT."
+    },
+    {
+      "id": "dk-postcode-with-country-prefix",
+      "text": "Postadresse: Nørrebrogade 4, DK-2100 København Ø",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Postadresse: Nørrebrogade 4, [POSTAL_CODE] København Ø",
+      "notes": "rules-engine#188: the DK- prefix belongs to the postcode; 1.0.0 left DK- visible."
+    },
+    {
+      "id": "dk-prefixed-code-without-a-town",
+      "text": "Produktkode DK-2100 på lager",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Produktkode DK-2100 på lager",
+      "notes": "rules-engine#188: DK-NNNN is a postcode only before a town name."
+    },
+    {
+      "id": "dk-passport-number",
+      "text": "Pasnummer: 208117543",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Pasnummer: [PASSPORT]",
+      "notes": "rules-engine#188: a Danish passport label makes the 9 digits PASSPORT; 1.0.0 typed them NATIONAL_ID."
+    },
+    {
+      "id": "dk-driving-licence-number",
+      "text": "Kørekortnummer: 31749260",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Kørekortnummer: [DRIVERS_LICENSE]",
+      "notes": "rules-engine#188: a kørekort label makes the 8 digits DRIVERS_LICENSE; 1.0.0 typed them PHONE."
+    },
+    {
+      "id": "dk-order-number-is-not-a-phone",
+      "text": "Din ordre 45893217 er modtaget.",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Din ordre 45893217 er modtaget.",
+      "notes": "rules-engine#188: an 8-digit order number behind a Danish order label is not a phone number."
+    },
+    {
+      "id": "dk-customer-number-is-not-a-phone",
+      "text": "Kunde nr. 45893217",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Kunde nr. 45893217",
+      "notes": "rules-engine#188: nor is a customer number."
+    },
+    {
+      "id": "dk-customer-service-phone-is-kept",
+      "text": "Ring til kundeservice på 28473915 i dag.",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Ring til kundeservice på [PHONE] i dag.",
+      "notes": "rules-engine#188: bare 'kunde' is not a reference label: kundeservice is followed by a phone number."
+    },
+    {
+      "id": "year-prefixed-case-number-is-not-a-greek-landline",
+      "text": "Din sag 2026-014482 er oprettet.",
+      "countries": null,
+      "expectRedactedText": "Din sag 2026-014482 er oprettet.",
+      "notes": "rules-engine#188: no Greek area code starts 20, so a year-prefixed case number is not a landline; 1.0.0 masked it as PHONE."
+    },
+    {
+      "id": "greek-landline-with-a-four-digit-area-code",
+      "text": "Τηλ. 2310-123456",
+      "countries": [
+        "EL"
+      ],
+      "expectRedactedText": "Τηλ. [PHONE]",
+      "notes": "rules-engine#188: Greek landlines keep matching after the area-code narrowing."
+    },
+    {
+      "id": "dk-citizen-service-email",
+      "text": "Emne: Henvendelse vedrørende din sag\n\nKære Mette Hansen,\n\nTak for din henvendelse til Borgerservice. Vi har registreret følgende oplysninger:\n\nCPR-nr.: 120385-4417\nPersonnummer: 0711922283\nCPR: 120385 4417\nSygesikringsbevis: 030457-1906\nIBAN: DK08 5301 0012 3456 78\nNemKonto: reg.nr. 5301 kontonr. 0012345678\nMomsnummer: DK31256798\nCVR-nr. 29841136\nTelefon: +45 32 64 18 77, mobil 41 26 58 93, tlf. 28473915\nNummerplade: CX 41 822\nAdresse: Vestergade 12, 8000 Aarhus C\nPostadresse for udlandet: Nørrebrogade 4, DK-2100 København Ø\nPasnummer: 208117543\nKørekortnummer: 31749260\nE-mail: mette.hansen@example.dk, logget ind fra 192.168.14.27\nFødselsdato: 12. marts 1985\nMitID bruger-id: mette.h82\n\nDin ordre 45893217 er modtaget, og din sag har sagsnummer 2026-014482.\nGebyret på 2.450 kr. for 2026 opkræves den 01.02.2026. Henvis til billet INC0458812.\n\nMed venlig hilsen\nBorgerservice\n",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Emne: Henvendelse vedrørende din sag\n\nKære Mette Hansen,\n\nTak for din henvendelse til Borgerservice. Vi har registreret følgende oplysninger:\n\nCPR-nr.: [NATIONAL_ID]\nPersonnummer: [NATIONAL_ID]\nCPR: [NATIONAL_ID]\nSygesikringsbevis: [NATIONAL_ID]\nIBAN: [BANK_ACCOUNT]\nNemKonto: reg.nr. [BANK_ACCOUNT]\nMomsnummer: [VAT]\nCVR-nr. [CHAMBER_OF_COMMERCE]\nTelefon: [PHONE], mobil [PHONE], tlf. [PHONE]\nNummerplade: [LICENSE_PLATE]\nAdresse: Vestergade 12, [POSTAL_CODE] Aarhus C\nPostadresse for udlandet: Nørrebrogade 4, [POSTAL_CODE] København Ø\nPasnummer: [PASSPORT]\nKørekortnummer: [DRIVERS_LICENSE]\nE-mail: [EMAIL], logget ind fra [IP_ADDRESS]\nFødselsdato: [DOB]\nMitID bruger-id: mette.h82\n\nDin ordre 45893217 er modtaget, og din sag har sagsnummer 2026-014482.\nGebyret på 2.450 kr. for 2026 opkræves den 01.02.2026. Henvis til billet INC0458812.\n\nMed venlig hilsen\nBorgerservice\n",
+      "notes": "rules-engine#188: the probe: a synthetic citizen-service e-mail with 20 planted values and 6 number lures."
     }
   ]
 }

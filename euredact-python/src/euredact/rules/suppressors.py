@@ -105,6 +105,13 @@ _REFERENCE_BEFORE = re.compile(
     r"ticket|incident\s*(?:report|nr|no)?|case\s*(?:nr|no|id)?|"
     r"zaaknummer|meldingsnummer|Vorgangsnummer|Vorgang|Störungsmeldung|"
     r"saksnummer|ärendenummer|sagsnummer|asianumero|"
+    # Danish order, invoice, customer, case and file numbers. Every 8-digit
+    # number fits the national phone pattern, so "Din ordre 45893217" was
+    # masked as PHONE (rules-engine#188). Not bare "kunde": "kundeservice"
+    # is followed by a real phone number.
+    r"ordre(?:nummer|\s*nr\.?)?|fakturanummer|fakturanr\.?|"
+    r"kunde(?:nummer|\s*nr\.?)|journal(?:nummer|\s*nr\.?)|j\.\s*nr\.?|"
+    r"sag(?:snr\.?|s?\s*nr\.?)?|"
     # The Dutch two-word form. "factuurnummer" was here, "Factuur nr." was not,
     # and the latter is what documents actually write.
     r"Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.#]?\s*\Z",
