@@ -156,7 +156,7 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         _B + r"(?:bsn(?!r)|burgerservicenummer(?:\s*\(bsn\))?"
         r"|personnummer|rijksregisternummer|nationaal\s*nummer"
         r"|numéro\s*national|national\s*(?:id|number)|identiteitsnummer"
-        r"|henkilötunnus|kennitala|cpr(?:-?nummer)?|nif|nie"
+        r"|henkilötunnus|kennitala|cpr(?:-?nummer|-?nr)?|nif|nie"
         # Spanish DNI, or DNIe, as a word of its own: with the run-on it read
         # the Polish "dnia"/"dniu" ("on the day") as the label and typed every
         # date after it a national ID (rules-engine#100).
