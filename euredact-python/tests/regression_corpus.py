@@ -862,6 +862,26 @@ def _dk_customer_service_phone(rng):
     return f"Ring til kundeservice på {v} i dag.", [pii(v, "PHONE", "DK")], []
 
 
+def _dk_plate(rng) -> str:
+    """A Danish plate as written: two letters, five digits grouped 2 + 3."""
+    letters = "".join(rng.choice(string.ascii_uppercase) for _ in range(2))
+    return f"{letters} {_digits(rng, 2)} {_digits(rng, 3)}"
+
+
+def _dk_plate_in_prose(template: str):
+    """A plate in ordinary prose needs no plate keyword (#192)."""
+    def build(rng):
+        v, e = _dk_plate(rng), email(rng)
+        return f"{template.format(v=v)} Kontakt: {e}", [pii(v, "LICENSE_PLATE", "DK"), pii(e, "EMAIL", "DK")], []
+    return build
+
+
+def _lab_count_per_microlitre(rng):
+    """"GB 14 200/µL" is a white-cell count, not a Danish plate (#192)."""
+    v, e = f"GB {rng.randrange(10, 30)} {_digits(rng, 3)}/µL", email(rng)
+    return f"Bilan biologique : {v}, CRP {rng.randrange(5, 200)} mg/L. Contact : {e}", [pii(e, "EMAIL", "FR")], [v]
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -1011,6 +1031,14 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#188: case number after sag", _year_case_number("Din sag ")),
     ("rules-engine#188: case number unlabelled", _year_case_number("Vedr. ")),
     ("rules-engine#188: kundeservice phone", _dk_customer_service_phone),
+    # #192: Danish plates in ordinary prose. Appended last, as above.
+    ("rules-engine#192: plate after Parkering", _dk_plate_in_prose("Parkering: {v}, registreret hos vagten.")),
+    ("rules-engine#192: plate after egen bil", _dk_plate_in_prose("Udgifterne er afholdt under kørsel i din egen bil, {v}.")),
+    ("rules-engine#192: plate between commas", _dk_plate_in_prose("Bilen, {v}, holdt på parkeringspladsen.")),
+    ("rules-engine#192: plate after Reg. nr.", _dk_plate_in_prose("Reg. nr.: {v}")),
+    ("rules-engine#192: plate after a car model", _dk_plate_in_prose("Hun kørte i en grå Toyota, {v}, da uheldet skete.")),
+    ("rules-engine#192: plate in brackets", _dk_plate_in_prose("Firmabilen ({v}) afleveres mandag.")),
+    ("rules-engine#192: lab count per microlitre", _lab_count_per_microlitre),
 ]
 
 
