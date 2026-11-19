@@ -64,6 +64,28 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **Danish gaps** *(rules-engine#188)*. A probe of a synthetic Danish
+  citizen-service e-mail (`countries=["DK"]`) found seven:
+  - a CPR number written with a space (`CPR: 120385 4417`) was left in clear,
+    or only its last four digits masked as a postcode. It is now NATIONAL_ID
+    behind a CPR label; without one, a date and four digits stay unmasked;
+  - a domestic NemKonto account (`reg.nr. 5301 kontonr. 0012345678`) left the
+    registration number in clear and typed the account number PHONE. It is now
+    one BANK_ACCOUNT span, and a `kontonr.` label types a bare account number
+    BANK_ACCOUNT;
+  - `DK-2100 København` masked only the digits; the prefix is now part of the
+    POSTAL_CODE span when a town follows;
+  - a passport number behind `Pasnummer:` was typed NATIONAL_ID, and a
+    driving-licence number behind `Kørekortnummer:` PHONE. They are now
+    PASSPORT and DRIVERS_LICENSE;
+  - an 8-digit order, invoice, customer, case or file number behind a Danish
+    label (`ordre`, `fakturanummer`, `kunde nr.`, `sag`, `journalnummer`,
+    `j.nr.`) was masked as a phone number, and is now left alone. Bare
+    `kunde` is not such a label: `kundeservice` is followed by a real
+    phone number;
+  - a year-prefixed case number (`2026-014482`) matched the Greek landline
+    pattern. Greek area codes start 21 to 28, and the pattern now says so.
+
 - **A failed cloud job was reported as a 15-minute timeout**
   *(rules-engine#184)*. A job that fails after the synchronous window
   answers the poll with 502 and `"inference failed"`. The SDK treated

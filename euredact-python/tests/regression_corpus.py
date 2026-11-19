@@ -801,6 +801,67 @@ def _czech_birth_number_check_zero(rng):
             return f"Rodné číslo: {v}", [pii(v, "NATIONAL_ID", "CZ")], []
 
 
+def _dk_cpr(rng) -> str:
+    """A CPR number, spaced: DDMMYY XXXX with a real date."""
+    return f"{rng.randrange(1, 29):02d}{rng.randrange(1, 13):02d}{_digits(rng, 2)} {_digits(rng, 4)}"
+
+
+def _dk_cpr_spaced(label: str):
+    """A CPR written with a space is one NATIONAL_ID behind its label (#188)."""
+    def build(rng):
+        v, e = _dk_cpr(rng), email(rng)
+        return f"{label}{v}. Kontakt: {e}", [pii(v, "NATIONAL_ID", "DK"), pii(e, "EMAIL", "DK")], []
+    return build
+
+
+def _dk_nemkonto(layout: str):
+    """reg.nr. + kontonr. is one BANK_ACCOUNT, neither half left readable (#188)."""
+    def build(rng):
+        reg, account, e = _digits(rng, 4), _digits(rng, 10), email(rng)
+        v = layout.format(reg=reg, account=account)
+        label = "NemKonto: reg.nr. " if "kontonr" in layout else "Reg.nr. "
+        return f"{label}{v}\nKontakt: {e}", [pii(v, "BANK_ACCOUNT", "DK"), pii(e, "EMAIL", "DK")], []
+    return build
+
+
+def _dk_postcode_prefixed(rng):
+    """DK-NNNN before a town is one POSTAL_CODE, prefix included (#188)."""
+    v, e = f"DK-{rng.randrange(1000, 9999)}", email(rng)
+    town = rng.choice(["København Ø", "Aarhus C", "Odense M", "Aalborg"])
+    return (f"Postadresse for udlandet: Nørrebrogade {rng.randrange(1, 90)}, {v} {town}\nKontakt: {e}",
+            [pii(v, "POSTAL_CODE", "DK"), pii(e, "EMAIL", "DK")], [])
+
+
+def _dk_labelled(label: str, digits: int, category: str):
+    """A Danish passport or kørekort number keeps its own type (#188)."""
+    def build(rng):
+        v, e = str(rng.randrange(2, 10)) + _digits(rng, digits - 1), email(rng)
+        return f"{label}{v}\nKontakt: {e}", [pii(v, category, "DK"), pii(e, "EMAIL", "DK")], []
+    return build
+
+
+def _dk_reference(label: str):
+    """An 8-digit order, customer or file number is not a phone (#188)."""
+    def build(rng):
+        v, e = str(rng.randrange(2, 10)) + _digits(rng, 7), email(rng)
+        return f"{label}{v} er registreret. Kontakt: {e}", [pii(e, "EMAIL", "DK")], [v]
+    return build
+
+
+def _year_case_number(label: str):
+    """YYYY-NNNNNN is not a Greek landline: no area code starts 20 (#188)."""
+    def build(rng):
+        v, e = f"20{rng.randrange(10, 30)}-{_digits(rng, 6)}", email(rng)
+        return f"{label}{v} er oprettet. Kontakt: {e}", [pii(e, "EMAIL", "DK")], [v]
+    return build
+
+
+def _dk_customer_service_phone(rng):
+    """Bare "kunde" is no reference label: kundeservice is followed by a phone (#188)."""
+    v = str(rng.randrange(2, 10)) + _digits(rng, 7)
+    return f"Ring til kundeservice på {v} i dag.", [pii(v, "PHONE", "DK")], []
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -931,6 +992,25 @@ TEMPLATES: list[tuple[str, object]] = [
     # #103: residence card and visa sticker.
     ("rules-engine#103: karta pobytu CUKR", _residence("karta pobytu CUKR nr ")),
     ("rules-engine#103: visa sticker", _residence("wiza krajowa typu D, naklejka wizowa nr ")),
+    # #188: Danish gaps. Appended last, so the records above keep their values.
+    ("rules-engine#188: CPR spaced, CPR label", _dk_cpr_spaced("CPR: ")),
+    ("rules-engine#188: CPR spaced, CPR-nr. label", _dk_cpr_spaced("CPR-nr. ")),
+    ("rules-engine#188: CPR spaced, personnummer label", _dk_cpr_spaced("Personnummer: ")),
+    ("rules-engine#188: NemKonto, kontonr.", _dk_nemkonto("{reg} kontonr. {account}")),
+    ("rules-engine#188: NemKonto, konto nr.", _dk_nemkonto("{reg}, konto nr. {account}")),
+    ("rules-engine#188: reg.nr. - account", _dk_nemkonto("{reg} - {account}")),
+    ("rules-engine#188: DK- postcode before a town", _dk_postcode_prefixed),
+    ("rules-engine#188: pasnummer", _dk_labelled("Pasnummer: ", 9, "PASSPORT")),
+    ("rules-engine#188: kørekortnummer", _dk_labelled("Kørekortnummer: ", 8, "DRIVERS_LICENSE")),
+    ("rules-engine#188: kørekort nr.", _dk_labelled("Kørekort nr. ", 8, "DRIVERS_LICENSE")),
+    ("rules-engine#188: order number", _dk_reference("Din ordre ")),
+    ("rules-engine#188: ordre nr.", _dk_reference("Ordre nr. ")),
+    ("rules-engine#188: kunde nr.", _dk_reference("Kunde nr. ")),
+    ("rules-engine#188: fakturanummer", _dk_reference("Fakturanummer: ")),
+    ("rules-engine#188: j.nr.", _dk_reference("J.nr. ")),
+    ("rules-engine#188: case number after sag", _year_case_number("Din sag ")),
+    ("rules-engine#188: case number unlabelled", _year_case_number("Vedr. ")),
+    ("rules-engine#188: kundeservice phone", _dk_customer_service_phone),
 ]
 
 
