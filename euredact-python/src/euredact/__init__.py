@@ -23,7 +23,7 @@ from __future__ import annotations
 import threading
 from typing import Iterator
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from euredact.cloud.chunking import Chunking
 from euredact.cloud.config import configure

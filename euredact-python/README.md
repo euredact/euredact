@@ -1580,8 +1580,9 @@ Custom patterns are always active regardless of either parameter.
 
 Passing neither is safe, and is the right default for mixed-origin data: the
 engine infers what it can and reports it in `result.inferred_countries`. On our
-152,300-document corpus, blind detection scores 99.7% precision against 99.9%
-with country hints — a 0.2-point gap, down from 3.4 points before inference.
+152,300-document corpus, blind detection scores 99.75% precision against 99.89%
+with country hints (1.0.0 and 1.1.0) — a 0.14-point gap, down from 3.4 points
+before inference.
 
 ## Chunked documents
 
@@ -1992,14 +1993,15 @@ documents (~3,450 chars).
 machine since. On one Linux machine (4 cores, CPython 3.14 with `[fast]`,
 Node.js 24), with the same inputs for every version (3,000 corpus records and
 200 identifier-dense documents of 3,450 characters, all countries, dates on,
-cache off), the median CPU time per document moved like this:
+cache off), the CPU time per document (the median for Python, the mean for Node.js)
+moved like this:
 
-| | 0.4.0 | 0.8.0 | 1.0.0 | this version |
+| | 0.4.0 | 0.8.0 | 1.0.0 | 1.1.0 |
 |---|---:|---:|---:|---:|
-| Python `[fast]`, short record | 1.00 ms | 1.03 ms | 1.55 ms | 0.93 ms |
-| Python `[fast]`, dense document | 24.1 ms | 24.8 ms | 33.0 ms | 23.4 ms |
-| Node.js, short record | 0.32 ms | 0.46 ms | 0.57 ms | 0.53 ms |
-| Node.js, dense document | 5.1 ms | 7.5 ms | 11.2 ms | 9.2 ms |
+| Python `[fast]`, short record | 1.00 ms | 1.03 ms | 1.55 ms | 0.95 ms |
+| Python `[fast]`, dense document | 24.1 ms | 24.8 ms | 33.0 ms | 23.1 ms |
+| Node.js, short record | 0.32 ms | 0.46 ms | 0.57 ms | 0.52 ms |
+| Node.js, dense document | 5.1 ms | 7.5 ms | 11.2 ms | 9.0 ms |
 
 1.0.0 was slower on identifier-dense text (rules-engine#176). In Python the RE2
 prefilter had lost its digit boundaries and ran out of its default 8 MB of DFA
@@ -2056,7 +2058,7 @@ document size alone: the same engine runs 1.4× faster on dense records and
 
 The TypeScript SDK needs no such extra — V8's regex engine has literal
 prefilters CPython lacks: on the same documents it runs about 2–3× faster than
-the accelerated Python path (1.8× on short records, 2.5× on dense documents, in
+the accelerated Python path (1.8× on short records, 2.6× on dense documents, in
 the table above).
 
 ## Versioning

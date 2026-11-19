@@ -346,14 +346,15 @@ documents (~3,450 chars), each document distinct.
 machine since. On one Linux machine (4 cores, CPython 3.14 with `[fast]`,
 Node.js 24), with the same inputs for every version (3,000 corpus records and
 200 identifier-dense documents of 3,450 characters, all countries, dates on,
-cache off), the median CPU time per document moved like this:
+cache off), the CPU time per document (the median for Python, the mean for Node.js)
+moved like this:
 
-| | 0.4.0 | 0.8.0 | 1.0.0 | this version |
+| | 0.4.0 | 0.8.0 | 1.0.0 | 1.1.0 |
 |---|---:|---:|---:|---:|
-| Python `[fast]`, short record | 1.00 ms | 1.03 ms | 1.55 ms | 0.93 ms |
-| Python `[fast]`, dense document | 24.1 ms | 24.8 ms | 33.0 ms | 23.4 ms |
-| Node.js, short record | 0.32 ms | 0.46 ms | 0.57 ms | 0.53 ms |
-| Node.js, dense document | 5.1 ms | 7.5 ms | 11.2 ms | 9.2 ms |
+| Python `[fast]`, short record | 1.00 ms | 1.03 ms | 1.55 ms | 0.95 ms |
+| Python `[fast]`, dense document | 24.1 ms | 24.8 ms | 33.0 ms | 23.1 ms |
+| Node.js, short record | 0.32 ms | 0.46 ms | 0.57 ms | 0.52 ms |
+| Node.js, dense document | 5.1 ms | 7.5 ms | 11.2 ms | 9.0 ms |
 
 1.0.0 was slower on identifier-dense text (rules-engine#176). In Python the RE2
 prefilter had lost its digit boundaries and ran out of its default 8 MB of DFA
@@ -380,23 +381,29 @@ agree.
 
 The TypeScript SDK needs no such extra and offers none: V8's regex engine has
 literal prefilters CPython lacks, so on the same documents it runs about 2–3×
-faster than the accelerated Python path (1.8× on short records, 2.5× on dense
-documents, in the table above; 6–7× in the 0.4.0 tables). Adding a native addon there would cost
+faster than the accelerated Python path (1.8× on short records, 2.6× on dense
+documents, in the table above; 6.6–7.4× in the 0.4.0 tables). Adding a native addon there would cost
 bundler, edge-runtime and Deno compatibility for nothing.
 
 ### Accuracy
 
-Full corpus, 152,300 documents and 667,268 labelled entities. Span match plus
-type match, so a value masked under the wrong label counts as both a miss and a
-false positive — see `euredact-python/tests/metrics.py`, which reproduces this.
+Full corpus, 152,300 documents and 667,268 labelled entities, measured on 1.1.0.
+Span match plus type match, so a value masked under the wrong label counts as
+both a miss and a false positive. The figures are the totals of
+[`docs/corpus-results.json`](docs/corpus-results.json), which
+`make eval RESULTS=docs/corpus-results` writes.
+`euredact-python/tests/metrics.py` scores the same tree differently: overlap
+matching, and a second detection of an already-matched label counts as a false
+positive (771 with hints, 1,696 blind). Over its 667,129 labels it gives
+precision 99.88% and recall 99.85% with hints, and 99.75% and 99.71% blind.
 
 | | precision | recall | F1 |
 |---|---:|---:|---:|
 | With country hints | 99.9% | 99.8% | **99.8%** |
 | Blind (no `countries` passed) | 99.8% | 99.7% | **99.7%** |
 
-Blind detection is within 0.1 points of hinted on every measure, so the engine
-does not need to be told the country. False positives: 720 with hints, 1,645
+Blind detection is within 0.14 points of hinted on every measure, so on this
+generated corpus the engine did not need to be told the country. False positives: 720 with hints, 1,645
 blind. The whole of the blind recall gap is values masked under another type
 (1,180 against 255 with hints): blind
 detection hides as many values as hinted, and these count as misses here

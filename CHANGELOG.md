@@ -27,6 +27,8 @@ which both test suites run.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-19
+
 ### Added
 
 - Cloud mode splits a document over the input cap into overlapping parts at paragraph and sentence boundaries, sends them and merges the answers into one result; `chunking="off"` keeps the old `TooLargeError`. New `CloudInfo.chunks`; usage summed over the parts; a failed part fails the call. *(rules-engine#183)*
@@ -502,7 +504,8 @@ which both test suites run.
 
 - First release. *(Python only)* 31 countries, 20+ PII entity types, checksum validation, two-pass detection, context-aware detection, batch processing, true async, referential integrity, Aho-Corasick acceleration, and zero required dependencies.
 
-[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v1.0.0...main
+[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v1.1.0...main
+[1.1.0]: https://git.euredact.dev/euredact/rules-engine/compare/v1.0.0...v1.1.0
 [1.0.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.8.0...v1.0.0
 [0.8.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.1...v0.8.0
 [0.7.1]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.0...v0.7.1
