@@ -38,6 +38,7 @@ which both test suites run.
 
 ### Fixed
 
+- Danish licence plates written `AA 12 345` are masked without a keyword nearby, so a plate in ordinary prose (`Bilen, RB 01 440, …`) is no longer left in clear; `Reg. nr.` with a space is a label. *(rules-engine#192)*
 - Danish: a spaced CPR number and a NemKonto reg.nr. + kontonr. are masked whole; `DK-2100` keeps its prefix inside the postcode; passport and kørekort numbers get their own types; 8-digit order, customer and case numbers behind a Danish label, and year-prefixed case numbers (`2026-014482`, once a Greek landline), are no longer phones. *(rules-engine#188)*
 - A cloud job that failed after the synchronous window was polled until the 900 s deadline and reported as a timeout; the gateway's `inference failed` answer now raises the new `InferenceFailedError` at once, with the job id and reason, and is never retried. *(rules-engine#184)*
 - Python `[fast]` was slower than no accelerator in 1.0.0: the RE2 prefilter lost its digit boundaries and ran out of DFA memory. Both are fixed (the prefilter may use up to 64 MB); `[fast]` is back to 0.93 ms per short record and 23.4 ms per dense document, from 1.55 and 33.0. *(Python only)* *(rules-engine#176)*
