@@ -261,7 +261,9 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
     # mod-97 or Luhn is not rescued by a label — see _RESCUE_TARGETS.
     (EntityType.BANK_ACCOUNT, re.compile(
         _B + r"(?:sort\s*code|account\s*(?:no|number)|rekeningnummer"
-        r"|kontonummer|numéro\s*de\s*compte|sort-?code)" + _SEP,
+        r"|kontonummer|numéro\s*de\s*compte|sort-?code"
+        # Danish "kontonr." / "konto nr." (rules-engine#188).
+        r"|konto\s*nr)" + _SEP,
         re.IGNORECASE)),
 
     # ── Residence permit ───────────────────────────────────────────────
@@ -295,12 +297,17 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
     # span to the passport rule beside a passport label (rules-engine#77).
     (EntityType.DRIVERS_LICENSE, re.compile(
         _B + r"(?:(?:nr\s*dokumentu\s*)?(?:prawo|prawa|prawem)\s*jazdy"
-        r"|numer\s*blankietu\s*prawa\s*jazdy)" + _SEP, re.IGNORECASE)),
+        r"|numer\s*blankietu\s*prawa\s*jazdy"
+        # Danish: an 8-digit licence number is also a phone number's shape
+        # (rules-engine#188).
+        r"|kørekort(?:nummer|\s*nr)?)" + _SEP, re.IGNORECASE)),
 
     # ── Passport ───────────────────────────────────────────────────────
     (EntityType.PASSPORT, re.compile(
         _B + r"(?:passport(?:\s*(?:no|number))?|paspoort(?:nummer)?"
-        r"|reisepass(?:nummer)?|passeport|passnummer)" + _SEP,
+        r"|reisepass(?:nummer)?|passeport|passnummer"
+        # Danish compounds; "pas" alone is too short (rules-engine#188).
+        r"|pas(?:nummer|\s*nr|-nr))" + _SEP,
         re.IGNORECASE)),
 
     # ── BIC / SWIFT ────────────────────────────────────────────────────

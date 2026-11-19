@@ -145,7 +145,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
   // "sort code 20-45-91" was typed LICENSE_PLATE with the label in front of it.
   // Retype target only — a failed mod-97 is never rescued by a label.
   [EntityType.BANK_ACCOUNT,
-   /(?<![A-Za-z0-9_])(?:sort\s*code|account\s*(?:no|number)|rekeningnummer|kontonummer|numéro\s*de\s*compte|sort-?code)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:sort\s*code|account\s*(?:no|number)|rekeningnummer|kontonummer|numéro\s*de\s*compte|sort-?code|konto\s*nr)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // Passport.
   // Residence permit. No permit patterns exist, so a permit number was filed
@@ -156,9 +156,9 @@ export const CUES: Array<[EntityType, RegExp]> = [
   // Driving licence: Polish labels; the document number has the passport
   // shape, so without this cue it lost the span to the passport rule (rules-engine#77).
   [EntityType.DRIVERS_LICENSE,
-   /(?<![A-Za-z0-9_])(?:(?:nr\s*dokumentu\s*)?(?:prawo|prawa|prawem)\s*jazdy|numer\s*blankietu\s*prawa\s*jazdy)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:(?:nr\s*dokumentu\s*)?(?:prawo|prawa|prawem)\s*jazdy|numer\s*blankietu\s*prawa\s*jazdy|kørekort(?:nummer|\s*nr)?)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
   [EntityType.PASSPORT,
-   /(?<![A-Za-z0-9_])(?:passport(?:\s*(?:no|number))?|paspoort(?:nummer)?|reisepass(?:nummer)?|passeport|passnummer)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:passport(?:\s*(?:no|number))?|paspoort(?:nummer)?|reisepass(?:nummer)?|passeport|passnummer|pas(?:nummer|\s*nr|-nr))(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // BIC / SWIFT.
   [EntityType.BIC,

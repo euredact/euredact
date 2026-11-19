@@ -86,6 +86,7 @@ const PASSPORT_CONTEXT = [
   "pasaporte", "número de pasaporte", "documento de viaje",
   "passaporte", "número do passaporte",
   "passnr", "passets nummer", "passin numero", "passinumero",
+  "pasnummer", "pas nr", "pas-nr",
   "passi number", "passinumber",
   "vegabréf", "vegabréfsnúmer",
   "paso numeris", "pases numurs",
@@ -479,12 +480,20 @@ const DK: CountryConfig = {
   patterns: [
     p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2}-\d{4}\b`),
     p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{6}\b`, "danish_cpr"),
+    // Space-separated, behind a CPR label (rules-engine#188).
+    p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2} \d{4}\b`, "danish_cpr", "", ["CPR", "cpr-nr", "cpr-nummer", "personnummer", "sygesikring"], true),
     p(EntityType.IBAN, String.raw`\bDK\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b`, "iban"),
+    // Domestic account, reg.nr. + kontonr., one span (rules-engine#188).
+    p(EntityType.BANK_ACCOUNT, String.raw`\b\d{4}(?:[ \t]*[,/\-][ \t]*|[ \t]+)(?:(?:[Kk]onto(?:nummer|nr\.?)?|[Kk]onto[ \t]*nr\.?)[ \t]*:?[ \t]*)?\d{6,10}\b`, null, "", ["reg.nr", "reg. nr", "regnr", "registreringsnummer", "kontonr", "konto nr", "kontonummer", "NemKonto"], true),
     p(EntityType.VAT, String.raw`\bDK\s?\d{8}\b`, "danish_vat"),
     p(EntityType.CHAMBER_OF_COMMERCE, String.raw`\b\d{8}\b`, "danish_vat", "", ["CVR", "CVR-nummer", "virksomhedsnummer", "virksomhedsregisteret"], true),
+    // Kørekort: 8 digits, the phone shape, behind its label (rules-engine#188).
+    p(EntityType.DRIVERS_LICENSE, String.raw`\b\d{8}\b`, null, "", ["kørekort", "kørekortnummer", "kørekort nr"], true),
     p(EntityType.PHONE, String.raw`\b[2-9]\d\s?\d{2}\s?\d{2}\s?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\+45\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{2}`),
     p(EntityType.LICENSE_PLATE, String.raw`\b[A-Z]{2}\s?\d{2}\s?\d{3}\b`, null, "", ["nummerplade", "registreringsnummer", "reg.nr", "køretøj"], true),
+    // "DK-2100 København Ø": the prefix belongs to the code (rules-engine#188).
+    p(EntityType.POSTAL_CODE, String.raw`\bDK-[1-9]\d{3}\b(?=[ \t]+[A-ZÆØÅ])`),
     p(EntityType.POSTAL_CODE, String.raw`\b[1-9]\d{3}\b`, null, "", ["postnummer", "postby", "postnr", "adresse", "bopæl", "bopælsadresse", "gade", "vej", "allé", "plads", "torv", "stræde", "boulevard", "Arbejdssted"], true),
   ],
 };
@@ -878,7 +887,8 @@ const EL: CountryConfig = {
     p(EntityType.VAT, String.raw`\bEL[\s.]?\d{9}\b`),
     p(EntityType.PHONE, String.raw`\b69\d[\s\-]?\d{3,4}[\s\-]?\d{4}\b`),
     p(EntityType.PHONE, String.raw`\b69\d{8}\b`),
-    p(EntityType.PHONE, String.raw`\b2\d{1,3}[\s\-]?\d{3,4}[\s\-]?\d{3,4}\b`),
+    // 21-28: no Greek area code starts 20 or 29 (rules-engine#188).
+    p(EntityType.PHONE, String.raw`\b2[1-8]\d{0,2}[\s\-]?\d{3,4}[\s\-]?\d{3,4}\b`),
     p(EntityType.PHONE, String.raw`\+30\s?\d{2,4}[\s\-]?\d{3,4}[\s\-]?\d{3,4}`),
     p(EntityType.POSTAL_CODE, String.raw`\b\d{3}\s?\d{2}\b`, null, "", ["Τ.Κ.", "ταχυδρομικός", "address", "Address:", "Postal:", "διεύθυνση", "οδός"], true),
   ],

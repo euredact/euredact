@@ -163,6 +163,9 @@ PASSPORT_CONTEXT = [
     # and `db_password=...` took the span away from SECRET. Only the compound
     # forms, which cannot appear inside an unrelated word, are listed.
     "passnummer", "passnr", "passets nummer", "passin numero", "passinumero",
+    # Danish. "pas" is the word, excluded like "pass"; the compounds are not
+    # (rules-engine#188).
+    "pasnummer", "pas nr", "pas-nr",
     # Estonian. "pass" alone is the word, and is excluded above as a
     # substring hazard, so only the compounds appear.
     "passi number", "passinumber",
