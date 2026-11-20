@@ -166,6 +166,9 @@ PASSPORT_CONTEXT = [
     # Danish. "pas" is the word, excluded like "pass"; the compounds are not
     # (rules-engine#188).
     "pasnummer", "pas nr", "pas-nr",
+    # "Passet nr. …", "Dansk pas, nr. …" (rules-engine#195). Not bare
+    # "passet": it is also the past participle of "passe", to look after.
+    "passet nr", "passets nr", "pas, nr",
     # Estonian. "pass" alone is the word, and is excluded above as a
     # substring hazard, so only the compounds appear.
     "passi number", "passinumber",

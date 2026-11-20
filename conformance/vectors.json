@@ -8667,6 +8667,96 @@
       ],
       "expectRedactedText": "Emne: Henvendelse vedrørende din sag\n\nKære Mette Hansen,\n\nTak for din henvendelse til Borgerservice. Vi har registreret følgende oplysninger:\n\nCPR-nr.: [NATIONAL_ID]\nPersonnummer: [NATIONAL_ID]\nCPR: [NATIONAL_ID]\nSygesikringsbevis: [NATIONAL_ID]\nIBAN: [BANK_ACCOUNT]\nNemKonto: reg.nr. [BANK_ACCOUNT]\nMomsnummer: [VAT]\nCVR-nr. [CHAMBER_OF_COMMERCE]\nTelefon: [PHONE], mobil [PHONE], tlf. [PHONE]\nNummerplade: [LICENSE_PLATE]\nAdresse: Vestergade 12, [POSTAL_CODE] Aarhus C\nPostadresse for udlandet: Nørrebrogade 4, [POSTAL_CODE] København Ø\nPasnummer: [PASSPORT]\nKørekortnummer: [DRIVERS_LICENSE]\nE-mail: [EMAIL], logget ind fra [IP_ADDRESS]\nFødselsdato: [DOB]\nMitID bruger-id: mette.h82\n\nDin ordre 45893217 er modtaget, og din sag har sagsnummer 2026-014482.\nGebyret på 2.450 kr. for 2026 opkræves den 01.02.2026. Henvis til billet INC0458812.\n\nMed venlig hilsen\nBorgerservice\n",
       "notes": "rules-engine#188: the probe: a synthetic citizen-service e-mail with 20 planted values and 6 number lures."
+    },
+    {
+      "id": "dk-cpr-after-sag",
+      "text": "Sag: 2002085636 – Sara Møller",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Sag: [NATIONAL_ID] – Sara Møller",
+      "notes": "rules-engine#195: a CPR filed as the case reference; #188 had made 'Sag' a reference label that dropped it."
+    },
+    {
+      "id": "dk-cpr-after-ref",
+      "text": "Ref. 2602109847 / 2025-038881",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Ref. [NATIONAL_ID] / 2025-038881",
+      "notes": "rules-engine#195: nor does 'Ref.' drop a date-valid CPR."
+    },
+    {
+      "id": "dk-spaced-cpr-after-vedr",
+      "text": "Vedr. 110573 1449 Frederik Lucas Nissen",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Vedr. [NATIONAL_ID] Frederik Lucas Nissen",
+      "notes": "rules-engine#195: 'Vedr.' licenses the spaced CPR, as a letter names the citizen it is about."
+    },
+    {
+      "id": "dk-cpr-in-a-file-name",
+      "text": "Vedhæftet: personoplysningsblanket_1202794846.pdf",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Vedhæftet: personoplysningsblanket_[NATIONAL_ID].pdf",
+      "notes": "rules-engine#195: an underscore is a boundary for the compact CPR."
+    },
+    {
+      "id": "dk-timestamp-in-a-file-name",
+      "text": "Bijlage: scan_20260312.pdf",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Bijlage: scan_20260312.pdf",
+      "notes": "rules-engine#195: a timestamp after an underscore is not a CPR: its 'month' is 26."
+    },
+    {
+      "id": "dk-passport-passet-nr",
+      "text": "Passet nr. 194947797",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Passet nr. [PASSPORT]",
+      "notes": "rules-engine#195: the definite form of 'pas' with nr."
+    },
+    {
+      "id": "dk-passport-pas-comma-nr",
+      "text": "Dansk pas, nr. 155005328",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Dansk pas, nr. [PASSPORT]",
+      "notes": "rules-engine#195: 'pas, nr.' with a comma."
+    },
+    {
+      "id": "dk-verb-passet-is-no-passport-label",
+      "text": "Hun har passet børnene i 194947797 minutter.",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Hun har passet børnene i 194947797 minutter.",
+      "notes": "rules-engine#195: bare 'passet' is the verb 'looked after', not a label."
+    },
+    {
+      "id": "dk-phone-before-dagen",
+      "text": "Du får en påmindelse på sms til 29997309 dagen før.",
+      "countries": [
+        "DK"
+      ],
+      "expectRedactedText": "Du får en påmindelse på sms til [PHONE] dagen før.",
+      "notes": "rules-engine#195: Danish 'dagen' (the day) is no duration after an 8-digit number; the Dutch 'dagen' (days) dropped it."
+    },
+    {
+      "id": "nl-duration-in-dagen-is-kept",
+      "text": "Opzegtermijn: 1200 dagen",
+      "countries": [
+        "NL"
+      ],
+      "expectRedactedText": "Opzegtermijn: 1200 dagen",
+      "notes": "rules-engine#195: a real duration still suppresses a postcode-sized number."
     }
   ]
 }

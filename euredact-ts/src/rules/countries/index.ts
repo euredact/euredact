@@ -87,6 +87,7 @@ const PASSPORT_CONTEXT = [
   "passaporte", "número do passaporte",
   "passnr", "passets nummer", "passin numero", "passinumero",
   "pasnummer", "pas nr", "pas-nr",
+  "passet nr", "passets nr", "pas, nr",
   "passi number", "passinumber",
   "vegabréf", "vegabréfsnúmer",
   "paso numeris", "pases numurs",
@@ -479,9 +480,10 @@ const DK: CountryConfig = {
   name: "Denmark",
   patterns: [
     p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2}-\d{4}\b`),
-    p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{6}\b`, "danish_cpr"),
+    // "_" is a boundary for the compact CPR: file names, export columns (rules-engine#195).
+    p(EntityType.NATIONAL_ID, String.raw`(?<![A-Za-z0-9])(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{6}(?![A-Za-z0-9])`, "danish_cpr"),
     // Space-separated, behind a CPR label (rules-engine#188).
-    p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2} \d{4}\b`, "danish_cpr", "", ["CPR", "cpr-nr", "cpr-nummer", "personnummer", "sygesikring"], true),
+    p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2} \d{4}\b`, "danish_cpr", "", ["CPR", "cpr-nr", "cpr-nummer", "personnummer", "sygesikring", "vedr"], true),
     p(EntityType.IBAN, String.raw`\bDK\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b`, "iban"),
     // Domestic account, reg.nr. + kontonr., one span (rules-engine#188).
     p(EntityType.BANK_ACCOUNT, String.raw`\b\d{4}(?:[ \t]*[,/\-][ \t]*|[ \t]+)(?:(?:[Kk]onto(?:nummer|nr\.?)?|[Kk]onto[ \t]*nr\.?)[ \t]*:?[ \t]*)?\d{6,10}\b`, null, "", ["reg.nr", "reg. nr", "regnr", "registreringsnummer", "kontonr", "konto nr", "kontonummer", "NemKonto"], true),
