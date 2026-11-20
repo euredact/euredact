@@ -917,6 +917,18 @@ def _dk_sms_phone_before_dagen(rng):
     return f"Du får en påmindelse på sms til {v} dagen før.", [pii(v, "PHONE", "DK")], []
 
 
+def _vat_printed_grouping(country: str, label: str):
+    """A VAT number in its printed digit groups is one VAT span (#193)."""
+    def build(rng):
+        if country == "FR":
+            v = f"FR {rng.randrange(10, 99)} {_digits(rng, 3)} {_digits(rng, 3)} {_digits(rng, 3)}"
+        else:
+            v = f"LU {_digits(rng, 2)} {_digits(rng, 3)} {_digits(rng, 3)}"
+        e = email(rng)
+        return f"{label}{v}. Contact : {e}", [pii(v, "VAT_NUMBER", country), pii(e, "EMAIL", country)], []
+    return build
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -1082,6 +1094,10 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#195: Passet nr.", _dk_passport_label("Passet nr. ")),
     ("rules-engine#195: pas, nr.", _dk_passport_label("Dansk pas, nr. ")),
     ("rules-engine#195: sms phone before dagen", _dk_sms_phone_before_dagen),
+    # #193: VAT numbers in their printed digit groups. Appended last, as above.
+    ("rules-engine#193: FR VAT grouped after N° TVA", _vat_printed_grouping("FR", "N° TVA : ")),
+    ("rules-engine#193: FR VAT grouped after TVA intracommunautaire", _vat_printed_grouping("FR", "TVA intracommunautaire : ")),
+    ("rules-engine#193: LU VAT grouped", _vat_printed_grouping("LU", "TVA : ")),
 ]
 
 
