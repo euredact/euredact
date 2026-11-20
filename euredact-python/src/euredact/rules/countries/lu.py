@@ -43,7 +43,9 @@ class LUConfig(CountryConfig):
             # --- VAT ---
             PatternDef(
                 entity_type=EntityType.VAT,
-                pattern=r"\bLU\s?\d{8}\b",
+                # And grouped 2-3-3, "LU 27 384 916", which the phone pattern
+                # took, leaving "LU" in clear (rules-engine#193).
+                pattern=r"\bLU\s?\d{2}\s?\d{3}\s?\d{3}\b",
                 validator="vat_lu",
                 description="Luxembourg VAT — LU + 8 digits",
             ),
