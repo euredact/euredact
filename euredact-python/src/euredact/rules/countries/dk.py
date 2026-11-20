@@ -24,6 +24,9 @@ class DKConfig(CountryConfig):
             # Compact 10-digit form — date prefix validation reduces FP
             PatternDef(
                 entity_type=EntityType.NATIONAL_ID,
+                # A CPR joined by "_" (a file name, an export column) is found
+                # by structural.detect_underscored_cpr: a lookaround here costs
+                # the RE2 prefilter this pattern's exact form (#195).
                 pattern=r"\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{6}\b",
                 validator="danish_cpr",
                 description="Danish CPR-nummer — 10 digits compact (date-validated)",
@@ -41,6 +44,9 @@ class DKConfig(CountryConfig):
                 context_keywords=[
                     "CPR", "cpr-nr", "cpr-nummer", "personnummer",
                     "sygesikring",
+                    # "Vedr. 110573 1449 Frederik Nissen": a letter about a
+                    # citizen names them by CPR and name (#195).
+                    "vedr",
                 ],
                 requires_context=True,
             ),

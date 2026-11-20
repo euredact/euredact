@@ -78,6 +78,28 @@ narrative lives. Sections here use that vocabulary
   documents, the change added one detection, a French PO box (`BP 80 303`)
   that is part of an address. CPU time is unchanged.
 
+- **Danish masking misses** *(rules-engine#195)*. Masking 1,680 Danish
+  documents with the 1.1.0 pre-release left values visible that the rules
+  should have caught. Each case and its fix:
+  - **A CPR number after a reference label** (`Sag: 2002085636`,
+    `Ref. 2602109847`) was dropped as a case number. `Sag:` was a regression
+    from #188's Danish reference labels. Danish case work files a matter
+    under the CPR itself, so a reference label no longer drops a 10-digit
+    number with a valid CPR date. One random number in 27 passes that
+    check, so an invoice number can now be masked as a NATIONAL_ID: the
+    wrong type, never a leak. Over 118,805 pipeline and corpus documents
+    one detection changed: a UK tax number behind "tax reference:", which
+    was left in clear and is now masked.
+  - **A CPR in a file name** (`…blanket_1202794846.pdf`) was missed because
+    `_` is a word character. It is now a boundary for the compact CPR.
+  - **`Vedr. 110573 1449 Frederik …`**: `vedr` now licenses the spaced CPR.
+  - **`Passet nr.` and `Dansk pas, nr.`** are passport labels. Bare
+    `passet` is not: it is also the verb "looked after".
+  - **`sms til 29997309 dagen før`** lost the phone number to the Dutch
+    unit `dagen` (days), which is the Danish for "the day". Time units now
+    suppress only a number of at most five digits; byte and mass units
+    still apply at any length.
+
 - **Danish gaps** *(rules-engine#188)*. A probe of a synthetic Danish
   citizen-service e-mail (`countries=["DK"]`) found seven:
   - a CPR number written with a space (`CPR: 120385 4417`) was left in clear,

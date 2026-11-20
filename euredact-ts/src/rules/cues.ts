@@ -158,7 +158,7 @@ export const CUES: Array<[EntityType, RegExp]> = [
   [EntityType.DRIVERS_LICENSE,
    /(?<![A-Za-z0-9_])(?:(?:nr\s*dokumentu\s*)?(?:prawo|prawa|prawem)\s*jazdy|numer\s*blankietu\s*prawa\s*jazdy|kørekort(?:nummer|\s*nr)?)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
   [EntityType.PASSPORT,
-   /(?<![A-Za-z0-9_])(?:passport(?:\s*(?:no|number))?|paspoort(?:nummer)?|reisepass(?:nummer)?|passeport|passnummer|pas(?:nummer|\s*nr|-nr))(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
+   /(?<![A-Za-z0-9_])(?:passport(?:\s*(?:no|number))?|paspoort(?:nummer)?|reisepass(?:nummer)?|passeport|passnummer|pas(?:nummer|\s*nr|-nr)|passets?\s*nr|pas,\s*nr)(?:(?:[A-Za-z0-9_]|[^\x00-\x7F])*|\s+[^\s:.\-\d,;()\/]{2,20})\s*\)?\s*[:.\-]*\s*$/i],
 
   // BIC / SWIFT.
   [EntityType.BIC,

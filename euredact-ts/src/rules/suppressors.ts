@@ -404,8 +404,15 @@ function suppressCurrency(text: string, match: RawMatch): boolean {
 function suppressUnits(text: string, match: RawMatch): boolean {
   if (!NUMERIC_TYPES.has(match.patternDef.entityType)) return false;
   const [, after] = getContext(text, match.start, match.end);
-  return UNIT_AFTER.test(after) || SINGLE_LETTER_UNIT_AFTER.test(after);
+  if (!(UNIT_AFTER.test(after) || SINGLE_LETTER_UNIT_AFTER.test(after))) return false;
+  // Only a short number counts days or weeks: the Dutch "dagen" (days) is
+  // the Danish "dagen" (the day), so "sms til 29997309 dagen før" was
+  // 29,997,309 days (rules-engine#195).
+  return !(TIME_UNIT_AFTER.test(after) && (match.text.match(/\d/g) ?? []).length > 5);
 }
+
+/** The durations in UNIT_AFTER, which only a short number can carry. */
+const TIME_UNIT_AFTER = /^[ \t]*(?:jaar|maanden|weken|dagen|uur|minuten|seconden|ans|mois|semaines|jours|heures|Jahre|Monate|Wochen|Tage|Stunden)(?![a-zA-Z\u00C0-\u024F\u0400-\u04FF])/i;
 
 /**
  * A bare metre, gram or litre: lower case, and not an initial or an elision
@@ -432,6 +439,9 @@ const SINGLE_LETTER_UNIT_AFTER = /^[ \t]*[mgl](?![\p{L}\p{N}_.'’])/u;
 const REFERENCE_TYPES = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.SSN, EntityType.TAX_ID, EntityType.IBAN, EntityType.CHAMBER_OF_COMMERCE, EntityType.POSTAL_CODE]);
 const LEGAL_TYPES = new Set<EntityType | string>([EntityType.PHONE, EntityType.NATIONAL_ID, EntityType.POSTAL_CODE]);
 
+/** A Danish CPR number's shape with a valid day and month (rules-engine#195). */
+const DATE_VALID_CPR = /^(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2}-?\d{4}$/;
+
 function suppressReference(text: string, match: RawMatch): boolean {
   const applicable = REFERENCE_TYPES;
   if (!applicable.has(match.patternDef.entityType)) return false;
@@ -439,6 +449,12 @@ function suppressReference(text: string, match: RawMatch): boolean {
   // NL91ABNA0417164300", "Patiënt #85031928479" (rules-engine#152).
   const v = match.patternDef.validator;
   if (v !== null && STRONG_CHECKSUMS.has(v) && VALIDATORS[v](match.text)) return false;
+  // Nor does a Danish CPR: case work files a matter under it ("Sag:
+  // 2002085636"), so a reference label is no evidence against it
+  // (rules-engine#195).
+  // By the digits, not the matching country: this verdict is shared by
+  // every country's candidate on the span.
+  if (match.patternDef.entityType === EntityType.NATIONAL_ID && DATE_VALID_CPR.test(match.text)) return false;
   const [before] = getContext(text, match.start, match.end);
   if (REFERENCE_BEFORE.test(before)) return true;
   const adjacent = cpBefore(text, match.start, 8);

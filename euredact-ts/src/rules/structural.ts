@@ -91,6 +91,26 @@ function detectCsvDob(text: string): Detection[] {
   return detections;
 }
 
+/**
+ * A Danish CPR number glued to a file name or column by "_" (rules-engine#195).
+ * Searched from the literal "_" rather than as a pattern boundary, as in the
+ * Python SDK, whose RE2 prefilter cannot run a lookaround.
+ */
+const UNDERSCORED_CPR = /_((?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{6})(?![0-9A-Za-z])/g;
+
+export function detectUnderscoredCpr(text: string): Detection[] {
+  if (!text.includes("_")) return [];
+  const out: Detection[] = [];
+  for (const m of text.matchAll(UNDERSCORED_CPR)) {
+    const start = m.index! + 1;
+    out.push({
+      entityType: EntityType.NATIONAL_ID, start, end: start + m[1].length, text: m[1],
+      source: DetectionSource.RULES, country: "DK", confidence: "high",
+    });
+  }
+  return out;
+}
+
 export function detectStructuralDob(text: string): Detection[] {
   return [...detectJsonDob(text), ...detectCsvDob(text)];
 }
