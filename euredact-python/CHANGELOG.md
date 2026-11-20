@@ -53,6 +53,20 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **Danish licence plates in ordinary prose** *(rules-engine#192)*. A plate
+  was masked only with one of four keywords nearby (`nummerplade`,
+  `registreringsnummer`, `reg.nr`, `køretøj`), so `Bilen, RB 01 440, holdt …`,
+  `Parkering: RB 01 440` and `Reg. nr.: RB 01 440` were left in clear. The
+  written form, two letters and five digits grouped `AA 12 345`, now needs no
+  label. It never takes the front of a longer number (`FR 47 512 084 937`,
+  `Steuer-ID 87 145 770 961`, `GB 14 200/µL`). Other spacings and the compact
+  `AA12345` still need a label, now also `reg. nr`, `regnr`, `indregistreret`,
+  `firmabil`, `leasingbil`, `parkering`, `parkeret` or `kørsel`. Not `bil`
+  or `bilen`: keywords match as substrings and would fire inside `mobil`,
+  `mobilen` and `stabilen`. Measured over 118,260 pipeline and corpus
+  documents, the change added one detection, a French PO box (`BP 80 303`)
+  that is part of an address. CPU time is unchanged.
+
 - **Danish masking misses** *(rules-engine#195)*. Masking 1,680 Danish
   documents with the 1.1.0 pre-release left values visible that the rules
   should have caught. Each case and its fix:
@@ -62,8 +76,9 @@ narrative lives. Sections here use that vocabulary
     under the CPR itself, so a reference label no longer drops a 10-digit
     number with a valid CPR date. One random number in 27 passes that
     check, so an invoice number can now be masked as a NATIONAL_ID: the
-    wrong type, never a leak. Over 118,805 pipeline and corpus documents,
-    no detection changed.
+    wrong type, never a leak. Over 118,805 pipeline and corpus documents
+    one detection changed: a UK tax number behind "tax reference:", which
+    was left in clear and is now masked.
   - **A CPR in a file name** (`…blanket_1202794846.pdf`) was missed because
     `_` is a word character. It is now a boundary for the compact CPR.
   - **`Vedr. 110573 1449 Frederik …`**: `vedr` now licenses the spaced CPR.

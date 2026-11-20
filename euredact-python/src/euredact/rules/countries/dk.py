@@ -123,13 +123,35 @@ class DKConfig(CountryConfig):
                 description="Danish international phone — +45",
             ),
             # --- License Plate (AA XX XXX) ---
+            # The written Danish form, two letters and five digits grouped
+            # 2 + 3, needs no label (rules-engine#192). Required, it missed
+            # every plate in ordinary prose -- "Bilen, RB 01 440, holdt ..." --
+            # and no keyword list closes that: there is always another word
+            # for the car. Measured over 118,260 pipeline and corpus
+            # documents, the shape added one detection, a French PO box
+            # ("BP 80 303") that is itself part of an address.
+            # It must not take the front of a longer number: "FR 47 512 084
+            # 937" is a VAT number, "Steuer-ID 87 145 770 961" a tax ID, and
+            # "GB 14 200/µL" a lab value. Masking the first nine characters
+            # would leave the rest readable.
+            PatternDef(
+                entity_type=EntityType.LICENSE_PLATE,
+                pattern=r"(?<![\-/])\b[A-Z]{2} \d{2} \d{3}\b(?![ \t]?\d)(?![ \t]?/)",
+                validator=None,
+                description="Danish license plate — AA XX XXX, spaced",
+            ),
+            # Any other spacing, and the compact AA12345, behind a label.
+            # Keywords match as substrings, so the everyday "bil"/"bilen" are
+            # left out: they fire inside "mobil", "mobilen" and "stabilen".
             PatternDef(
                 entity_type=EntityType.LICENSE_PLATE,
                 pattern=r"\b[A-Z]{2}\s?\d{2}\s?\d{3}\b",
                 validator=None,
-                description="Danish license plate — AA XX XXX",
+                description="Danish license plate — AA XX XXX (label required)",
                 context_keywords=[
                     "nummerplade", "registreringsnummer", "reg.nr", "køretøj",
+                    "reg. nr", "reg nr", "regnr", "indregistreret",
+                    "firmabil", "leasingbil", "parkeret", "parkering", "kørsel",
                 ],
                 requires_context=True,
             ),
