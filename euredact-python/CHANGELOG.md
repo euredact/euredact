@@ -53,6 +53,20 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **Danish licence plates in ordinary prose** *(rules-engine#192)*. A plate
+  was masked only with one of four keywords nearby (`nummerplade`,
+  `registreringsnummer`, `reg.nr`, `køretøj`), so `Bilen, RB 01 440, holdt …`,
+  `Parkering: RB 01 440` and `Reg. nr.: RB 01 440` were left in clear. The
+  written form, two letters and five digits grouped `AA 12 345`, now needs no
+  label. It never takes the front of a longer number (`FR 47 512 084 937`,
+  `Steuer-ID 87 145 770 961`, `GB 14 200/µL`). Other spacings and the compact
+  `AA12345` still need a label, now also `reg. nr`, `regnr`, `indregistreret`,
+  `firmabil`, `leasingbil`, `parkering`, `parkeret` or `kørsel`. Not `bil`
+  or `bilen`: keywords match as substrings and would fire inside `mobil`,
+  `mobilen` and `stabilen`. Measured over 118,260 pipeline and corpus
+  documents, the change added one detection, a French PO box (`BP 80 303`)
+  that is part of an address. CPU time is unchanged.
+
 - **Danish gaps** *(rules-engine#188)*. A probe of a synthetic Danish
   citizen-service e-mail (`countries=["DK"]`) found seven:
   - a CPR number written with a space (`CPR: 120385 4417`) was left in clear,
