@@ -64,6 +64,13 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **`Batches` without a global `crypto`** *(rules-engine#196)*. Every
+  `Batches` call threw `ReferenceError: crypto is not defined` where the
+  runtime has no global `crypto`: on Node 18, which 1.0.0 still declared
+  supported, inside an ES module. The Idempotency-Key now comes from the same
+  helper `CloudClient` uses, which falls back when the global is missing.
+  Reproduced and verified on Node 18.20.8 with the built package.
+
 - **Danish licence plates in ordinary prose** *(rules-engine#192)*. A plate
   was masked only with one of four keywords nearby (`nummerplade`,
   `registreringsnummer`, `reg.nr`, `køretøj`), so `Bilen, RB 01 440, holdt …`,
