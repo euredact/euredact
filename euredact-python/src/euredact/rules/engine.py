@@ -12,7 +12,7 @@ from euredact.rules import evidence as evidence_mod
 from euredact.rules.countries._base import PatternDef
 from euredact.rules.matchers import MultiPatternMatcher, RawMatch
 from euredact.rules.registry import CountryRegistry
-from euredact.rules.structural import detect_structural_dob
+from euredact.rules.structural import detect_structural_dob, detect_underscored_cpr
 from euredact.rules.suppressors import (
     forget_line_memos,
     labelled_a_passport,
@@ -874,7 +874,7 @@ class RuleEngine:
 
         # Structural detectors (JSON field names, CSV headers). These arrive as
         # finished Detections, carry no RawMatch, and are not suppressed.
-        for d in detect_structural_dob(text):
+        for d in [*detect_structural_dob(text), *detect_underscored_cpr(text)]:
             candidates.append(
                 (1, 0, 1, 0.0, 1, d.start, d.end, None, d, "high",
                  tie_key(None, d))

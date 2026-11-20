@@ -2,7 +2,7 @@ import { DetectionSource, EntityType, type CountryConfig, type CountryEvidence, 
 import { MultiPatternMatcher, type RawMatch } from "./matchers.js";
 import { activateScratch, labelledAPassport, shouldSuppress, SuppressionScratch } from "./suppressors.js";
 import { CUE_TARGETS, CUE_WINDOW, RESCUE_TARGETS, cuedType, retypedBy } from "./cues.js";
-import { detectStructuralDob } from "./structural.js";
+import { detectStructuralDob, detectUnderscoredCpr } from "./structural.js";
 import { COUNTRY_CONFIGS } from "./countries/index.js";
 import * as evidenceMod from "./evidence.js";
 
@@ -598,7 +598,7 @@ export class RuleEngine {
       });
     }
 
-    for (const d of detectStructuralDob(text)) {
+    for (const d of [...detectStructuralDob(text), ...detectUnderscoredCpr(text)]) {
       candidates.push({ blindPriority: 1, cue: 0, priority: 1, length: d.end - d.start,
                         countryScore: 0, inScope: 1, tier: 0, det: d,
                         tie: tieKey(d.country ?? "") });
