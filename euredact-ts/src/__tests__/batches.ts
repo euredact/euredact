@@ -126,6 +126,31 @@ test("what is sent is what cloud mode sends", async () => {
   assert.equal(gateway.uploaded[0].text, maskForCloud(TEXT, local.detections)[0]);
 });
 
+test("works without a global crypto, as on Node 18 (rules-engine#196)", async () => {
+  // In an ES module on Node < 19 the global does not exist; 1.0.0 called
+  // crypto.randomUUID() there and every batch call threw ReferenceError.
+  const saved = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+  const keys: string[] = [];
+  try {
+    delete (globalThis as { crypto?: unknown }).crypto;
+    assert.equal(typeof (globalThis as { crypto?: unknown }).crypto, "undefined");
+    const gateway = new FakeGateway();
+    const recording: typeof fetch = async (input, init) => {
+      keys.push((init?.headers as Record<string, string>)["Idempotency-Key"]);
+      return gateway.fetch(input, init);
+    };
+    const { batches } = setup({ fetchImpl: recording });
+    const batch = await batches.create(docs());
+    await batches.retrieve(batch.id);
+    await batches.cancel(batch.id);
+    assert.equal(keys.length, 3);
+    assert.ok(keys.every(k => typeof k === "string" && k.length > 8));
+    assert.equal(new Set(keys).size, 3);
+  } finally {
+    if (saved) Object.defineProperty(globalThis, "crypto", saved);
+  }
+});
+
 for (const [name, input, message] of [
   ["duplicate", [{ customId: "a", text: "x", countries: ["BE"] }, { customId: "a", text: "x", countries: ["BE"] }], /duplicate customId/],
   ["long id", [{ customId: "a".repeat(65), text: "x", countries: ["BE"] }], /customId must be 1-64 characters/],
