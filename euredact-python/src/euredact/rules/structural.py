@@ -146,6 +146,38 @@ def _detect_delimiter(header: str) -> str | None:
     return None
 
 
+# ── CPR joined by an underscore ────────────────────────────────────────
+
+#: A Danish CPR number glued to a file name or column by "_":
+#: "personoplysningsblanket_1202794846.pdf" (rules-engine#195). "_" is a word
+#: character, so the CPR pattern's \b refused it. Writing the boundary as a
+#: lookaround in the pattern instead made Python's [fast] scan 50% slower on
+#: short records: RE2 cannot run it, and the prefilter fell back to a
+#: superset that fired on any long digit run. Searched here instead, from the
+#: literal "_", and only in a text that has one.
+_UNDERSCORED_CPR = re.compile(
+    r"_((?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{6})(?![0-9A-Za-z])"
+)
+
+
+def detect_underscored_cpr(text: str) -> list[Detection]:
+    """A date-valid CPR number right after an underscore."""
+    if "_" not in text:
+        return []
+    return [
+        Detection(
+            entity_type=EntityType.NATIONAL_ID,
+            start=m.start(1),
+            end=m.end(1),
+            text=m.group(1),
+            source=DetectionSource.RULES,
+            country="DK",
+            confidence="high",
+        )
+        for m in _UNDERSCORED_CPR.finditer(text)
+    ]
+
+
 def detect_structural_dob(text: str) -> list[Detection]:
     """Run all structural DOB detectors. Returns combined results."""
     results: list[Detection] = []

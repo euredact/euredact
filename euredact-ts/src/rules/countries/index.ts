@@ -480,8 +480,7 @@ const DK: CountryConfig = {
   name: "Denmark",
   patterns: [
     p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2}-\d{4}\b`),
-    // "_" is a boundary for the compact CPR: file names, export columns (rules-engine#195).
-    p(EntityType.NATIONAL_ID, String.raw`(?<![A-Za-z0-9])(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{6}(?![A-Za-z0-9])`, "danish_cpr"),
+    p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{6}\b`, "danish_cpr"),
     // Space-separated, behind a CPR label (rules-engine#188).
     p(EntityType.NATIONAL_ID, String.raw`\b(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2} \d{4}\b`, "danish_cpr", "", ["CPR", "cpr-nr", "cpr-nummer", "personnummer", "sygesikring", "vedr"], true),
     p(EntityType.IBAN, String.raw`\bDK\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b`, "iban"),
