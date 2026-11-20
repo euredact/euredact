@@ -23,7 +23,7 @@ import type { Detection, RedactResult, Review } from "../types.js";
 import { DetectionSource } from "../types.js";
 import { EuRedact, applyReplacements, maskForCloud, ontoOriginal, reviewOntoOriginal } from "../sdk.js";
 import { defaultBatchStore, gzip, sha256Hex } from "../platform.js";
-import { cloudErrorFor, codePointOffsets, isInteger, toCloudInfo, toResult } from "./client.js";
+import { cloudErrorFor, codePointOffsets, isInteger, toCloudInfo, toResult, uuid } from "./client.js";
 import { getConfig, requireSecureBaseUrl, type CloudConfig } from "./config.js";
 import { CloudError, NotConfiguredError } from "./errors.js";
 
@@ -248,7 +248,9 @@ export class Batches {
         body: body as BodyInit | undefined,
         headers: {
           Authorization: `Bearer ${this.config.apiKey}`,
-          "Idempotency-Key": headers["Idempotency-Key"] ?? crypto.randomUUID(),
+          // uuid(), not the bare global: an ES module on a runtime without
+          // `globalThis.crypto` (Node < 19) threw ReferenceError here (rules-engine#196).
+          "Idempotency-Key": headers["Idempotency-Key"] ?? uuid(),
           ...this.config.headers,
           ...headers,
         },
@@ -380,7 +382,7 @@ export class Batches {
     const compressed = gzip(body);
     const headers: Record<string, string> = {
       "Content-Type": "application/x-ndjson",
-      "Idempotency-Key": options.idempotencyKey ?? crypto.randomUUID(),
+      "Idempotency-Key": options.idempotencyKey ?? uuid(),
     };
     if (compressed !== null) headers["Content-Encoding"] = "gzip";
     const resp = await this.request("POST", "/v1/batches", compressed ?? body, headers);
