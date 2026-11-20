@@ -64,6 +64,16 @@ narrative lives. Sections here use that vocabulary
 
 ### Fixed
 
+- **French and Luxembourg VAT numbers in their printed grouping**
+  *(rules-engine#193)*. `FR 47 512 084 937` (the SIREN in 3-3-3 groups) was
+  not detected at all and stayed in clear. Blind, part of it was masked
+  under another type, with `FR` left visible. `LU 27 384 916` was masked as
+  a phone number, with `LU` left visible. Both patterns now accept a space
+  between the digit groups. On the training-pipeline documents this
+  masks 45 VAT numbers that were left readable (44 gold-labelled VAT; the
+  45th a company VAT number the gold missed), and replaces 7 partial
+  masks under the wrong type. No corpus document changed.
+
 - **Danish licence plates in ordinary prose** *(rules-engine#192)*. A plate
   was masked only with one of four keywords nearby (`nummerplade`,
   `registreringsnummer`, `reg.nr`, `køretøj`), so `Bilen, RB 01 440, holdt …`,

@@ -8724,10 +8724,8 @@
       "id": "dk-plate-shape-not-the-front-of-a-french-vat",
       "text": "N° TVA : FR 47 512 084 937 – facturation mensuelle.",
       "countries": null,
-      "mustNotDetect": [
-        "LICENSE_PLATE"
-      ],
-      "notes": "rules-engine#192: the spaced plate shape must not take the first nine characters of a longer number. Only the plate is asserted: the VAT number itself, grouped 2-3-3-3, is not detected yet (rules-engine#193)."
+      "expectRedactedText": "N° TVA : [VAT] – facturation mensuelle.",
+      "notes": "rules-engine#192: the spaced plate shape must not take the first nine characters of a longer number. The whole VAT number is masked since rules-engine#193."
     },
     {
       "id": "dk-plate-shape-not-the-front-of-a-steuer-id",
@@ -8832,6 +8830,49 @@
       ],
       "expectRedactedText": "Opzegtermijn: 1200 dagen",
       "notes": "rules-engine#195: a real duration still suppresses a postcode-sized number."
+    },
+    {
+      "id": "fr-vat-printed-grouping",
+      "text": "N° TVA : FR 47 512 084 937 – facturation via Mazars.",
+      "countries": [
+        "FR"
+      ],
+      "expectRedactedText": "N° TVA : [VAT] – facturation via Mazars.",
+      "notes": "rules-engine#193: the SIREN in its printed 3-3-3 groups; left in clear before."
+    },
+    {
+      "id": "fr-vat-printed-grouping-key-glued",
+      "text": "Titulaire : Altexia Conseil SAS, N° TVA : FR84 512 403 917.",
+      "countries": [
+        "FR"
+      ],
+      "expectRedactedText": "Titulaire : Altexia Conseil SAS, N° TVA : [VAT].",
+      "notes": "rules-engine#193: the key glued to FR, the SIREN grouped."
+    },
+    {
+      "id": "fr-vat-printed-grouping-blind",
+      "text": "TVA intracommunautaire : FR 42 512 903 748, centre de traitement.",
+      "countries": null,
+      "expectRedactedText": "TVA intracommunautaire : [VAT], centre de traitement.",
+      "notes": "rules-engine#193: without a country; main masked '42 512 903 748' as TAX_ID and left 'FR' in clear."
+    },
+    {
+      "id": "lu-vat-grouped",
+      "text": "TVA : LU 27 384 916, Luxembourg.",
+      "countries": [
+        "LU"
+      ],
+      "expectRedactedText": "TVA : [VAT], Luxembourg.",
+      "notes": "rules-engine#193: LU grouped 2-3-3; main masked the digits as PHONE and left 'LU' in clear."
+    },
+    {
+      "id": "fr-vat-compact-still-detected",
+      "text": "N° TVA : FR47512084937",
+      "countries": [
+        "FR"
+      ],
+      "expectRedactedText": "N° TVA : [VAT]",
+      "notes": "rules-engine#193: the compact form is unchanged."
     }
   ]
 }

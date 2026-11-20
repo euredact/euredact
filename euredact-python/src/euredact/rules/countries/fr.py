@@ -55,7 +55,9 @@ class FRConfig(CountryConfig):
             # --- VAT (TVA) ---
             PatternDef(
                 entity_type=EntityType.VAT,
-                pattern=r"\bFR\s?[0-9A-HJ-NP-Z]{2}\s?\d{9}\b",
+                # The SIREN in its printed 3-3-3 groups too: "FR 47 512 084
+                # 937" matched nothing and was left in clear (rules-engine#193).
+                pattern=r"\bFR\s?[0-9A-HJ-NP-Z]{2}\s?\d{3}\s?\d{3}\s?\d{3}\b",
                 validator="vat_fr",
                 description="French VAT — FR + 2 chars + 9 digits (SIREN)",
             ),
