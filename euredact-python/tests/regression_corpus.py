@@ -882,6 +882,41 @@ def _lab_count_per_microlitre(rng):
     return f"Bilan biologique : {v}, CRP {rng.randrange(5, 200)} mg/L. Contact : {e}", [pii(e, "EMAIL", "FR")], [v]
 
 
+def _dk_cpr_compact(rng) -> str:
+    return f"{rng.randrange(1, 29):02d}{rng.randrange(1, 13):02d}{_digits(rng, 6)}"
+
+
+def _dk_cpr_as_reference(template: str, spaced: bool = False):
+    """A CPR used as the case reference, or in a file name, stays a CPR (#195).
+
+    The spaced form after "Vedr." carries no label of its own, so blind
+    detection types it by the document's country: with a .ch address it is
+    masked as a Swiss phone number. A Danish letter has a Danish address.
+    """
+    def build(rng):
+        c = _dk_cpr_compact(rng)
+        v = f"{c[:6]} {c[6:]}" if spaced else c
+        e = email(rng)
+        if spaced:
+            e = e.split("@")[0] + "@borger.example.dk"
+        return f"{template.format(v=v)} Kontakt: {e}", [pii(v, "NATIONAL_ID", "DK"), pii(e, "EMAIL", "DK")], []
+    return build
+
+
+def _dk_passport_label(label: str):
+    """Inflected and comma-separated Danish passport labels (#195)."""
+    def build(rng):
+        v, e = str(rng.randrange(1, 10)) + _digits(rng, 8), email(rng)
+        return f"{label}{v}. Kontakt: {e}", [pii(v, "PASSPORT", "DK"), pii(e, "EMAIL", "DK")], []
+    return build
+
+
+def _dk_sms_phone_before_dagen(rng):
+    """Danish "dagen" (the day) is no duration after a phone number (#195)."""
+    v = str(rng.randrange(2, 10)) + _digits(rng, 7)
+    return f"Du får en påmindelse på sms til {v} dagen før.", [pii(v, "PHONE", "DK")], []
+
+
 TEMPLATES: list[tuple[str, object]] = [
     # #82: AVS/AHV with a bad check digit, named as such.
     ("rules-engine#82: label touching", _avs("Numéro AVS {v}.", valid=False)),
@@ -1039,6 +1074,14 @@ TEMPLATES: list[tuple[str, object]] = [
     ("rules-engine#192: plate after a car model", _dk_plate_in_prose("Hun kørte i en grå Toyota, {v}, da uheldet skete.")),
     ("rules-engine#192: plate in brackets", _dk_plate_in_prose("Firmabilen ({v}) afleveres mandag.")),
     ("rules-engine#192: lab count per microlitre", _lab_count_per_microlitre),
+    # #195: misses in the Danish pack masking. Appended last, as above.
+    ("rules-engine#195: CPR after Sag:", _dk_cpr_as_reference("Sag: {v} – Sara Møller.")),
+    ("rules-engine#195: CPR after Ref.", _dk_cpr_as_reference("Ref. {v} / 2025-038881.")),
+    ("rules-engine#195: spaced CPR after Vedr.", _dk_cpr_as_reference("Vedr. {v} Frederik Lucas Nissen.", spaced=True)),
+    ("rules-engine#195: CPR in a file name", _dk_cpr_as_reference("Vedhæftet: personoplysningsblanket_{v}.pdf.")),
+    ("rules-engine#195: Passet nr.", _dk_passport_label("Passet nr. ")),
+    ("rules-engine#195: pas, nr.", _dk_passport_label("Dansk pas, nr. ")),
+    ("rules-engine#195: sms phone before dagen", _dk_sms_phone_before_dagen),
 ]
 
 
