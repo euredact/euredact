@@ -463,7 +463,8 @@ const FR: CountryConfig = {
     p(EntityType.NATIONAL_ID, String.raw`\b[12]\s?\d{2}\s?(?:0[1-9]|1[0-2]|[2-9]\d)\s?\d{2}[0-9AB]?\s?\d{3}\s?\d{3}\s?\d{2}\b`, "french_nir"),
     p(EntityType.NATIONAL_ID, String.raw`\b\d{12}\b`, null, "", ["carte d'identité", "CNI", "carte nationale", "identity card", "pièce d'identité"], true),
     p(EntityType.IBAN, String.raw`\bFR\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{3}\b`, "iban"),
-    p(EntityType.VAT, String.raw`\bFR\s?[0-9A-HJ-NP-Z]{2}\s?\d{9}\b`, "vat_fr"),
+    // The SIREN in its printed 3-3-3 groups too (rules-engine#193).
+    p(EntityType.VAT, String.raw`\bFR\s?[0-9A-HJ-NP-Z]{2}\s?\d{3}\s?\d{3}\s?\d{3}\b`, "vat_fr"),
     p(EntityType.PHONE, String.raw`\b0[1-9][\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\+33\s?[1-9][\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}`),
     p(EntityType.PASSPORT, String.raw`\b\d{2}[A-Z]{2}\d{5}\b`, null, "", PASSPORT_CONTEXT, true),
@@ -635,7 +636,8 @@ const LU: CountryConfig = {
     p(EntityType.NATIONAL_ID, String.raw`\b(?:19|20)\d{2}[^\S\r\n]?(?:0[1-9]|1[0-2])[^\S\r\n]?(?:0[1-9]|[12]\d|3[01])[^\S\r\n]?\d{3}[^\S\r\n]?\d{2}\b`),
     p(EntityType.NATIONAL_ID, String.raw`\b(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{5}\b`),
     p(EntityType.IBAN, String.raw`\bLU\d{2}\s?[A-Z0-9]{4}\s?[A-Z0-9]{4}\s?[A-Z0-9]{4}\s?[A-Z0-9]{4}\b`, "iban"),
-    p(EntityType.VAT, String.raw`\bLU\s?\d{8}\b`, "vat_lu"),
+    // And grouped 2-3-3, "LU 27 384 916" (rules-engine#193).
+    p(EntityType.VAT, String.raw`\bLU\s?\d{2}\s?\d{3}\s?\d{3}\b`, "vat_lu"),
     p(EntityType.PHONE, String.raw`\b(?:2[0-9]|[4-9]\d)[\s\-]?\d{2}[\s\-]?\d{2}[\s\-]?\d{2}\b`),
     p(EntityType.PHONE, String.raw`\b(?:2[0-9]|[4-9]\d)\d{6}\b`),
     p(EntityType.PHONE, String.raw`\b6[2-9]\d[\s\-]?\d{3}[\s\-]?\d{3}\b`),
