@@ -72,6 +72,13 @@ _AMOUNT_LABEL_BEFORE = re.compile(
 # Horizontal space only: a unit is on the number's own line. Read across the
 # break, "Mob: +49 172 634 85 21" followed by "m.k@example.de" on the next line
 # was "21 m" and the whole phone number was dropped (rules-engine#51).
+#: The durations in _UNIT_AFTER, which only a short number can carry.
+_TIME_UNIT_AFTER = re.compile(
+    r"^[ \t]*(?:jaar|maanden|weken|dagen|uur|minuten|seconden|"
+    r"ans|mois|semaines|jours|heures|Jahre|Monate|Wochen|Tage|Stunden)\b",
+    re.IGNORECASE,
+)
+
 _UNIT_AFTER = re.compile(
     # A size in bytes: "48213377 bytes total" in a build log (rules-engine#136).
     r"^[ \t]*(?:bytes?|octets?|KiB|MiB|GiB|TiB|"
@@ -117,6 +124,9 @@ _REFERENCE_BEFORE = re.compile(
     r"Factuur\s*n[ro]?\.?|Nota\s*n[ro]?\.?)\s*[:.#]?\s*\Z",
     re.IGNORECASE,
 )
+
+#: A Danish CPR number's shape with a valid day and month (rules-engine#195).
+_DATE_VALID_CPR = re.compile(r"(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2}-?\d{4}")
 
 #: Checks a random number passes at most once in 97 (mod 97). A value that
 #: passes one is the identifier, whatever reference word sits nearby.
@@ -787,7 +797,15 @@ def suppress_units(text: str, match: RawMatch) -> bool:
     ):
         return False
     _, after = _get_context(text, match.start, match.end)
-    return bool(_UNIT_AFTER.search(after))
+    if not _UNIT_AFTER.search(after):
+        return False
+    # A duration counts days, weeks or years in a handful of digits. Behind a
+    # phone number the word is something else: the Dutch "dagen" (days) is the
+    # Danish "dagen" (the day), so "sms til 29997309 dagen før" was 29,997,309
+    # days and the number was dropped (rules-engine#195). Sizes in bytes keep
+    # applying at any length.
+    return not (_TIME_UNIT_AFTER.search(after)
+                and sum(c.isdigit() for c in match.text) > 5)
 
 
 def suppress_reference(text: str, match: RawMatch) -> bool:
@@ -818,6 +836,21 @@ def suppress_reference(text: str, match: RawMatch) -> bool:
         validator = VALIDATORS[match.pattern_def.validator]
         if validator(match.text):
             return False
+    # Nor does a Danish CPR number lose to one. Danish case work files a
+    # citizen's matter under the CPR itself -- "Sag: 2002085636 – Sara
+    # Møller", "Ref. 2602109847" -- so a reference label in front is no
+    # evidence against it, and dropping it leaves a national ID in clear
+    # (rules-engine#195). Its date check passes one random number in 27, so
+    # an invoice number can come out as a CPR: masked under the wrong type,
+    # never leaked. Over 118,805 pipeline and corpus documents this changed
+    # no detection.
+    # Decided by the digits, not by which country's pattern matched: this
+    # verdict is cached per type and span and shared by every country's
+    # candidate there, so a check on the country let a Bulgarian candidate's
+    # verdict drop the Danish one when blind detection ranked it first.
+    if (match.pattern_def.entity_type == EntityType.NATIONAL_ID
+            and _DATE_VALID_CPR.fullmatch(match.text)):
+        return False
     before, _ = _get_context(text, match.start, match.end)
     if _REFERENCE_BEFORE.search(before):
         return True

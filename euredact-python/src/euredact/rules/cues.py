@@ -307,7 +307,7 @@ CUES: tuple[tuple[EntityType, re.Pattern[str]], ...] = (
         _B + r"(?:passport(?:\s*(?:no|number))?|paspoort(?:nummer)?"
         r"|reisepass(?:nummer)?|passeport|passnummer"
         # Danish compounds; "pas" alone is too short (rules-engine#188).
-        r"|pas(?:nummer|\s*nr|-nr))" + _SEP,
+        r"|pas(?:nummer|\s*nr|-nr)|passets?\s*nr|pas,\s*nr)" + _SEP,
         re.IGNORECASE)),
 
     # ── BIC / SWIFT ────────────────────────────────────────────────────
