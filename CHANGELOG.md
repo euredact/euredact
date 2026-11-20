@@ -38,6 +38,7 @@ which both test suites run.
 
 ### Fixed
 
+- `Batches` threw `crypto is not defined` on runtimes without a global `crypto` (Node 18 in 1.0.0); it now uses the same Idempotency-Key helper as `CloudClient`. *(TypeScript only)* *(rules-engine#196)*
 - French and Luxembourg VAT numbers in their printed digit grouping (`FR 47 512 084 937`, `LU 27 384 916`) are masked whole; they were left in clear or partly masked as another type. *(rules-engine#193)*
 - Danish licence plates written `AA 12 345` are masked without a keyword nearby, so a plate in ordinary prose (`Bilen, RB 01 440, …`) is no longer left in clear; `Reg. nr.` with a space is a label. *(rules-engine#192)*
 - Danish: a CPR number after a case label (`Sag:`, `Ref.`), in a file name, or spaced after `Vedr.` is masked; `Passet nr.` and `pas, nr.` label a passport; `dagen` after a phone number is no longer read as a duration. *(rules-engine#195)*
