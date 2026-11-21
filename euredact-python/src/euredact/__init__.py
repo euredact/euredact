@@ -23,7 +23,7 @@ from __future__ import annotations
 import threading
 from typing import Iterator
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 from euredact.cloud.config import configure
 from euredact.rules.bic_registry import set_bic_registry

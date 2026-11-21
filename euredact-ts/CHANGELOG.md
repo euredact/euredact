@@ -11,7 +11,7 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
-## Unreleased
+## 1.0.1 (2026-11-21)
 
 Leak fixes backported from 1.1.0 to the 1.0.x line (rules-engine#205). The
 measurements these entries quote were made on 1.1.0's engine; 1.0.1's own

@@ -27,6 +27,8 @@ which both test suites run.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-21
+
 Leak fixes backported from 1.1.0 to the 1.0.x line. *(rules-engine#205)*
 
 ### Fixed
@@ -490,7 +492,8 @@ Leak fixes backported from 1.1.0 to the 1.0.x line. *(rules-engine#205)*
 
 - First release. *(Python only)* 31 countries, 20+ PII entity types, checksum validation, two-pass detection, context-aware detection, batch processing, true async, referential integrity, Aho-Corasick acceleration, and zero required dependencies.
 
-[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v1.0.0...main
+[Unreleased]: https://git.euredact.dev/euredact/rules-engine/compare/v1.0.1...release/1.0.x
+[1.0.1]: https://git.euredact.dev/euredact/rules-engine/compare/v1.0.0...v1.0.1
 [1.0.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.8.0...v1.0.0
 [0.8.0]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.1...v0.8.0
 [0.7.1]: https://git.euredact.dev/euredact/rules-engine/compare/v0.7.0...v0.7.1
