@@ -1,6 +1,6 @@
-# Corpus results — euredact 1.0.0 (`fc82c25`)
+# Corpus results — euredact 1.0.1 (`233763d`)
 
-Generated 2026-11-14 by `make eval` from `corpus-results.json`, which carries the same figures. Per entity type, under the names the API returns. No aggregate figure is given: each row stands with the conditions below (rules-engine#109).
+Generated 2026-11-21 by `make eval` from `corpus-results.json`, which carries the same figures. Per entity type, under the names the API returns. No aggregate figure is given: each row stands with the conditions below (rules-engine#109).
 
 ## Conditions
 
@@ -136,4 +136,4 @@ Labels per category: `EMAIL` 152,938, `IBAN` 126,428, `PHONE` 123,151, `NATIONAL
 
 ## Regression records
 
-648 records from `tests/regression_corpus.py`, 0 failures, checked in both modes.
+858 records from `tests/regression_corpus.py`, 0 failures, checked in both modes.

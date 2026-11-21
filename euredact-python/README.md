@@ -1957,9 +1957,10 @@ fix or a changed type is a detection change, never breaking: new detection
 ships in a minor release (quarterly: February, May, August, November), a leak
 fix in a patch release whenever needed.
 
-**Supported versions:** 1.0.x is current and receives every fix; 0.x is
-unsupported from 1.0.0. When the next minor ships, the previous one receives
-leak fixes for three more months. Details:
+**Supported versions:** 1.1.x is current and receives every fix; 1.0.x
+receives fixes for values left unredacted until 2027-02-21; 0.x is unsupported.
+When the next minor ships, the previous one receives leak fixes for three more
+months. Details:
 [Versioning](https://github.com/euredact/euredact#versioning).
 
 ## License

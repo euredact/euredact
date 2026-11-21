@@ -494,8 +494,9 @@ Releases follow a quarterly rhythm:
 
 | Version | Status | Receives |
 |---|---|---|
-| 1.0.x | current | every fix |
-| 0.x | unsupported from 1.0.0 | nothing; upgrade to 1.0 |
+| 1.1.x | current, from 2026-11-21 | every fix |
+| 1.0.x | previous minor, until 2027-02-21 | fixes for values left unredacted (`sev:leak`); then nothing |
+| 0.x | unsupported from 1.0.0 | nothing; upgrade to 1.1 |
 
 The latest minor release receives every fix. When the next one ships, the
 previous minor receives fixes for values left unredacted (`sev:leak`) for three
