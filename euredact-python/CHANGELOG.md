@@ -11,7 +11,7 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
-## 1.1.0 (2026-11-19)
+## 1.1.0 (2026-11-21)
 
 ### Added
 
@@ -137,7 +137,7 @@ narrative lives. Sections here use that vocabulary
 - **`[fast]` was slower than no accelerator** *(rules-engine#176)*. Measured
   as CPU time per document on one Linux machine, same inputs, `[fast]`
   went from 1.03 ms per short record and 24.8 ms per identifier-dense
-  document (0.8.0) to 1.55 and 33.0 ms (1.0.0); it is now 0.93 and 23.4 ms.
+  document (0.8.0) to 1.55 and 33.0 ms (1.0.0); it is now 0.90 and 22.6 ms (measured on the 1.1.0 release tree).
   Two causes:
   - The RE2 prefilter received the engine's digit boundaries as lookarounds,
     which RE2 cannot read, and dropped them: `\b\d{9}\b` became `\d{9}`

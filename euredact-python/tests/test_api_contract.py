@@ -297,3 +297,28 @@ def test_the_placeholder_formats_are_the_documented_ones():
     tokens = _EuRedact().redact(text, countries=["NL"], cache=False, tokenize=True)
     assert _re.fullmatch(r"Mail EMAIL_[BCDFGHJKLMNPQRSTVWXZ2-9]{4}, BSN NATIONAL_ID_[BCDFGHJKLMNPQRSTVWXZ2-9]{4}",
                          tokens.redacted_text)
+
+
+#: The fields of the public result types as 1.0.0 shipped them, in order. A
+#: minor release may add fields only after these: a field inserted before one
+#: of them shifts every positional argument after it. 1.1.0's
+#: ``RedactResult.review`` was first added before ``tokens``, and a result
+#: built positionally against 1.0.0 would have bound its token mapping to
+#: ``review``.
+_FIELDS_1_0 = {
+    "RedactResult": ["redacted_text", "detections", "source", "degraded",
+                     "inferred_countries", "evidence", "detection_mode",
+                     "exempted", "cloud", "tokens"],
+    "Detection": ["entity_type", "start", "end", "text", "source", "country",
+                  "confidence", "country_confidence", "out_of_scope"],
+    "CloudInfo": ["job_id", "model_version", "usage", "unlocated"],
+}
+
+
+@pytest.mark.parametrize("name", sorted(_FIELDS_1_0))
+def test_public_fields_keep_their_1_0_positions(name):
+    import dataclasses
+
+    import euredact.types as types
+    fields = [f.name for f in dataclasses.fields(getattr(types, name))]
+    assert fields[:len(_FIELDS_1_0[name])] == _FIELDS_1_0[name]

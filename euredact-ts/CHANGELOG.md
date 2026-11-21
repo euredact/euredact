@@ -11,7 +11,7 @@ narrative lives. Sections here use that vocabulary
 (`Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security`) for
 0.6.0 onward; earlier releases keep the headings they were written with.
 
-## 1.1.0 (2026-11-19)
+## 1.1.0 (2026-11-21)
 
 ### Added
 
@@ -155,7 +155,7 @@ narrative lives. Sections here use that vocabulary
 - **Slower on identifier-dense text in 1.0.0** *(rules-engine#176)*.
   Measured as CPU time per document on one Linux machine, same inputs:
   0.46 ms per short record and 7.5 ms per dense document at 0.8.0, 0.57 and
-  11.2 ms at 1.0.0, now 0.53 and 9.2 ms.
+  11.2 ms at 1.0.0, now 0.50 and 8.5 ms (measured on the 1.1.0 release tree).
   - **Currency check.** The check for a currency before a value ends in
     `$`, but V8 tried it from every position of the window, and #152's
     Unicode lookbehinds made that a tenth of all the time. It now reads

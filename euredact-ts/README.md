@@ -1716,7 +1716,7 @@ These figures were measured at 0.4.0. On one Linux machine (4 cores,
 Node.js 24) with the same inputs for every version (3,000 corpus records and
 200 identifier-dense documents of 3,450 characters), the mean CPU time per
 document moved from 0.32 ms and 5.1 ms (0.4.0) to 0.46 and 7.5 (0.8.0), 0.57
-and 11.2 (1.0.0) and 0.52 and 9.0 (1.1.0). Of 1.0.0's extra cost on
+and 11.2 (1.0.0) and 0.50 and 8.5 (1.1.0). Of 1.0.0's extra cost on
 dense text, the repeated context windows and one currency check are fixed; the
 rest is the cost of the checks #152 added so that real values are no longer
 dropped (rules-engine#176).
@@ -1729,7 +1729,7 @@ No optional accelerator is needed or offered. The Python SDK ships an
 `[fast]` extra (RE2 / Aho-Corasick) because CPython's regex engine is the
 bottleneck there; V8's has literal prefilters that make it unnecessary here.
 On the same inputs this SDK runs about 2–3× faster than the accelerated Python
-path (1.8× on short records, 2.6× on dense documents; 6.6–7.4× in the 0.4.0
+path (1.8× on short records, 2.7× on dense documents; 6.6–7.4× in the 0.4.0
 measurements), so adding a native addon — and with it the loss of
 bundler, edge-runtime and Deno compatibility — would buy nothing.
 
@@ -1786,9 +1786,10 @@ fix or a changed type is a detection change, never breaking: new detection
 ships in a minor release (quarterly: February, May, August, November), a leak
 fix in a patch release whenever needed.
 
-**Supported versions:** 1.0.x is current and receives every fix; 0.x is
-unsupported from 1.0.0. When the next minor ships, the previous one receives
-leak fixes for three more months. Details:
+**Supported versions:** 1.1.x is current and receives every fix; 1.0.x
+receives fixes for values left unredacted until 2027-02-21; 0.x is unsupported.
+When the next minor ships, the previous one receives leak fixes for three more
+months. Details:
 [Versioning](https://github.com/euredact/euredact#versioning).
 
 ## License

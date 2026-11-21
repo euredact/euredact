@@ -371,11 +371,6 @@ class RedactResult:
     """What the cloud service reported beside the spans: job id, model, cost
     and anything it could not place. ``None`` for a rules-only result."""
 
-    review: Review | None = None
-    """The service's review recommendation for the document, with its score;
-    see :class:`Review`. ``None`` for a rules-only result and when the service
-    sends none."""
-
     tokens: dict[str, str] = field(default_factory=dict)
     """Token -> original text, populated by ``redact(tokenize=True)``.
 
@@ -384,3 +379,12 @@ class RedactResult:
     the same value in another document gets a different token. Treat the
     mapping as read-only -- a cached result shares it with every caller.
     """
+
+    review: Review | None = None
+    """The service's review recommendation for the document, with its score;
+    see :class:`Review`. ``None`` for a rules-only result and when the service
+    sends none.
+
+    Last, after ``tokens``: a field added in a minor release goes at the end,
+    so a ``RedactResult`` built positionally against 1.0.0 still binds its
+    arguments to the same fields."""
