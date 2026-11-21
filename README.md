@@ -2,6 +2,8 @@
 
 **European PII detection and redaction SDK** -- available for Python and Node.js.
 
+[![euRedact on StartupScores](https://startupscores.com/badge/euredact.svg?style=shield&v=combo&theme=dark)](https://startupscores.com/open-source/euredact)
+
 **euRedact Core** is the open-source SDK: it runs on your machine and detects and redacts personally identifiable information across **31 European countries** using a two-pass rule engine: liberal pattern matching followed by checksum validation, context-aware suppression, and priority-based deduplication. Zero required dependencies in both languages.
 
 ## Quick Start
