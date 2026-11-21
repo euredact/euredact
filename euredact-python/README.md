@@ -1998,10 +1998,10 @@ moved like this:
 
 | | 0.4.0 | 0.8.0 | 1.0.0 | 1.1.0 |
 |---|---:|---:|---:|---:|
-| Python `[fast]`, short record | 1.00 ms | 1.03 ms | 1.55 ms | 0.95 ms |
-| Python `[fast]`, dense document | 24.1 ms | 24.8 ms | 33.0 ms | 23.1 ms |
-| Node.js, short record | 0.32 ms | 0.46 ms | 0.57 ms | 0.52 ms |
-| Node.js, dense document | 5.1 ms | 7.5 ms | 11.2 ms | 9.0 ms |
+| Python `[fast]`, short record | 1.00 ms | 1.03 ms | 1.55 ms | 0.90 ms |
+| Python `[fast]`, dense document | 24.1 ms | 24.8 ms | 33.0 ms | 22.6 ms |
+| Node.js, short record | 0.32 ms | 0.46 ms | 0.57 ms | 0.50 ms |
+| Node.js, dense document | 5.1 ms | 7.5 ms | 11.2 ms | 8.5 ms |
 
 1.0.0 was slower on identifier-dense text (rules-engine#176). In Python the RE2
 prefilter had lost its digit boundaries and ran out of its default 8 MB of DFA
@@ -2058,7 +2058,7 @@ document size alone: the same engine runs 1.4× faster on dense records and
 
 The TypeScript SDK needs no such extra — V8's regex engine has literal
 prefilters CPython lacks: on the same documents it runs about 2–3× faster than
-the accelerated Python path (1.8× on short records, 2.6× on dense documents, in
+the accelerated Python path (1.8× on short records, 2.7× on dense documents, in
 the table above).
 
 ## Versioning
@@ -2080,9 +2080,10 @@ fix or a changed type is a detection change, never breaking: new detection
 ships in a minor release (quarterly: February, May, August, November), a leak
 fix in a patch release whenever needed.
 
-**Supported versions:** 1.0.x is current and receives every fix; 0.x is
-unsupported from 1.0.0. When the next minor ships, the previous one receives
-leak fixes for three more months. Details:
+**Supported versions:** 1.1.x is current and receives every fix; 1.0.x
+receives fixes for values left unredacted until 2027-02-21; 0.x is unsupported.
+When the next minor ships, the previous one receives leak fixes for three more
+months. Details:
 [Versioning](https://github.com/euredact/euredact#versioning).
 
 ## License

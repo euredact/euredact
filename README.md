@@ -351,10 +351,10 @@ moved like this:
 
 | | 0.4.0 | 0.8.0 | 1.0.0 | 1.1.0 |
 |---|---:|---:|---:|---:|
-| Python `[fast]`, short record | 1.00 ms | 1.03 ms | 1.55 ms | 0.95 ms |
-| Python `[fast]`, dense document | 24.1 ms | 24.8 ms | 33.0 ms | 23.1 ms |
-| Node.js, short record | 0.32 ms | 0.46 ms | 0.57 ms | 0.52 ms |
-| Node.js, dense document | 5.1 ms | 7.5 ms | 11.2 ms | 9.0 ms |
+| Python `[fast]`, short record | 1.00 ms | 1.03 ms | 1.55 ms | 0.90 ms |
+| Python `[fast]`, dense document | 24.1 ms | 24.8 ms | 33.0 ms | 22.6 ms |
+| Node.js, short record | 0.32 ms | 0.46 ms | 0.57 ms | 0.50 ms |
+| Node.js, dense document | 5.1 ms | 7.5 ms | 11.2 ms | 8.5 ms |
 
 1.0.0 was slower on identifier-dense text (rules-engine#176). In Python the RE2
 prefilter had lost its digit boundaries and ran out of its default 8 MB of DFA
@@ -381,7 +381,7 @@ agree.
 
 The TypeScript SDK needs no such extra and offers none: V8's regex engine has
 literal prefilters CPython lacks, so on the same documents it runs about 2–3×
-faster than the accelerated Python path (1.8× on short records, 2.6× on dense
+faster than the accelerated Python path (1.8× on short records, 2.7× on dense
 documents, in the table above; 6.6–7.4× in the 0.4.0 tables). Adding a native addon there would cost
 bundler, edge-runtime and Deno compatibility for nothing.
 
@@ -526,8 +526,9 @@ Releases follow a quarterly rhythm:
 
 | Version | Status | Receives |
 |---|---|---|
-| 1.0.x | current | every fix |
-| 0.x | unsupported from 1.0.0 | nothing; upgrade to 1.0 |
+| 1.1.x | current, from 2026-11-21 | every fix |
+| 1.0.x | previous minor, until 2027-02-21 | fixes for values left unredacted (`sev:leak`); then nothing |
+| 0.x | unsupported from 1.0.0 | nothing; upgrade to 1.1 |
 
 The latest minor release receives every fix. When the next one ships, the
 previous minor receives fixes for values left unredacted (`sev:leak`) for three

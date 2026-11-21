@@ -2,11 +2,11 @@
  "engine": {
   "package": "euredact",
   "version": "1.1.0",
-  "commit": "fa77ad3",
-  "describe": "v1.0.0-19-gfa77ad3",
+  "commit": "e711b0e",
+  "describe": "v1.0.0-35-ge711b0e",
   "released": true
  },
- "generated": "2026-11-19",
+ "generated": "2026-11-21",
  "corpus": {
   "files": [
    {
@@ -1216,7 +1216,7 @@
   ]
  },
  "regressions": {
-  "records": 756,
+  "records": 858,
   "failures": 0
  }
 }
