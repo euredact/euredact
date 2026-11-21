@@ -13,7 +13,85 @@ narrative lives. Sections here use that vocabulary
 
 ## Unreleased
 
+Leak fixes backported from 1.1.0 to the 1.0.x line (rules-engine#205). The
+measurements these entries quote were made on 1.1.0's engine; 1.0.1's own
+corpus figures are in `docs/corpus-results.md`.
+
 ### Fixed
+
+- **`Batches` without a global `crypto`** *(rules-engine#196)*. Every
+  `Batches` call threw `ReferenceError: crypto is not defined` where the
+  runtime has no global `crypto`: on Node 18, which 1.0.0 still declared
+  supported, inside an ES module. The Idempotency-Key now comes from the same
+  helper `CloudClient` uses, which falls back when the global is missing.
+  Reproduced and verified on Node 18.20.8 with the built package.
+
+- **French and Luxembourg VAT numbers in their printed grouping**
+  *(rules-engine#193)*. `FR 47 512 084 937` (the SIREN in 3-3-3 groups) was
+  not detected at all and stayed in clear. Blind, part of it was masked
+  under another type, with `FR` left visible. `LU 27 384 916` was masked as
+  a phone number, with `LU` left visible. Both patterns now accept a space
+  between the digit groups. On the training-pipeline documents this
+  masks 45 VAT numbers that were left readable (44 gold-labelled VAT; the
+  45th a company VAT number the gold missed), and replaces 7 partial
+  masks under the wrong type. No corpus document changed.
+
+- **Danish licence plates in ordinary prose** *(rules-engine#192)*. A plate
+  was masked only with one of four keywords nearby (`nummerplade`,
+  `registreringsnummer`, `reg.nr`, `køretøj`), so `Bilen, RB 01 440, holdt …`,
+  `Parkering: RB 01 440` and `Reg. nr.: RB 01 440` were left in clear. The
+  written form, two letters and five digits grouped `AA 12 345`, now needs no
+  label. It never takes the front of a longer number (`FR 47 512 084 937`,
+  `Steuer-ID 87 145 770 961`, `GB 14 200/µL`). Other spacings and the compact
+  `AA12345` still need a label, now also `reg. nr`, `regnr`, `indregistreret`,
+  `firmabil`, `leasingbil`, `parkering`, `parkeret` or `kørsel`. Not `bil`
+  or `bilen`: keywords match as substrings and would fire inside `mobil`,
+  `mobilen` and `stabilen`. Measured over 118,260 pipeline and corpus
+  documents, the change added one detection, a French PO box (`BP 80 303`)
+  that is part of an address. CPU time is unchanged.
+
+- **Danish masking misses** *(rules-engine#195)*. Masking 1,680 Danish
+  documents with the 1.1.0 pre-release left values visible that the rules
+  should have caught. Each case and its fix:
+  - **A CPR number after a reference label** (`Ref. 2602109847`) was
+    dropped as a case number. Danish case work files a matter
+    under the CPR itself, so a reference label no longer drops a 10-digit
+    number with a valid CPR date. One random number in 27 passes that
+    check, so an invoice number can now be masked as a NATIONAL_ID: the
+    wrong type, never a leak. Over 118,805 pipeline and corpus documents
+    one detection changed: a UK tax number behind "tax reference:", which
+    was left in clear and is now masked.
+  - **A CPR in a file name** (`…blanket_1202794846.pdf`) was missed because
+    `_` is a word character. It is now a boundary for the compact CPR.
+  - **`Vedr. 110573 1449 Frederik …`**: `vedr` now licenses the spaced CPR.
+  - **`Passet nr.` and `Dansk pas, nr.`** are passport labels. Bare
+    `passet` is not: it is also the verb "looked after".
+  - **`sms til 29997309 dagen før`** lost the phone number to the Dutch
+    unit `dagen` (days), which is the Danish for "the day". Time units now
+    suppress only a number of at most five digits; byte and mass units
+    still apply at any length.
+
+- **Danish gaps** *(rules-engine#188)*. A probe of a synthetic Danish
+  citizen-service e-mail (`countries=["DK"]`) found seven:
+  - a CPR number written with a space (`CPR: 120385 4417`) was left in clear,
+    or only its last four digits masked as a postcode. It is now NATIONAL_ID
+    behind a CPR label; without one, a date and four digits stay unmasked;
+  - a domestic NemKonto account (`reg.nr. 5301 kontonr. 0012345678`) left the
+    registration number in clear and typed the account number PHONE. It is now
+    one BANK_ACCOUNT span, and a `kontonr.` label types a bare account number
+    BANK_ACCOUNT;
+  - `DK-2100 København` masked only the digits; the prefix is now part of the
+    POSTAL_CODE span when a town follows;
+  - a passport number behind `Pasnummer:` was typed NATIONAL_ID, and a
+    driving-licence number behind `Kørekortnummer:` PHONE. They are now
+    PASSPORT and DRIVERS_LICENSE;
+  - an 8-digit order, invoice, customer, case or file number behind a Danish
+    label (`ordre`, `fakturanummer`, `kunde nr.`, `sag`, `journalnummer`,
+    `j.nr.`) was masked as a phone number, and is now left alone. Bare
+    `kunde` is not such a label: `kundeservice` is followed by a real
+    phone number;
+  - a year-prefixed case number (`2026-014482`) matched the Greek landline
+    pattern. Greek area codes start 21 to 28, and the pattern now says so.
 
 - **A lone surrogate was answered with another text's cached result**
   *(rules-engine#175)*. The cache key hashed the text as UTF-8, which writes
