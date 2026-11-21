@@ -104,3 +104,52 @@ def test_refuses_a_dirty_tree(repos: dict[str, Path]) -> None:
 
 def test_rejects_a_malformed_version(repos: dict[str, Path]) -> None:
     assert _check(repos, "0.6.0").returncode == 2
+
+
+# ── Maintenance releases: a patch on its line's branch (rules-engine#204) ──
+
+
+@pytest.fixture
+def line(repos: dict[str, Path]) -> dict[str, Path]:
+    """release/0.5.x carries a 0.5.2 patch; main has moved on to 0.6.0."""
+    work = repos["work"]
+    _git(work, "push", "-q", str(repos["github"]), "HEAD:refs/heads/main")
+    _git(work, "checkout", "-q", "-b", "release/0.5.x", "HEAD~1")
+    _git(work, "commit", "-q", "--allow-empty", "-m", "Release 0.5.2")
+    _git(work, "push", "-q", "origin", "release/0.5.x")
+    return repos
+
+
+def test_a_patch_is_checked_against_its_line_not_main(line: dict[str, Path]) -> None:
+    _git(line["work"], "push", "-q", str(line["github"]), "release/0.5.x")
+    r = _check(line, "v0.5.2", "--branch", "release/0.5.x")
+    assert r.returncode == 0, r.stderr
+    assert "release/0.5.x" in r.stdout
+
+
+def test_refuses_when_github_lacks_the_line(line: dict[str, Path]) -> None:
+    r = _check(line, "v0.5.2", "--branch", "release/0.5.x")
+    assert r.returncode == 1
+    assert "github release/0.5.x is not HEAD" in r.stderr
+
+
+def test_refuses_a_tag_from_another_line(line: dict[str, Path]) -> None:
+    _git(line["work"], "push", "-q", str(line["github"]), "release/0.5.x")
+    r = _check(line, "v0.6.1", "--branch", "release/0.5.x")
+    assert r.returncode == 1
+    assert "not a release of release/0.5.x" in r.stderr
+
+
+def test_refuses_a_branch_that_is_not_a_release_line(line: dict[str, Path]) -> None:
+    r = _check(line, "v0.5.2", "--branch", "feature/x")
+    assert r.returncode == 1
+
+
+def test_the_tagged_check_on_a_line(line: dict[str, Path]) -> None:
+    work = line["work"]
+    _git(work, "push", "-q", str(line["github"]), "release/0.5.x")
+    assert _check(line, "v0.5.2", "--branch", "release/0.5.x", "--tagged").returncode == 1
+    _git(work, "tag", "v0.5.2")
+    for remote in (line["forgejo"], line["github"]):
+        _git(work, "push", "-q", str(remote), "refs/tags/v0.5.2")
+    assert _check(line, "v0.5.2", "--branch", "release/0.5.x", "--tagged").returncode == 0

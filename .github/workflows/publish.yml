@@ -139,5 +139,11 @@ jobs:
           if npm view "euredact@${version}" version >/dev/null 2>&1; then
             echo "euredact@${version} is already on the registry; skipping publish."
           else
-            npm publish --access public --provenance
+            # A patch on an older line (1.0.1 after 1.1.0) must not take
+            # `latest`: npm gives it to whatever is published last. The tag is
+            # decided from the registry, not from the branch (rules-engine#204).
+            latest=$(npm view euredact dist-tags.latest 2>/dev/null || true)
+            dist_tag=$(python3 ../scripts/npm_dist_tag.py "$version" "$latest")
+            echo "publishing euredact@${version} under dist-tag ${dist_tag} (latest is ${latest:-none})"
+            npm publish --access public --provenance --tag "$dist_tag"
           fi
