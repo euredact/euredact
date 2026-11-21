@@ -21,7 +21,7 @@ From 1.0.0 (decided 2026-11-14) releases follow the README's
 - **`1.x.0`, quarterly**, at the start of February, May, August and November:
   everything merged since the last minor release — new identifiers, countries,
   options, cloud features. A minor release always re-measures the accuracy
-  figures on the release commit (step 3) and regenerates
+  figures on the code being released (step 3) and regenerates
   `docs/corpus-results.{json,md}`. Before it, refresh the bundled BIC list
   with the `bic-refresh` skill: its own issue and PR, merged before the
   release commit, so the release measures the list it ships. In the release
@@ -52,6 +52,22 @@ re-running the failed job will faithfully re-execute the *old* definition —
 producing an identical failure that looks like the fix did not work.
 
 ## 1. Bump the version in all three places
+
+Which version: ask the `release-notes` agent (`.claude/agents/release-notes.md`)
+first. It applies the 1.x rhythm below to what changed since the last tag,
+checks the public API for breaks, and says which rule decided. The decision
+is still yours, and a break or an out-of-quarter minor is the owner's.
+
+Steps 1 and 2 are one command, which refuses rather than leaving the files
+disagreeing:
+
+```bash
+scripts/bump_version.py X.Y.Z                 # --date YYYY-MM-DD, default today
+scripts/bump_version.py X.Y.Z --branch release/X.Y.x   # a maintenance release
+scripts/bump_version.py --check               # the four places agree?
+```
+
+What it changes, by hand if you must:
 
 ```
 euredact-python/pyproject.toml            version = "X.Y.Z"
@@ -111,7 +127,11 @@ does **not** cover the corpus, because the corpus lives outside the repository.
   Instructions for use on euredact.dev read. Commit both with the release, so
   the published figures are the released engine's (rules-engine#109), and a
   number quoted in the changelog is one that was just measured rather than
-  carried forward.
+  carried forward. Generate them with the version bump in the working tree
+  and nothing else uncommitted: the files then name the commit the release
+  commit is built on. They cannot name the release commit itself, whose hash
+  depends on them (rules-engine#176); a later change to docs or tests only
+  does not make them stale, an engine change does.
 
 If the corpus is not on this machine, the three corpus checks cannot run, and
 `make check` is not a substitute. Say so before going further. Release only if
@@ -209,7 +229,10 @@ neither works:
 
 So: merge both changelogs into one body, mark any entry that applies to only one
 SDK, drop the sections that belong in a changelog but not in release notes, and
-paste it in the reply. Write it to `~/Desktop/` as well, as a convenience — but
+paste it in the reply. The `release-notes` agent drafts the title and body by
+these rules and returns a table of every claim it checked in both SDKs. Read
+that table, rerun anything it could not verify, and fill in what it asks for,
+such as the false-positive counts from the eval run. Write it to `~/Desktop/` as well, as a convenience — but
 the reply is the deliverable.
 
 **Verify every claim in the body against the tagged commit before writing it.**
@@ -294,6 +317,63 @@ and none on 0.7.0). For 0.7.0 the issues were filed by hand and serve as the
 example: euredact/euredact-inference#120, euredact/euredact-training-pipeline#41,
 euredact/public-site#25 (rules-engine#122).
 
+## Maintenance releases: a patch on an older line
+
+When a minor ships, the previous one keeps receiving leak fixes for three
+months (*Supported versions*). Such a patch, 1.0.1 after 1.1.0, is released
+from the line's own branch, `release/X.Y.x`, not from `main`. Everything
+above applies, with these differences (rules-engine#204):
+
+1. **The branch.** A human creates `release/X.Y.x` from the line's `vX.Y.0`
+   tag, once per line, on Forgejo (workers push only `issue/` branches). The
+   push mirror carries it to GitHub.
+2. **What goes on it: fixes only, by issue.** Leak fixes (`sev:leak`) and
+   fixes for a broken release, never a feature, option or behaviour change.
+   A fix that a later issue repaired goes with that repair (#188 with #195).
+   Collect them with the backport script, on an `issue/` branch cut from the
+   line:
+
+   ```bash
+   git switch -c issue/N-backport-X.Y.Z origin/release/X.Y.x
+   scripts/backport.py --issues A,B,C --since vX.Y.0 --dry-run   # what it would take
+   scripts/backport.py --issues A,B,C --since vX.Y.0             # resumes after a conflict
+   ```
+
+   It finds each fix's commits by this repo's conventions (`issue-N:`,
+   `corpus: regression records for #N`, a `Closes`/`Refs …#N` trailer). It
+   applies them in the order their PRs merged into main, so the conflicts it
+   meets are the ones main's merges resolved, and the regression records
+   keep main's values. **Always include this issue's tooling (#204)** in the
+   first backport to a line, and any later fix to `publish.yml`. The release
+   event runs the workflow file *from the tag's commit*, so a branch without
+   the dist-tag fix would publish to npm as `latest` (step 0 again).
+   The changelog entries do not come along. Write them under `## Unreleased`
+   on the branch, from the issues.
+3. **The PR** targets the line: `forgejo_issues.py pr --base release/X.Y.x …`.
+4. **Checks:** `make verify RESULTS=docs/corpus-results` and `make sweep-full`
+   on the branch, as for any release that changes detection. The figures
+   describe the line, not main.
+5. **Bump:** `scripts/bump_version.py X.Y.Z --branch release/X.Y.x`, in its
+   own release PR against the line, merged by fast-forward.
+6. **Gate and tag:** `scripts/release_refs.sh vX.Y.Z --branch release/X.Y.x`
+   (and `--tagged`). It checks the line's branch on both remotes, not main,
+   and refuses a tag from another line.
+7. **GitHub Release:** from the existing tag, with **"Set as latest release"
+   unchecked**. The latest release is the newest minor.
+8. **npm:** `publish.yml` publishes a version older than npm's `latest` under
+   the dist-tag `release-X.Y` (`scripts/npm_dist_tag.py`). `latest` stays on
+   the newest minor, so `npm install euredact` is unaffected. PyPI needs
+   nothing: it serves the highest version. Step 6 then checks both:
+
+   ```bash
+   npm view euredact dist-tags     # latest: the newest minor; release-X.Y: X.Y.Z
+   curl -s https://pypi.org/simple/euredact/ | grep -o 'euredact-X\.Y\.Z[^"#]*'
+   ```
+9. **Streams (step 7):** the gateway and pipeline follow the newest minor and
+   usually need nothing. File the website issue only if the site documents
+   the line, for example a supported-versions table that names its latest
+   patch.
+
 ## Recovering a failed publish
 
 **Do not re-cut a release to pick up a fix.** Re-running a release run replays
@@ -323,8 +403,9 @@ diagnostic on its own. Check in this order:
 
 Publishing uses **OIDC trusted publishing**, not `NPM_TOKEN`. It requires a
 trusted publisher on npmjs.com (org `euredact`, repo `euredact`, workflow
-`publish.yml`, environment `release`) and npm 11+, which is why the job
-installs a pinned npm over the Node 20 default.
+`publish.yml`, environment `release`) and npm 11+. The job runs on the Node.js
+Active LTS and installs a pinned npm over the one it ships, so the version
+that holds the publishing credential is chosen, not inherited.
 
 ### Both publish jobs run in the `release` environment
 

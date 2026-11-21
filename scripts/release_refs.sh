@@ -6,6 +6,11 @@
 #   scripts/release_refs.sh vX.Y.Z            before tagging
 #   scripts/release_refs.sh vX.Y.Z --tagged   after pushing the tag, before the Release
 #
+# A maintenance release (1.0.1 after 1.1.0) is tagged on its line's branch,
+# not on main; name the branch (rules-engine#204):
+#
+#   scripts/release_refs.sh v1.0.1 --branch release/1.0.x [--tagged]
+#
 # Why it exists: `origin` is Forgejo, but publish.yml runs on GitHub. 0.6.0 was
 # pushed to Forgejo only; GitHub's main was still on 0.5.1, the Release created
 # its own v0.6.0 there, and publish rebuilt 0.5.1 — reported as success because
@@ -15,11 +20,24 @@ set -euo pipefail
 FORGEJO="${FORGEJO_REMOTE:-$(git remote get-url origin)}"
 GITHUB="${GITHUB_REMOTE:-https://github.com/euredact/euredact.git}"
 
-tag="${1:-}"
-tagged="${2:-}"
-if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ -n "$tagged" && "$tagged" != "--tagged" ]]; then
-  echo "usage: $0 vX.Y.Z [--tagged]" >&2
-  exit 2
+usage() { echo "usage: $0 vX.Y.Z [--tagged] [--branch BRANCH]" >&2; exit 2; }
+tag="" tagged="" branch="main"
+while (( $# )); do
+  case "$1" in
+    --tagged) tagged=1 ;;
+    --branch) [[ $# -ge 2 ]] || usage; branch="$2"; shift ;;
+    v*) [[ -z "$tag" ]] || usage; tag="$1" ;;
+    *) usage ;;
+  esac
+  shift
+done
+[[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || usage
+# A line's branch carries only its own patches: release/1.0.x tags 1.0.y.
+if [[ "$branch" =~ ^release/([0-9]+)\.([0-9]+)\.x$ ]]; then
+  [[ "$tag" == "v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}."* ]] \
+    || { echo "FAIL: $tag is not a release of $branch" >&2; exit 1; }
+elif [[ "$branch" != "main" ]]; then
+  echo "FAIL: release from main or a release/X.Y.x branch, not $branch" >&2; exit 1
 fi
 
 fail=0
@@ -32,8 +50,9 @@ fi
 head=$(git rev-parse HEAD)
 echo "HEAD                $head"
 
-# main on each remote, and the commit the tag points at there (empty if absent).
-remote_main() { git ls-remote "$1" refs/heads/main | cut -f1; }
+# The release branch on each remote, and the commit the tag points at there
+# (empty if absent).
+remote_branch() { git ls-remote "$1" "refs/heads/$branch" | cut -f1; }
 remote_tag() {
   local out
   out=$(git ls-remote --tags "$1" "refs/tags/$tag" "refs/tags/$tag^{}")
@@ -44,9 +63,9 @@ remote_tag() {
 
 for name in forgejo github; do
   url=$([[ $name == forgejo ]] && echo "$FORGEJO" || echo "$GITHUB")
-  main=$(remote_main "$url") || { bad "$name: cannot reach $url"; continue; }
-  echo "$name main$( [[ $name == github ]] && echo ' ' )        ${main:-<none>}"
-  [[ "$main" == "$head" ]] || bad "$name main is not HEAD — push it: git push $url HEAD:refs/heads/main"
+  at_branch=$(remote_branch "$url") || { bad "$name: cannot reach $url"; continue; }
+  echo "$name $branch$( [[ $name == github ]] && echo ' ' )        ${at_branch:-<none>}"
+  [[ "$at_branch" == "$head" ]] || bad "$name $branch is not HEAD — push it: git push $url HEAD:refs/heads/$branch"
 
   at=$(remote_tag "$url")
   echo "$name $tag$( [[ $name == github ]] && echo ' ' )      ${at:-<none>}"
@@ -65,4 +84,4 @@ if (( fail )); then
   echo "not safe to $([[ -n $tagged ]] && echo 'create the GitHub Release' || echo 'tag')." >&2
   exit 1
 fi
-echo "ok: Forgejo and GitHub agree on $head$([[ -n $tagged ]] && echo " and $tag")."
+echo "ok: Forgejo and GitHub agree on $branch = $head$([[ -n $tagged ]] && echo " and $tag")."
