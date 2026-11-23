@@ -58,6 +58,17 @@ first. It applies the 1.x rhythm below to what changed since the last tag,
 checks the public API for breaks, and says which rule decided. The decision
 is still yours, and a break or an out-of-quarter minor is the owner's.
 
+Steps 1 and 2 are one command, which refuses rather than leaving the files
+disagreeing:
+
+```bash
+scripts/bump_version.py X.Y.Z                 # --date YYYY-MM-DD, default today
+scripts/bump_version.py X.Y.Z --branch release/X.Y.x   # a maintenance release
+scripts/bump_version.py --check               # the four places agree?
+```
+
+What it changes, by hand if you must:
+
 ```
 euredact-python/pyproject.toml            version = "X.Y.Z"
 euredact-python/src/euredact/__init__.py  __version__ = "X.Y.Z"
@@ -305,6 +316,63 @@ and a v15 end-to-end run measured an engine the fixes never reached
 and none on 0.7.0). For 0.7.0 the issues were filed by hand and serve as the
 example: euredact/euredact-inference#120, euredact/euredact-training-pipeline#41,
 euredact/public-site#25 (rules-engine#122).
+
+## Maintenance releases: a patch on an older line
+
+When a minor ships, the previous one keeps receiving leak fixes for three
+months (*Supported versions*). Such a patch, 1.0.1 after 1.1.0, is released
+from the line's own branch, `release/X.Y.x`, not from `main`. Everything
+above applies, with these differences (rules-engine#204):
+
+1. **The branch.** A human creates `release/X.Y.x` from the line's `vX.Y.0`
+   tag, once per line, on Forgejo (workers push only `issue/` branches). The
+   push mirror carries it to GitHub.
+2. **What goes on it: fixes only, by issue.** Leak fixes (`sev:leak`) and
+   fixes for a broken release, never a feature, option or behaviour change.
+   A fix that a later issue repaired goes with that repair (#188 with #195).
+   Collect them with the backport script, on an `issue/` branch cut from the
+   line:
+
+   ```bash
+   git switch -c issue/N-backport-X.Y.Z origin/release/X.Y.x
+   scripts/backport.py --issues A,B,C --since vX.Y.0 --dry-run   # what it would take
+   scripts/backport.py --issues A,B,C --since vX.Y.0             # resumes after a conflict
+   ```
+
+   It finds each fix's commits by this repo's conventions (`issue-N:`,
+   `corpus: regression records for #N`, a `Closes`/`Refs …#N` trailer). It
+   applies them in the order their PRs merged into main, so the conflicts it
+   meets are the ones main's merges resolved, and the regression records
+   keep main's values. **Always include this issue's tooling (#204)** in the
+   first backport to a line, and any later fix to `publish.yml`. The release
+   event runs the workflow file *from the tag's commit*, so a branch without
+   the dist-tag fix would publish to npm as `latest` (step 0 again).
+   The changelog entries do not come along. Write them under `## Unreleased`
+   on the branch, from the issues.
+3. **The PR** targets the line: `forgejo_issues.py pr --base release/X.Y.x …`.
+4. **Checks:** `make verify RESULTS=docs/corpus-results` and `make sweep-full`
+   on the branch, as for any release that changes detection. The figures
+   describe the line, not main.
+5. **Bump:** `scripts/bump_version.py X.Y.Z --branch release/X.Y.x`, in its
+   own release PR against the line, merged by fast-forward.
+6. **Gate and tag:** `scripts/release_refs.sh vX.Y.Z --branch release/X.Y.x`
+   (and `--tagged`). It checks the line's branch on both remotes, not main,
+   and refuses a tag from another line.
+7. **GitHub Release:** from the existing tag, with **"Set as latest release"
+   unchecked**. The latest release is the newest minor.
+8. **npm:** `publish.yml` publishes a version older than npm's `latest` under
+   the dist-tag `release-X.Y` (`scripts/npm_dist_tag.py`). `latest` stays on
+   the newest minor, so `npm install euredact` is unaffected. PyPI needs
+   nothing: it serves the highest version. Step 6 then checks both:
+
+   ```bash
+   npm view euredact dist-tags     # latest: the newest minor; release-X.Y: X.Y.Z
+   curl -s https://pypi.org/simple/euredact/ | grep -o 'euredact-X\.Y\.Z[^"#]*'
+   ```
+9. **Streams (step 7):** the gateway and pipeline follow the newest minor and
+   usually need nothing. File the website issue only if the site documents
+   the line, for example a supported-versions table that names its latest
+   patch.
 
 ## Recovering a failed publish
 
